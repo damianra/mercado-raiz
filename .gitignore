@@ -1,0 +1,23 @@
+node_modules
+dist
+build
+.env
+*.sqlite
+*.sqlite-journal
+test-results
+playwright-report
+docker-build.*
+test-run.*
+dev-run.*
+publish.*
+# api-skeleton
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+server/uploads/*
+!server/uploads/.gitkeep
+docker-build.*
+test-run.*
+dev-run.*
+publish.*

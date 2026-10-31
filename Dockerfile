@@ -1,0 +1,26 @@
+# Fullstack: build del frontend → dist/ servido por el mismo Express
+# que la API (api-skeleton sirve dist/ u out/ cuando existe). Un solo contenedor.
+FROM docker.io/library/node:22 AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM docker.io/library/node:22 AS proddeps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+FROM deps AS build
+COPY . .
+RUN npm run build
+
+FROM docker.io/library/node:22-slim
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=proddeps /app/node_modules ./node_modules
+COPY package*.json ./
+COPY --from=build /app/dist ./dist
+COPY server ./server
+
+EXPOSE 4000
+CMD ["node", "server/index.js"]
