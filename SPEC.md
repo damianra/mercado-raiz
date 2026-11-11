@@ -730,6 +730,17 @@ smokes reales: invoke con `numCtx`/`numPredict` contra qwen3:8b
 por REST sin harness-notify; revisión funcional por sub-agente en
 cada tarea.
 
+**Validación del grafo real** (2026-11-11, corrida `run-1794384065546`
+contra la DB con 100 productos semilla diseñados por cuadrante
+estable/volátil × monto bajo/alto — detalle en
+`harness-langgraph/docs/benchmarks/validacion-grafo-real-2026-11-11.md`):
+101 productos evaluados, **137 llamadas LLM de 202 posibles → 65
+evitadas (32%)** — ~50 por triage CV + ~15 por justificación template;
+0 fallbacks; GPU 196 W/69 °C sostenidos. Proyección previa era ~40%
+— la real bajó porque el LLM estimó más demanda en los volátiles
+(cruce de umbral $100). Hallazgo derivado: el rate limiter del
+backend (20 POST/min) rechazó 41 `crear-orden` — ver SPEC-13.
+
 ### Nota sobre SPEC-08
 
 R12.1/R12.2 reemplazan el diseño HITL-vía-`interrupt` documentado
@@ -737,6 +748,68 @@ en SPEC-08 y los docs del harness: el patrón sigue soportado por la
 infraestructura (checkpointer, `/resume`, `.last-thread`) pero el
 grafo ya no lo usa — las corridas pausadas viejas siguen
 reanudables.
+
+---
+
+## SPEC-13 · Robustez del agente ante rate-limiting del backend
+
+- **Origen:** hallazgo de la validación del grafo real (SPEC-12,
+  corrida `run-1794384065546` con 101 productos): el middleware
+  `rateLimit({ windowMs: 60_000, max: 20 })` de `server/security.js`
+  permite **20 escrituras/min por IP** — el nodo `crear-orden` dispara
+  un `POST /api/ordenes` por producto en ráfaga y **41 órdenes fueron
+  rechazadas con 429**. El error se registró en `errores_no_criticos`
+  pero la orden nunca se persistió: el trabajo LLM de esos productos
+  (análisis + justificación) quedó desperdiciado y el producto no
+  quedó repuesto.
+- **Estado global:** ⏳ registrada — pendiente de implementación
+
+### Contexto técnico
+
+- `server/security.js:22` — limiter in-memory por IP, solo métodos de
+  escritura (GET/HEAD exentos). El 429 devuelve JSON de error **sin
+  header `Retry-After`**.
+- `harness-langgraph/src/langgraph/nodes/crear-orden.js` — POST por
+  producto sin retry: `catch → errores[]`, el producto se pierde para
+  esta corrida.
+- Las ventas (`GET /api/historial`) no cuentan contra el límite
+  (solo escritura), así que el cuello es exclusivamente `crear-orden`.
+
+### Requisitos
+
+- **R13.1** El backend debe incluir `Retry-After` (segundos) en las
+  respuestas 429 del limiter — hoy el cliente no tiene cómo saber
+  cuándo reintentar.
+- **R13.2** `crear-orden` (o `ordenes.client`) debe reintentar ante
+  429 con backoff — respetar `Retry-After` si viene, exponencial con
+  tope si no (ej. 2s→4s→8s, máx ~5 intentos). Si agota, el error
+  sigue yendo a `errores_no_criticos` como hoy.
+- **R13.3** Métrica: los reintentos 429 no deben contarse como
+  `llamadas_llm` ni como fallbacks — son fricción de transporte.
+  Evaluar si conviene un contador `ordenes_rechazadas_429` en
+  `/metrics` para observabilidad.
+- **R13.4** Decidir y documentar la política del limiter para el
+  cliente interno: opciones — subir `max` para `127.0.0.1`/loopback,
+  `HARNESS_API_KEY` bypass, o aceptar el límite y dejar que el retry
+  absorba la ráfaga (más realista como demo productiva). Documentar
+  lo elegido en `arquitectura.md` y `.env.example` si hay variable.
+- **R13.5** Tests: cliente que reintenta ante 429 mockeado
+  (verificar backoff y corte al agotar intentos); smoke de corrida
+  >20 productos sin órdenes perdidas.
+
+### Tareas
+
+- **T13.1** `Retry-After` en `security.js` (R13.1)
+- **T13.2** Retry con backoff en `ordenes.client`/`crear-orden`
+  (R13.2, R13.3)
+- **T13.3** Política del limiter para cliente interno + docs
+  (R13.4)
+- **T13.4** Tests + smoke de corrida grande (R13.5)
+
+### Verificado por
+
+Pendiente — se completa al implementar. El hallazgo quedó medido en
+`harness-langgraph/docs/benchmarks/validacion-grafo-real-2026-11-11.md`.
 
 ---
 
@@ -756,6 +829,7 @@ reanudables.
 | (post-gen) | SPEC-10 | `harness-langgraph/src/harness/*` | `harness-langgraph/tests/` |
 | (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
 | (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
+| (post-gen) | SPEC-13 ⏳ | `server/security.js`, `integrations/ordenes.client.js`, `nodes/crear-orden.js` | pendiente |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
