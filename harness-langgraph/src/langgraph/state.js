@@ -57,7 +57,6 @@ export const EstadoGrafo = Annotation.Root({
    */
   ordenesPendientes: listaVacia(),
 
-
   /** Escriben: todos los nodos ante errores no fatales (concatena). Lee: fin. */
   errores: acumulativo(),
 });
