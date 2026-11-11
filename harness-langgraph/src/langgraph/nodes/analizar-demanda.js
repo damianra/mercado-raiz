@@ -1,31 +1,52 @@
 /**
  * NODO 2 — ANALIZAR DEMANDA (nodo con LLM)
  *
- * Lee del estado: productosBajos. Por cada producto trae sus ventas
- * del backend (historial.client → GET /api/historial) y manda el
- * prompt de prompts/analisis-demanda al modelo (llmJson). La
- * respuesta se valida con zod (schemaAnalisis + utils/llm-json);
- * si falla tras reintentos, usa un promedio de las ventas como
- * fallback. Escribe: analisisPorProducto (y concatena en errores
- * cuando hubo fallback).
+ * Lee del estado: productosBajos. Corre en dos fases:
+ *
+ *  Fase A (paralela, `prepararUno`): por cada producto trae sus
+ *  ventas del backend (historial.client → GET /api/historial),
+ *  calcula el hash del input (cache, SPEC-16) y aplica el triage
+ *  por CV (SPEC-12): demanda estable → promedio histórico directo;
+ *  input ya visto → respuesta del cache. Los volátiles sin cache
+ *  quedan `pendiente`.
+ *
+ *  Fase B (lotes, `analizarLote`): los pendientes se agrupan en
+ *  lotes de `config.demandaBatch` (SPEC-16) y cada lote es UNA
+ *  llamada a `llmJsonBatch` (prompt array). Los items válidos se
+ *  matchean por `producto_id`; los faltantes/inválidos — o el
+ *  lote entero si la llamada falla — caen a `analisisIndividual`
+ *  (llmJson + prompt por producto, el path pre-batch) en un solo
+ *  pool que respeta `config.concurrencia`.
+ *
+ *  Si el LLM falla también en la llamada individual, usa un
+ *  promedio de las ventas como fallback. Escribe:
+ *  analisisPorProducto + hashPorProducto (y concatena en errores
+ *  cuando hubo fallback).
  */
 import { z } from 'zod';
 import { config } from '../../config/env.js';
-import { llmJson } from '../../config/ollama.js';
+import { llmJson, llmJsonBatch } from '../../config/ollama.js';
 import { ventasDeProducto } from '../../integrations/historial.client.js';
 import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
 import { buscarDemanda, guardarDemanda, hashAnalisis } from '../../harness/analisis-cache.js';
-import { parseJsonResponse } from '../../utils/llm-json.js';
+import { parseJsonArrayResponse, parseJsonResponse } from '../../utils/llm-json.js';
 import { conLimite } from '../../utils/concurrencia.js';
 import { promptAnalisisDemanda } from '../prompts/analisis-demanda.js';
+import { promptAnalisisDemandaBatch } from '../prompts/analisis-demanda-batch.js';
 import { log } from '../../utils/logger.js';
 
 const schemaAnalisis = z.object({
   demanda_diaria: z.number().nonnegative(),
   tendencia: z.enum(['subiendo', 'estable', 'bajando']),
   observacion: z.string(),
+});
+
+// Item de respuesta en lote: mismo análisis + el id que el
+// modelo repite para matchear respuesta ↔ producto (SPEC-16).
+const schemaAnalisisBatch = schemaAnalisis.extend({
+  producto_id: z.coerce.number(),
 });
 
 /**
@@ -58,7 +79,12 @@ function fallbackDesdeVentas(ventas) {
   };
 }
 
-async function analizarUno(p) {
+/**
+ * Fase A — por producto: trae ventas, calcula hash, aplica el
+ * triage CV y el cache. Devuelve el análisis resuelto o marca
+ * `pendiente` con el contexto para la fase de LLM.
+ */
+async function prepararUno(p) {
   const ventas = await ventasDeProducto(p.id);
   // SPEC-16: el hash cubre ventas + producto + config — generar-
   // analisis lo reusa para cachear la justificación (mismo input).
@@ -86,6 +112,11 @@ async function analizarUno(p) {
     log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
     return { id: p.id, hash, analisis: cacheada };
   }
+  return { id: p.id, hash, p, ventas, pendiente: true };
+}
+
+/** Llamada individual al LLM — fallback de items del lote. */
+async function analisisIndividual({ p, ventas, hash }) {
   try {
     metrics.llamadaLlm();
     const respuesta = await conReintentos(
@@ -111,15 +142,84 @@ async function analizarUno(p) {
   }
 }
 
+/**
+ * Fase B — un lote de pendientes en UNA llamada al LLM (SPEC-16,
+ * R16.3). El modelo devuelve un array; los items válidos se
+ * matchean por producto_id. Devuelve { resueltos, faltantes }:
+ * los faltantes/inválidos — o el lote entero si la llamada
+ * falla — los resuelve `analizarDemanda` con llamadas
+ * individuales en un solo pool (así el límite de concurrencia
+ * global se respeta también en el fallback).
+ */
+async function analizarLote(lote) {
+  let items;
+  try {
+    metrics.llamadaLlm();
+    items = await conReintentos(
+      async () => {
+        const r = await llmJsonBatch.invoke(promptAnalisisDemandaBatch(lote));
+        costTracker.registrar(r);
+        return parseJsonArrayResponse(r.content, schemaAnalisisBatch).items;
+      },
+      { intentos: 2, etiqueta: `lote de ${lote.length} productos` },
+    );
+  } catch (err) {
+    log(`  lote de ${lote.length}: LLM falló (${err.message}) — llamadas individuales`);
+    return { resueltos: [], faltantes: lote };
+  }
+  const porId = new Map(items.map((i) => [i.producto_id, i]));
+  const resueltos = [];
+  const faltantes = [];
+  for (const e of lote) {
+    const item = porId.get(e.id);
+    if (!item) {
+      faltantes.push(e);
+      continue;
+    }
+    const analisis = {
+      demanda_diaria: item.demanda_diaria,
+      tendencia: item.tendencia,
+      observacion: item.observacion,
+    };
+    guardarDemanda(e.id, e.hash, analisis);
+    log(`  ${e.p.sku}: ~${analisis.demanda_diaria} u/día, ${analisis.tendencia} — ${analisis.observacion} (lote)`);
+    resueltos.push({ id: e.id, hash: e.hash, analisis });
+  }
+  if (faltantes.length) {
+    log(`  lote: ${faltantes.length} item(s) faltantes/inválidos — llamadas individuales`);
+  }
+  return { resueltos, faltantes };
+}
+
 export async function analizarDemanda(state) {
-  // SPEC-16: hasta `concurrencia` productos en vuelo — gana si
+  // SPEC-16: hasta `concurrencia` tareas en vuelo — gana si
   // Ollama corre con OLLAMA_NUM_PARALLEL >= ese valor.
-  const resultados = await conLimite(state.productosBajos, config.concurrencia, analizarUno);
+  const preparados = await conLimite(state.productosBajos, config.concurrencia, prepararUno);
+
+  // Los pendientes se agrupan en lotes de `demandaBatch`; cada
+  // lote es una sola llamada al LLM.
+  const pendientes = preparados.filter((r) => r.pendiente);
+  const lotes = [];
+  for (let i = 0; i < pendientes.length; i += config.demandaBatch) {
+    lotes.push(pendientes.slice(i, i + config.demandaBatch));
+  }
+  const porLote = await conLimite(lotes, config.concurrencia, analizarLote);
+
+  // Fallback granular: todos los items que el LLM omitió o
+  // devolvió inválidos (en cualquier lote) en un solo pool —
+  // respeta el límite de concurrencia global.
+  const faltantes = porLote.flatMap((r) => r.faltantes);
+  const individuales = await conLimite(faltantes, config.concurrencia, analisisIndividual);
 
   const analisis = {};
   const hashes = {};
   const errores = [];
-  for (const r of resultados) {
+  const resueltos = [
+    ...preparados.filter((r) => !r.pendiente),
+    ...porLote.flatMap((r) => r.resueltos),
+    ...individuales,
+  ];
+  for (const r of resueltos) {
     analisis[r.id] = r.analisis;
     hashes[r.id] = r.hash;
     if (r.error) errores.push(r.error);

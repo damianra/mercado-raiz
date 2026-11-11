@@ -51,7 +51,7 @@ Tres beneficios concretos:
 | Nodo | Piensa con | Qué hace |
 |---|---|---|
 | leer-inventario | código | trae productos bajos/críticos del backend |
-| analizar-demanda | **LLM** (condicional) | estima demanda desde ventas; triage por CV: estables → promedio sin LLM (SPEC-12) |
+| analizar-demanda | **LLM** (condicional) | estima demanda desde ventas; triage por CV: estables → promedio sin LLM (SPEC-12); cache por hash de input (SPEC-16); volátiles en lotes de `DEMANDA_BATCH` por llamada, faltantes → llamada individual (SPEC-16) |
 | calcular-cantidad | código | fórmula: cubrir demanda × (lead time + 7 días) |
 | decidir-aprobacion | código | regla: monto ≥ umbral → requiere humano |
 | generar-analisis | **LLM** (condicional) | prosa solo si requiere_aprobacion; auto-aprobadas → template (SPEC-12) |

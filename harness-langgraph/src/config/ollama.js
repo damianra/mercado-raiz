@@ -38,3 +38,19 @@ export const llmJson = new ChatOllama({
   numCtx: 2048,
   numPredict: 300, // JSON de 3 campos corto; margen sobre los ~43 tok típicos
 });
+
+/**
+ * Modelo JSON para llamadas en lote (SPEC-16, R16.3): un prompt
+ * con DEMANDA_BATCH productos espera un array de análisis.
+ * numPredict y numCtx escalan con el tamaño del lote (~60 tok de
+ * salida por item, ~250 tok de input por producto + scaffold).
+ */
+export const llmJsonBatch = new ChatOllama({
+  baseUrl: config.ollamaBaseUrl,
+  model: config.ollamaModel,
+  temperature: 0.1,
+  format: 'json',
+  think: false,
+  numCtx: Math.max(2048, 512 + 320 * config.demandaBatch),
+  numPredict: 60 * config.demandaBatch,
+});
