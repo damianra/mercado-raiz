@@ -6,7 +6,7 @@
  * requiere_aprobacion y analisis_ia. Escribe: ordenesCreadas (todas
  * las respuestas) y ordenesPendientes (los orden_id que quedaron en
  * PENDIENTE_APROBACION — la lista que usa el router para decidir
- * si el grafo pausa en esperar-aprobacion).
+ * si el grafo pasa por notificar antes de cerrar).
  */
 import { crearOrden } from '../../integrations/ordenes.client.js';
 import { log } from '../../utils/logger.js';

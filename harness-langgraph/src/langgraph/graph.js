@@ -10,9 +10,10 @@
  *
  *   leer-inventario → analizar-demanda → calcular-cantidad
  *     → decidir-aprobacion → generar-analisis → crear-orden
- *     → ¿pendientes? → notificar → esperar-aprobacion ⏸
- *       → procesar-decision → ¿quedan? ↺ esperar-aprobacion / fin
+ *     → ¿pendientes? → notificar → fin
  *                    └─ no → fin
+ * (SPEC-12: sin interrupt — la aprobación humana quedó desacoplada
+ * en el backend REST; la corrida es atómica).
  */
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
@@ -26,10 +27,8 @@ import { generarAnalisis } from './nodes/generar-analisis.js';
 import { decidirAprobacion } from './nodes/decidir-aprobacion.js';
 import { crearOrdenes } from './nodes/crear-orden.js';
 import { notificar } from './nodes/notificar.js';
-import { esperarAprobacion } from './nodes/esperar-aprobacion.js';
-import { procesarDecision } from './nodes/procesar-decision.js';
 import { fin } from './nodes/fin.js';
-import { despuesDeCrearOrdenes, despuesDeProcesar } from './edges/router.js';
+import { despuesDeCrearOrdenes } from './edges/router.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -47,8 +46,6 @@ export async function construirGrafo() {
     .addNode('decidir-aprobacion', decidirAprobacion)
     .addNode('crear-orden', crearOrdenes)
     .addNode('notificar', notificar)
-    .addNode('esperar-aprobacion', esperarAprobacion)
-    .addNode('procesar-decision', procesarDecision)
     .addNode('fin', fin)
     .addEdge(START, 'leer-inventario')
     .addEdge('leer-inventario', 'analizar-demanda')
@@ -57,9 +54,7 @@ export async function construirGrafo() {
     .addEdge('decidir-aprobacion', 'generar-analisis')
     .addEdge('generar-analisis', 'crear-orden')
     .addConditionalEdges('crear-orden', despuesDeCrearOrdenes, ['notificar', 'fin'])
-    .addEdge('notificar', 'esperar-aprobacion')
-    .addEdge('esperar-aprobacion', 'procesar-decision')
-    .addConditionalEdges('procesar-decision', despuesDeProcesar, ['esperar-aprobacion', 'fin'])
+    .addEdge('notificar', 'fin')
     .addEdge('fin', END)
     .compile({ checkpointer });
 

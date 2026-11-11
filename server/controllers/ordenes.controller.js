@@ -1,5 +1,4 @@
 import { capString } from '../security.js';
-import { notificarResume } from '../harness-notify.js';
 import {
   ESTADOS_ORDEN,
   SORT_COLUMNS,
@@ -118,9 +117,6 @@ export function aprobar(req, res) {
   if (!ordenPendienteOError(req, res)) return;
   const aprobadoPor = capString(req.body?.aprobado_por, 200) || 'sistema';
   const orden = aprobarOrden(req.params.orden_id, aprobadoPor);
-  // La decisión humana quedó persistida → señal al agente para que
-  // reanude el grafo (si hay una corrida pausada esperándolo).
-  notificarResume({ orden_id: orden.orden_id, decision: 'APROBADA', por: aprobadoPor });
   res.json({
     success: true,
     message: `Orden ${orden.orden_id} aprobada exitosamente`,
@@ -139,7 +135,6 @@ export function rechazar(req, res) {
   if (!ordenPendienteOError(req, res)) return;
   const rechazadoPor = capString(req.body?.rechazado_por, 200) || 'sistema';
   const orden = rechazarOrden(req.params.orden_id, rechazadoPor, capString(motivo, 500));
-  notificarResume({ orden_id: orden.orden_id, decision: 'RECHAZADA', por: rechazadoPor });
   res.json({
     success: true,
     message: `Orden ${orden.orden_id} rechazada`,

@@ -52,16 +52,11 @@ export const EstadoGrafo = Annotation.Root({
 
   /**
    * orden_id de las que esperan decisión humana.
-   * Escribe: crear-orden (inicial) y procesar-decision (achicada).
-   * Leen: edges/router, notificar, esperar-aprobacion, procesar-decision.
+   * Escribe: crear-orden.
+   * Leen: edges/router, notificar.
    */
   ordenesPendientes: listaVacia(),
 
-  /** Escribe: procesar-decision. Lee: fin. */
-  ordenesResueltas: listaVacia(),
-
-  /** Escribe: esperar-aprobacion (payload que llegó por POST /resume). Nadie lo lee — queda de registro. */
-  senalReanudacion: ultimoGana(),
 
   /** Escriben: todos los nodos ante errores no fatales (concatena). Lee: fin. */
   errores: acumulativo(),
