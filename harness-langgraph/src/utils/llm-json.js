@@ -33,15 +33,32 @@ export function parseJsonResponse(content, schema) {
  */
 export function parseJsonArrayResponse(content, itemSchema) {
   const text = typeof content === 'string' ? content : String(content);
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error(`el LLM no devolvió un array JSON: ${text.slice(0, 120)}`);
+  // Con format:'json' Ollama sesga la salida hacia objetos — el
+  // modelo suele devolver {"resultados": [...]} en vez del array
+  // desnudo, o un objeto suelto cuando interpreta un solo item.
+  // Se prueban en orden: texto completo, primer [...], primer
+  // {...}; un objeto sin array adentro se trata como item único.
+  const candidatos = [text];
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (arrMatch) candidatos.push(arrMatch[0]);
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) candidatos.push(objMatch[0]);
   let data;
-  try {
-    data = JSON.parse(match[0]);
-  } catch {
-    throw new Error(`array JSON inválido del LLM: ${match[0].slice(0, 120)}`);
+  for (const candidato of candidatos) {
+    try {
+      const parsed = JSON.parse(candidato);
+      if (Array.isArray(parsed)) {
+        data = parsed;
+        break;
+      }
+      if (parsed && typeof parsed === 'object') {
+        const items = Object.values(parsed).find((v) => Array.isArray(v));
+        data = items ?? [parsed];
+        break;
+      }
+    } catch { /* sigue el siguiente candidato */ }
   }
-  if (!Array.isArray(data)) throw new Error('la respuesta del LLM no es un array');
+  if (!data) throw new Error(`el LLM no devolvió un array JSON: ${text.slice(0, 120)}`);
   const items = [];
   let invalidos = 0;
   for (const item of data) {

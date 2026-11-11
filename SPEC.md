@@ -941,7 +941,8 @@ verificado que el archivo permanece en disco, `git ls-files` vacío y
 ## SPEC-16 · Optimización de throughput del agente
 
 - **Fecha:** 2026-11-14
-- **Estado global:** ⏳ registrada — pendiente de implementación
+- **Estado global:** ✅ implementada y medida — frío ~4× más rápido
+  que el baseline, tibio <1 s (0 llamadas LLM)
 
 ### Contexto técnico
 
@@ -1027,12 +1028,16 @@ Palancas elegidas (en este orden de implementación):
   nodo en 2 fases: `prepararUno` (ventas+hash+triage+cache, en
   paralelo) marca `pendiente`; los pendientes se chunkean en lotes
   de `DEMANDA_BATCH` y cada lote es una llamada a `llmJsonBatch`
-  (instancia con `numPredict=60×lote`, `numCtx` escalado). Items
+  (instancia con `numPredict=100×lote`, `numCtx` escalado). Items
   se validan contra `schemaAnalisisBatch` (análisis +
   `producto_id` coerce) via `parseJsonArrayResponse` nuevo;
   matcheo por `producto_id`; faltantes/inválidos y lotes que
   fallan completos caen a `analisisIndividual` (path pre-batch
   intacto). `DEMANDA_BATCH` en `.env`/`.env.example`/README.
+  **Fix medido en benchmark:** con `format:'json'` Ollama sesga la
+  salida a objetos — el prompt pide `{"resultados": [...]}` (no el
+  array desnudo: el 100% de los lotes fallaba) y el parser acepta
+  array, objeto-envuelto y objeto suelto (→ item único).
 - **R16.4** `POST /api/ordenes/batch`: acepta array de órdenes, las
   valida una por una (400 con detalle del item si alguna falla, sin
   parciales silenciosos — transacción), las crea en una transacción
@@ -1050,7 +1055,17 @@ Palancas elegidas (en este orden de implementación):
 - **R16.5** Tests + medición: tests por pieza (cache hit/miss,
   concurrencia respeta el límite, batch con item inválido hace
   fallback, endpoint batch transaccional) + corrida comparativa del
-  agente real documentando speedup vs `validacion-grafo-real`.
+  agente real documentando speedup vs `validacion-grafo-real`. ✅ —
+  22 tests nuevos (`analisis-cache.test.js`, `concurrencia.test.js`,
+  `crear-orden.test.js`, `server/ordenes-batch.test.js`, +2 casos de
+  formato de lote en `triage-y-justificacion`); suite 109/109.
+  Benchmark documentado en
+  `docs/benchmarks/benchmark-spec16-optimizacion-2026-11-11.md`:
+  **frío 79 s vs ~312 s baseline (~3,9×)** con 87 llamadas LLM
+  (12 lotes + 75 justificaciones, 0 degradados) vs 137;
+  **tibio <1 s con 0 llamadas LLM** (133 cache hits);
+  108/108 órdenes vía endpoint batch (baseline perdía 41 por 429);
+  GPU 88%/189 W en frío, idle en tibio.
 
 ### Tareas
 
@@ -1062,7 +1077,9 @@ Palancas elegidas (en este orden de implementación):
 
 ### Verificado por
 
-Pendiente — se completa al implementar y medir.
+Revisión por sub-agente en cada PR (R16.1→PR#14, R16.2→#15, R16.3→#16
+con 2 pasadas, R16.4→#17 con 2 pasadas, R16.5→pendiente) + suite
+Vitest + benchmark real con GPU/Ollama monitorizados.
 
 ---
 
@@ -1085,7 +1102,7 @@ Pendiente — se completa al implementar y medir.
 | (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
 | (post-gen) | SPEC-14 ✅ | `integrations/productos.client.js` | `paginacion-productos.test.js` (5) |
 | (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
-| (post-gen) | SPEC-16 ⏳ | `langgraph/nodes/*`, `integrations/ordenes.client.js`, `server/*` | pendiente |
+| (post-gen) | SPEC-16 ✅ | `harness/analisis-cache.js`, `utils/{concurrencia,llm-json}.js`, `langgraph/nodes/*`, `server/models|controllers|routes/ordenes*` | `analisis-cache`, `concurrencia`, `crear-orden`, `ordenes-batch` (22 tests) + benchmark |
 
 ## Anexo B — Divergencias brief ↔ implementación
 

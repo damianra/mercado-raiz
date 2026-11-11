@@ -31,7 +31,10 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config/env.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ARCHIVO = join(here, '../../data/analisis-cache.json');
+// ANALISIS_CACHE_PATH sobreescribe la ubicación (tests, corridas
+// aisladas). Sin ella: data/analisis-cache.json del harness.
+const ARCHIVO = process.env.ANALISIS_CACHE_PATH
+  || join(here, '../../data/analisis-cache.json');
 
 let cache = null; // lazy-load una vez por proceso
 
