@@ -36,6 +36,7 @@ El proxy de Vite redirige `/api` y `/uploads` al puerto 4000 en dev.
 ### Agente de reposición (opcional)
 
 ```bash
+npm --prefix harness-langgraph install   # deps del agente (también requeridas por `npm test`: la suite incluye harness-langgraph/tests/)
 npm run agente   # harness-langgraph (requiere la API en :4000 y Ollama en :11434)
 ```
 

@@ -386,8 +386,10 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
 - **R9.3** Docker multi-stage (node:22): `npm ci` → build `dist/` →
   slim con `server/` + `dist/`; `CMD node server/index.js` sirve API +
   estáticos en un solo contenedor (el backend sirve `dist/` si existe).
-- **R9.4** CI (`.github/workflows/ci.yml`): `npm ci`, `npm audit
-  --audit-level=critical`, `npm test` en Node 22.
+- **R9.4** CI (`.github/workflows/ci.yml`): `npm ci` (raíz **y**
+  `harness-langgraph/` — el vitest raíz incluye
+  `harness-langgraph/tests/`, que importan `zod`/LangChain),
+  `npm audit --audit-level=critical`, `npm test` en Node 22.
 - **R9.5** `.env.example` declara `PORT` (comentada; `HARNESS_URL`
   eliminada en SPEC-12); el harness tiene su propio `.env.example`
   (`BACKEND_URL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`,

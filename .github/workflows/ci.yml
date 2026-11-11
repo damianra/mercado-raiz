@@ -15,5 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # vitest raíz globa harness-langgraph/tests/** (deps: zod, langchain)
+      - run: npm ci
+        working-directory: harness-langgraph
       - run: npm audit --audit-level=critical
       - run: npm test
