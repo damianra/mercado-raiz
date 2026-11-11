@@ -390,6 +390,135 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
 
 ---
 
+## SPEC-10 · Observabilidad y Métricas del Agente (LLM y Orquestación)
+
+- **Origen:** agregado post-generación (bloque provisto por el usuario, validado contra el código el 2026-11-10)
+- **Implementación objetivo:** `harness-langgraph/src/harness/{cost-tracker,metrics,server,orchestrator}.js`, `src/langgraph/{state.js,nodes/*}`, `src/index.js`
+- **Estado global:** 🟡 parcial — la telemetría base existe; falta el contrato de API nuevo y las métricas de negocio.
+
+**Objetivo**: rastrear el rendimiento, costo computacional y
+comportamiento del LLM (Ollama) en cada ejecución del agente,
+proporcionando datos accionables para optimización y depuración, sin
+inflar el estado global (state bloat): las métricas viven en los
+acumuladores del harness (`metrics`, `costTracker`), no en el estado
+del grafo — salvo `errores`, que ya es parte del estado por diseño.
+
+### 1. Datos nativos capturados de Ollama (por cada llamada al LLM)
+
+`cost-tracker.js` ya recibe la respuesta completa de LangChain; debe
+leer además `response_metadata` (verificado: trae los 7 campos en
+nanosegundos) y transformarlos a ms:
+
+| Campo (Origen Ollama, `response_metadata`) | Campo en Métrica | Descripción | Estado |
+|---|---|---|---|
+| `model` | `modelo` | Modelo usado — dinámico, hoy `qwen3:8b` | ❌ pendiente |
+| `prompt_eval_count` | `tokens_prompt` | Tokens de entrada | 🟡 existe (como `tokens_entrada`, sumado; falta nombre expuesto) |
+| `eval_count` | `tokens_generacion` | Tokens de salida | 🟡 idem (`tokens_salida`) |
+| `load_duration` | `tiempo_carga_ms` | Carga del modelo en memoria — alto = cold start | ❌ pendiente |
+| `prompt_eval_duration` | `tiempo_procesamiento_prompt_ms` | Tiempo leyendo el contexto | ❌ pendiente |
+| `eval_duration` | `tiempo_generacion_ms` | Tiempo escribiendo la respuesta | ❌ pendiente |
+| `total_duration` | `tiempo_total_inferencia_ms` | Ciclo completo de inferencia | ❌ pendiente |
+
+### 2. Métricas de Orquestación y Negocio (Harness)
+
+| Métrica | Fuente real hoy | Estado |
+|---|---|---|
+| `total_productos_evaluados` | `state.productosBajos.length` (estado final del grafo) | ❌ pendiente — el harness no lee aún el estado final |
+| `ordenes_creadas` | `state.ordenesCreadas.length` | ❌ pendiente — misma vía |
+| `ordenes_pausadas_hith` | `state.ordenesPendientes` / flag `requiere_aprobacion` | ❌ pendiente — misma vía |
+| `conteo_fallbacks` | `metrics.erroresFallback` → `fallbacks_usados` | ✅ existe, renombrar/exponer |
+| `tasa_fallback` | `conteo_fallbacks / total_productos_evaluados * 100` | ❌ pendiente — **acotación**: hay 2 nodos LLM, así el máximo teórico es 200%; alerta >15% se mantiene como umbral |
+| `errores_no_criticos` | `state.errores` (reducer acumulativo, ya escriben todos los nodos) | 🟡 existe en el grafo; falta exponerlo en `/metrics` |
+
+### 3. Contrato de API
+
+**Ruta**: `GET http://localhost:4110/metrics` (existe — hoy devuelve
+`{...metrics.resumen(), llm: costTracker.resumen()}`; hay que
+reestructurar a esta forma, breaking change interno del sub-proyecto)
+
+```json
+{
+  "estado_corrida": "terminado",
+  "resumen_ejecucion": {
+    "total_productos_evaluados": 5,
+    "ordenes_creadas": 2,
+    "ordenes_pausadas_hith": 1,
+    "conteo_fallbacks": 1,
+    "tasa_fallback": 20.0,
+    "mensaje_sistema": "Ejecución completada con 1 fallback heurístico."
+  },
+  "rendimiento_llm": {
+    "modelo": "qwen3:8b",
+    "llamadas_totales": 10,
+    "tokens_prompt_acumulados": 4500,
+    "tokens_generacion_acumulados": 1200,
+    "tiempo_carga_promedio_ms": 150,
+    "tiempo_generacion_promedio_ms": 850,
+    "tiempo_total_promedio_ms": 1000
+  },
+  "errores_no_criticos": [
+    "generar-analisis(SKU-99): Respuesta demasiado corta, se usó template"
+  ]
+}
+```
+
+Notas de diseño validadas:
+
+- `estado_corrida` mapea a `orchestrator.corrida.fase`
+  (`idle|corriendo|pausado|terminado|error`).
+- Si `total_productos_evaluados` es `0` (sin llamadas al LLM),
+  `rendimiento_llm` será `null` y el frontend solo muestra
+  `mensaje_sistema` — nunca tablas vacías (regla UI n°5).
+- `mensaje_sistema` es derivado (contadores → frase), no viene del LLM.
+
+### Requisitos
+
+- **R10.1** `costTracker.registrar(r)` lee `response_metadata`:
+  acumula tokens + las 4 duraciones (ns→ms) y guarda `modelo` de la
+  última llamada. 🟡 tokens ya; ❌ duraciones y modelo.
+- **R10.2** El harness obtiene `productosBajos`, `ordenesCreadas`,
+  `ordenesPendientes`, `ordenesResueltas` y `errores` del estado final
+  del grafo (`grafo.getState()` tras cada `stream`, ya disponible en
+  `orchestrator.ejecutar`) y los vuelca a `metrics` — sin duplicarlos
+  en el estado del grafo. ❌
+- **R10.3** `GET /metrics` devuelve el contrato de §3 con
+  `estado_corrida`, `resumen_ejecucion` (incl. `tasa_fallback` y
+  `mensaje_sistema`), `rendimiento_llm` (`null` sin llamadas) y
+  `errores_no_criticos`. ❌ breaking change aceptado (endpoint interno).
+- **R10.4** Los nodos LLM siguen registrando fallbacks en
+  `state.errores` + `metrics.fallback()` — ya lo hacen; solo
+  verificar que el mensaje sea conciso (sin stack traces). ✅
+- **R10.5** `resumenFinal()` del orchestrator imprime el nuevo
+  resumen estructurado. ❌
+
+### Tareas de implementación
+
+- [ ] **T10.1** `cost-tracker.js`: extender `registrar()` para leer
+  `response_metadata` (`load_duration`, `prompt_eval_duration`,
+  `eval_duration`, `total_duration`, `model`); acumular sumas y
+  contar llamadas; exponer promedios ms en `resumen()`.
+- [ ] **T10.2** `metrics.js`: agregar campos `productosEvaluados`,
+  `ordenesCreadas`, `ordenesPausadas`, `erroresNoCriticos` con sus
+  setters, y `tasa_fallback` derivada en `resumen()`.
+- [ ] **T10.3** `orchestrator.js`: tras cada `ejecutar()` (y al
+  terminar la corrida) leer `estado.values` y alimentar los campos
+  de T10.2; generar `mensaje_sistema`.
+- [ ] **T10.4** `server.js`: reestructurar `GET /metrics` al contrato
+  de §3 (fase → `estado_corrida`; `rendimiento_llm: null` si no hubo
+  llamadas).
+- [ ] **T10.5** Tests: extender `harness-langgraph/tests/` con un
+  test de `cost-tracker` (objeto mock de `response_metadata`) y del
+  shape de `/metrics` — sin Ollama real.
+- [ ] **T10.6** Docs: actualizar `docs/arquitectura.md` (tabla del
+  harness) y `EXPLICACION.md` con el nuevo contrato de `/metrics`.
+
+### Verificado por
+
+`harness-langgraph/tests/` (T10.5); validación manual con
+`curl :4110/metrics` tras una corrida real.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -403,6 +532,7 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
 | (transversal) | SPEC-06 | `security.js`, `Privacidad.jsx`, `NotFound.jsx` | `app.test.js`, e2e |
 | (post-gen) | SPEC-08 | `harness-langgraph/` | `tests/nodes/` |
 | (skeleton) | SPEC-09 | `Dockerfile`, `ci.yml`, configs | CI |
+| (post-gen) | SPEC-10 | `harness-langgraph/src/harness/*` | `harness-langgraph/tests/` |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
