@@ -13,9 +13,16 @@
  * llamadas LLM la próxima corrida). Está en .gitignore.
  *
  * El hash cubre TODO lo que entra a los prompts: ventas de la
- * ventana, campos del producto (stock, precio, lead time, nombre —
- * un movimiento AJUSTE cambia stock sin tocar ventas) y la config
- * que afecta el resultado (modelo, umbrales).
+ * ventana, campos del producto (sku, nombre, stock, precio, lead
+ * time — un movimiento AJUSTE cambia stock sin tocar ventas) y la
+ * config que afecta el resultado (modelo, umbrales).
+ *
+ * `analisis_llm` marca que `entrada.analisis` la produjo el LLM
+ * (no el fallback heurístico): buscarDemanda lo exige, así si ayer
+ * el LLM falló y la justificación salió sobre el fallback, ese
+ * fallback no se presenta hoy como demanda cacheada — se reintenta.
+ * Las justificaciones sí pueden reusarse sobre análisis
+ * heurísticos: son deterministas, mismo input → misma prosa.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -54,6 +61,7 @@ export function hashAnalisis(producto, ventas) {
   const input = {
     ventas: ventas.map((v) => [v.fecha.slice(0, 10), Math.abs(v.diferencia)]),
     producto: [
+      producto.sku,
       producto.nombre,
       producto.stock_actual,
       producto.stock_minimo,
@@ -76,7 +84,9 @@ export function hashAnalisis(producto, ventas) {
  */
 export function buscarDemanda(productoId, hash) {
   const entrada = cargar()[productoId];
-  return entrada?.hash === hash ? (entrada.analisis ?? null) : null;
+  return entrada?.hash === hash && entrada.analisis_llm === true
+    ? entrada.analisis
+    : null;
 }
 
 /**
@@ -102,17 +112,25 @@ export function buscarJustificacion(productoId, hash, analisis) {
  */
 export function guardarDemanda(productoId, hash, analisis) {
   cargar();
-  cache[productoId] = { hash, analisis, analisis_ia: null };
+  cache[productoId] = { hash, analisis, analisis_llm: true, analisis_ia: null };
   persistir();
 }
 
 /**
  * Guarda la justificación junto con el análisis que la produjo —
  * buscarJustificacion lo exige para no reusar texto con cifras
- * viejas. Preserva la demanda cacheada si ya estaba.
+ * viejas. `analisis_llm` solo se conserva si el análisis guardado
+ * sigue siendo el que el LLM cacheó (hit de demanda o
+ * guardarDemanda previo en esta misma corrida); si la justificación
+ * se generó sobre el fallback heurístico, el flag se pierde y el
+ * LLM de demanda se reintenta en la próxima corrida.
  */
 export function guardarJustificacion(productoId, hash, analisis, analisis_ia) {
   cargar();
-  cache[productoId] = { hash, analisis, analisis_ia };
+  const entrada = cache[productoId];
+  const analisisEsDeLlm = entrada?.hash === hash
+    && entrada.analisis_llm === true
+    && JSON.stringify(entrada.analisis) === JSON.stringify(analisis);
+  cache[productoId] = { hash, analisis, analisis_llm: analisisEsDeLlm, analisis_ia };
   persistir();
 }
