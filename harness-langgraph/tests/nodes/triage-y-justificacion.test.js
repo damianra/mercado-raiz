@@ -11,9 +11,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invokeJson = vi.fn();
+const invokeBatch = vi.fn();
 const invokeTexto = vi.fn();
 vi.mock('../../src/config/ollama.js', () => ({
   llmJson: { invoke: (...a) => invokeJson(...a) },
+  llmJsonBatch: { invoke: (...a) => invokeBatch(...a) },
   llm: { invoke: (...a) => invokeTexto(...a) },
 }));
 
@@ -94,17 +96,18 @@ describe('analizar-demanda — triage heurístico (SPEC-12)', () => {
     expect(cacheFns.guardarDemanda).not.toHaveBeenCalled();
   });
 
-  it('ventas volátiles: llama al LLM como siempre', async () => {
+  it('ventas volátiles: una llamada en lote resuelve el análisis', async () => {
     ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
-    invokeJson.mockResolvedValue({
-      content: '{"demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}',
+    invokeBatch.mockResolvedValue({
+      content: '[{"producto_id": 1, "demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}]',
       response_metadata: {},
     });
     const state = { productosBajos: [producto(1)] };
 
     const { analisisPorProducto } = await analizarDemanda(state);
 
-    expect(invokeJson).toHaveBeenCalledTimes(1);
+    expect(invokeBatch).toHaveBeenCalledTimes(1); // SPEC-16: 1 lote = 1 llamada
+    expect(invokeJson).not.toHaveBeenCalled(); // sin fallback individual
     expect(analisisPorProducto[1].demanda_diaria).toBe(4);
     expect(metrics.resumen().llm_evitadas).toBe(0);
     // el análisis LLM queda cacheado para la próxima corrida
@@ -112,14 +115,50 @@ describe('analizar-demanda — triage heurístico (SPEC-12)', () => {
     expect(cacheFns.guardarDemanda.mock.calls[0][2].demanda_diaria).toBe(4);
   });
 
+  it('lote con item faltante: solo ese producto cae a llamada individual', async () => {
+    ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
+    invokeBatch.mockResolvedValue({
+      // el modelo devuelve solo el producto 2 — el 1 falta
+      content: '[{"producto_id": 2, "demanda_diaria": 7, "tendencia": "estable", "observacion": "ok"}]',
+      response_metadata: {},
+    });
+    invokeJson.mockResolvedValue({
+      content: '{"demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}',
+      response_metadata: {},
+    });
+    const state = { productosBajos: [producto(1), producto(2)] };
+
+    const { analisisPorProducto } = await analizarDemanda(state);
+
+    expect(invokeBatch).toHaveBeenCalledTimes(1); // mismo lote
+    expect(invokeJson).toHaveBeenCalledTimes(1); // solo el faltante
+    expect(analisisPorProducto[1].demanda_diaria).toBe(4); // vía individual
+    expect(analisisPorProducto[2].demanda_diaria).toBe(7); // vía lote
+  });
+
+  it('lote entero inválido: todos caen a llamada individual', async () => {
+    ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
+    invokeBatch.mockResolvedValue({ content: 'no json at all', response_metadata: {} });
+    invokeJson.mockResolvedValue({
+      content: '{"demanda_diaria": 4, "tendencia": "estable", "observacion": "ok"}',
+      response_metadata: {},
+    });
+    const state = { productosBajos: [producto(1), producto(2)] };
+
+    await analizarDemanda(state);
+
+    expect(invokeBatch).toHaveBeenCalledTimes(2); // 1 intento + 1 reintento
+    expect(invokeJson).toHaveBeenCalledTimes(2); // 1 por producto
+  });
+
   it('pocos datos (<3 días): va al LLM, no al heurístico', async () => {
     ventasDeProducto.mockResolvedValue(ventas([5, 5]));
-    invokeJson.mockResolvedValue({
-      content: '{"demanda_diaria": 5, "tendencia": "estable", "observacion": "ok"}',
+    invokeBatch.mockResolvedValue({
+      content: '[{"producto_id": 1, "demanda_diaria": 5, "tendencia": "estable", "observacion": "ok"}]',
       response_metadata: {},
     });
     await analizarDemanda({ productosBajos: [producto(1)] });
-    expect(invokeJson).toHaveBeenCalledTimes(1);
+    expect(invokeBatch).toHaveBeenCalledTimes(1);
   });
 });
 

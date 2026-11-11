@@ -1023,7 +1023,16 @@ Palancas elegidas (en este orden de implementación):
   review): `parseJsonResponse` hoy solo parsea objetos (`\{...\}`
   greedy no captura arrays) → necesita variante array-aware; el cap
   `numPredict` debe escalar con el tamaño del lote (≈50 tok/item) o
-  el JSON truncado degrada todo a llamadas individuales.
+  el JSON truncado degrada todo a llamadas individuales. ✅ —
+  nodo en 2 fases: `prepararUno` (ventas+hash+triage+cache, en
+  paralelo) marca `pendiente`; los pendientes se chunkean en lotes
+  de `DEMANDA_BATCH` y cada lote es una llamada a `llmJsonBatch`
+  (instancia con `numPredict=60×lote`, `numCtx` escalado). Items
+  se validan contra `schemaAnalisisBatch` (análisis +
+  `producto_id` coerce) via `parseJsonArrayResponse` nuevo;
+  matcheo por `producto_id`; faltantes/inválidos y lotes que
+  fallan completos caen a `analisisIndividual` (path pre-batch
+  intacto). `DEMANDA_BATCH` en `.env`/`.env.example`/README.
 - **R16.4** `POST /api/ordenes/batch`: acepta array de órdenes, las
   valida una por una (400 con detalle del item si alguna falla, sin
   parciales silenciosos — transacción), las crea en una transacción

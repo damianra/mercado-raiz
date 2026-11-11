@@ -59,11 +59,16 @@ Detalles en `docs/`: `arquitectura.md`, `flujo-datos.md`,
 Ver `.env.example` (copiado a `.env`): `BACKEND_URL`,
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`, `UMBRAL_APROBACION`,
 `UMBRAL_CV` (triage heurístico — SPEC-12), `AGENTE_CONCURRENCIA`
-(default 3 — productos en vuelo por nodo LLM, SPEC-16).
+(default 3 — tareas en vuelo por nodo LLM, SPEC-16),
+`DEMANDA_BATCH` (default 5 — productos volátiles por llamada de
+demanda; los que el modelo omita o devuelva inválidos caen a
+llamada individual — SPEC-16).
 
 Runtime del LLM (`src/config/ollama.js`): `numCtx: 2048` y
 `numPredict` acotado por instancia — los prompts usan ~250 tokens y
-las salidas ~100-160, holgura innecesaria solo gasta KV-cache.
+las salidas ~100-160, holgura innecesaria solo gasta KV-cache. La
+instancia de lote (`llmJsonBatch`, demanda por lotes) escala
+`numPredict`/`numCtx` con `DEMANDA_BATCH`.
 
 Paralelismo: los nodos que iteran productos llamando al LLM
 (`analizar-demanda`, `generar-analisis`) procesan hasta

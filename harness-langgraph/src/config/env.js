@@ -50,4 +50,12 @@ export const config = {
    * requests se encolan en Ollama y el speedup es mínimo.
    */
   concurrencia: Math.max(1, Number(required('AGENTE_CONCURRENCIA', '3')) || 3),
+
+  /**
+   * Tamaño de lote para prompts de demanda (SPEC-16): cuántos
+   * productos volátiles se mandan por llamada al LLM en un array
+   * JSON. Items inválidos/faltantes caen a llamada individual.
+   * Ojo: lotes >6-7 agrandan numCtx (ver ollama.js, llmJsonBatch).
+   */
+  demandaBatch: Math.max(1, Number(required('DEMANDA_BATCH', '5')) || 5),
 };
