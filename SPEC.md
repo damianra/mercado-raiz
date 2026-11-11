@@ -240,7 +240,8 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
   ["privacidad","notfound"]`
 - **Implementación:** `server/security.js`, `server/log.js`,
   `server/routes/uploads.js`, `src/pages/Privacidad.jsx`,
-  `src/pages/NotFound.jsx`, `server/harness-notify.js`
+  `src/pages/NotFound.jsx`, ~~`server/harness-notify.js`~~
+  (eliminado en SPEC-12)
 
 ### Requisitos
 
@@ -319,8 +320,10 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 
 Agente de reposición autónoma: lee productos con stock bajo → el LLM
 (Ollama `llama3.2:1b`) estima demanda → código calcula cantidad →
-crea órdenes vía HTTP → si alguna supera $100, **pausa el grafo** hasta
-que un humano resuelve desde el dashboard → reanuda y cierra.
+crea órdenes vía HTTP → si alguna supera $100, ~~pausa el grafo hasta
+que un humano resuelve desde el dashboard → reanuda~~ **(SPEC-12:**
+la corrida es atómica — termina y la pendiente espera en la DB; el
+humano resuelve por REST del backend**)** → cierra.
 
 ### Grafo (8 nodos — 10 antes de SPEC-12)
 

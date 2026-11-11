@@ -66,7 +66,7 @@ export const orchestrator = {
       seccion('⏸  AGENTE PAUSADO — esperando decisión humana');
       log(`Órdenes pendientes: ${estado.values.ordenesPendientes.join(', ')}`);
       log('Pasos: aprobar/rechazar en http://localhost:5173');
-      log('       (el backend dispara POST :4110/resume automáticamente)');
+      log('       y luego POST :4110/resume (solo corridas pausadas viejas)');
 
       // Si llegó otra decisión humana MIENTRAS procesábamos, quedó
       // encolada: reanudar en cadena hasta vaciar la cola.
@@ -105,8 +105,8 @@ export const orchestrator = {
   },
 
   /**
-   * Reanuda la corrida pausada — lo llama POST /resume (hoy lo
-   * dispara el backend tras cada aprobar/rechazar).
+   * Reanuda la corrida pausada — lo llama POST /resume (compat:
+   * solo queda para checkpoints pausados de antes de SPEC-12).
    * Si llega mientras el grafo está corriendo (el humano aprobó
    * varias órdenes de golpe), se encola: al volver a pausar se
    * procesa sola — ninguna señal se pierde.

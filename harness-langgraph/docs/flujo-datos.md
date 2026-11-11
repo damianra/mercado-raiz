@@ -25,7 +25,6 @@ cualquier nodo     → errores: [string]  (acumulativo)
 | leer-inventario | `GET /api/productos?estado=STOCK_BAJO` `?estado=CRITICO` | qué reponer |
 | analizar-demanda | `GET /api/historial?producto_id=N&tipo=VENTA` | materia prima del LLM |
 | crear-orden | `POST /api/ordenes` | `{producto_id, cantidad, requiere_aprobacion, analisis_ia}` |
-| procesar-decision | `GET /api/ordenes/:orden_id` | estado real post-aprobación |
 | fin | `GET /api/dashboard/stats` | KPIs de cierre |
 
 ## Regla del umbral, duplicada a propósito

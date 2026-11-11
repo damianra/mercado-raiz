@@ -25,7 +25,7 @@ prompt front - back Qwen 3.7
 
 ```bash
 npm install
-cp .env.example .env   # opcional: PORT, HARNESS_URL
+cp .env.example .env   # opcional: PORT
 npm run seed           # puebla la DB con datos realistas
 npm run dev            # frontend en http://localhost:5173
 npm run api            # API Express en http://localhost:4000
