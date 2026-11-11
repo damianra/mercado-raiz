@@ -64,11 +64,11 @@ Tres beneficios concretos:
 | Archivo | Qué hace | Por qué existe |
 |---|---|---|
 | `orchestrator.js` | ejecuta el grafo, detecta pausas, reanuda | un solo lugar conoce el thread_id y el ciclo de vida |
-| `server.js` | GET /status, /metrics; POST /resume, /run | la puerta de entrada del mundo exterior (el humano) |
+| `server.js` | GET /status, /metrics (contrato SPEC-10); POST /resume, /run | la puerta de entrada del mundo exterior (el humano) |
 | `monitor.js` | imprime cada transición del grafo | ver el agente "moverse" durante la demo |
 | `error-handler.js` | retry con backoff | fallas transitorias (429, timeout) no matan la corrida |
-| `cost-tracker.js` | acumula tokens del LLM | con un modelo hosted esto ES la factura |
-| `metrics.js` | duración, llamadas, fallbacks | el "informe" que se muestra al final |
+| `cost-tracker.js` | acumula tokens, duraciones (ns→ms) y modelo del LLM por llamada | con un modelo hosted esto ES la factura |
+| `metrics.js` | duración, llamadas, fallbacks + contadores de negocio (productos, órdenes, errores) | el "informe" que se muestra al final — el orchestrator lo alimenta con el estado del grafo |
 
 ## Human-in-the-loop, cómo está cableado
 

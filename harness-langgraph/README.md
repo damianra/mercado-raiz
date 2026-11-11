@@ -37,7 +37,7 @@ Cuando el agente pause en `esperar-aprobacion`:
    órdenes y sigue: si quedan pendientes vuelve a pausar, si no,
    termina. Aprobar/rechazar varias seguidas también funciona —
    las señales se encolan.
-3. `curl http://localhost:4110/metrics` → métricas y tokens usados.
+3. `curl http://localhost:4110/metrics` → métricas de la corrida: negocio + rendimiento del LLM (tokens, tiempos en ms).
 
 ## Mapa del código
 

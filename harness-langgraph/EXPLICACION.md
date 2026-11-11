@@ -67,8 +67,8 @@ confiable*. Vive en `src/harness/`:
 | `server.js` | Servidor Express en el puerto **4110** — la única puerta de entrada del mundo exterior al agente. |
 | `monitor.js` | Imprime cada transición del grafo en consola — ves al agente "moverse" en vivo. |
 | `error-handler.js` | Reintentos con backoff ante fallas transitorias. |
-| `cost-tracker.js` | Cuenta los tokens usados por el LLM (con un modelo pago, esto sería la factura). |
-| `metrics.js` | Duración de corrida, llamadas al LLM, fallbacks usados. |
+| `cost-tracker.js` | Cuenta tokens y tiempos de inferencia del LLM por llamada — modelo, duraciones en ms (con un modelo pago, los tokens serían la factura). |
+| `metrics.js` | Duración de corrida, llamadas al LLM, fallbacks y contadores de negocio (productos evaluados, órdenes creadas/pausadas, errores). |
 
 Además el servidor tiene un rol sutil pero importante: **es lo que
 mantiene vivo el proceso** mientras el grafo está congelado
@@ -124,7 +124,7 @@ npm run agente          # desde la raíz; o cd harness-langgraph && npm run agen
     │                   │                    │               │   no → fin ✅
     │                   │                    │               │
     │  GET /status ────────────────────────────────────────▶ │ fase actual
-    │  GET /metrics ───────────────────────────────────────▶ │ tokens, tiempos
+    │  GET /metrics ───────────────────────────────────────▶ │ negocio + LLM
 ```
 
 En criollo, la conversación es:
@@ -157,7 +157,7 @@ En criollo, la conversación es:
 | `POST http://localhost:4110/run` | Disparar una corrida nueva (409 si ya hay una en curso) |
 | `POST http://localhost:4110/resume` | Despertar al agente pausado (lo dispara el backend solo) |
 | `GET http://localhost:4110/status` | Ver en qué fase está: `corriendo`, `pausado`, `terminado` |
-| `GET http://localhost:4110/metrics` | Métricas de la corrida y tokens gastados |
+| `GET http://localhost:4110/metrics` | Contrato SPEC-10: `estado_corrida`, `resumen_ejecucion` (contadores de negocio + `mensaje_sistema`), `rendimiento_llm` (tokens y tiempos ms — `null` si no se usó el LLM), `errores_no_criticos` |
 
 ### Detalle fino: por qué el humano no habla con el agente
 
