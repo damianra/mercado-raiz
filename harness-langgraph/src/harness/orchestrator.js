@@ -61,6 +61,7 @@ export const orchestrator = {
 
     if (await this.estaPausado(threadId)) {
       const estado = await this.grafo.getState(config);
+      metrics.sincronizarEstadoGrafo(estado.values);
       this.corrida = { threadId, fase: 'pausado', detalle: estado.values.ordenesPendientes };
       seccion('⏸  AGENTE PAUSADO — esperando decisión humana');
       log(`Órdenes pendientes: ${estado.values.ordenesPendientes.join(', ')}`);
@@ -79,6 +80,8 @@ export const orchestrator = {
       return 'pausado';
     }
 
+    const estadoFinal = await this.grafo.getState(config);
+    metrics.sincronizarEstadoGrafo(estadoFinal.values);
     this.corrida = { threadId, fase: 'terminado', detalle: null };
     return 'terminado';
   },
