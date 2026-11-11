@@ -779,7 +779,7 @@ reanudables.
 
 - **R13.1** El backend debe incluir `Retry-After` (segundos) en las
   respuestas 429 del limiter — hoy el cliente no tiene cómo saber
-  cuándo reintentar.
+  cuándo reintentar. ✅
 - **R13.2** `crear-orden` (o `ordenes.client`) debe reintentar ante
   429 con backoff — respetar `Retry-After` si viene, exponencial con
   tope si no (ej. 2s→4s→8s, máx ~5 intentos). Si agota, el error
