@@ -20,6 +20,7 @@ export const llm = new ChatOllama({
   baseUrl: config.ollamaBaseUrl,
   model: config.ollamaModel,
   temperature: 0.3, // bajo: queremos análisis consistentes, no creatividad
+  think: false, // modelos con razonamiento (qwen3): sin think el bloque <think> quedaría dentro del texto
 });
 
 /**
@@ -31,4 +32,5 @@ export const llmJson = new ChatOllama({
   model: config.ollamaModel,
   temperature: 0.1,
   format: 'json',
+  think: false,
 });
