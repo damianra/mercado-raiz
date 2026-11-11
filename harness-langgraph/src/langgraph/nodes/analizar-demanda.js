@@ -16,6 +16,7 @@ import { ventasDeProducto } from '../../integrations/historial.client.js';
 import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
+import { buscarDemanda, guardarDemanda, hashAnalisis } from '../../harness/analisis-cache.js';
 import { parseJsonResponse } from '../../utils/llm-json.js';
 import { promptAnalisisDemanda } from '../prompts/analisis-demanda.js';
 import { log } from '../../utils/logger.js';
@@ -58,10 +59,15 @@ function fallbackDesdeVentas(ventas) {
 
 export async function analizarDemanda(state) {
   const analisis = {};
+  const hashes = {};
   const errores = [];
 
   for (const p of state.productosBajos) {
     const ventas = await ventasDeProducto(p.id);
+    // SPEC-16: el hash cubre ventas + producto + config — generar-
+    // analisis lo reusa para cachear la justificación (mismo input).
+    const hash = hashAnalisis(p, ventas);
+    hashes[p.id] = hash;
     // SPEC-12: demanda estable (CV < UMBRAL_CV) → promedio histórico
     // directo; el LLM se reserva para los patrones volátiles.
     const cv = coeficienteVariacion(ventas);
@@ -72,6 +78,15 @@ export async function analizarDemanda(state) {
         observacion: `Demanda estable (CV=${cv.toFixed(2)}), estimado por promedio histórico`,
       };
       log(`  ${p.sku}: demanda estable (CV=${cv.toFixed(2)}) — estimado heurístico, sin LLM`);
+      continue;
+    }
+    // SPEC-16: input idéntico al de una corrida anterior → la
+    // respuesta también; reusarla ahorra la llamada.
+    const cacheada = buscarDemanda(p.id, hash);
+    if (cacheada) {
+      metrics.cacheHit();
+      analisis[p.id] = cacheada;
+      log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
       continue;
     }
     try {
@@ -85,6 +100,7 @@ export async function analizarDemanda(state) {
         { intentos: 2, etiqueta: `análisis de ${p.sku}` },
       );
       analisis[p.id] = respuesta;
+      guardarDemanda(p.id, hash, respuesta);
       log(`  ${p.sku}: ~${respuesta.demanda_diaria} u/día, ${respuesta.tendencia} — ${respuesta.observacion}`);
     } catch (err) {
       metrics.fallback();
@@ -94,5 +110,5 @@ export async function analizarDemanda(state) {
     }
   }
 
-  return { analisisPorProducto: analisis, errores };
+  return { analisisPorProducto: analisis, hashPorProducto: hashes, errores };
 }

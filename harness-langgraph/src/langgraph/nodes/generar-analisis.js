@@ -13,6 +13,7 @@ import { llm } from '../../config/ollama.js';
 import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
+import { buscarJustificacion, guardarJustificacion } from '../../harness/analisis-cache.js';
 import { promptGenerarAnalisis } from '../prompts/generar-analisis.js';
 import { log } from '../../utils/logger.js';
 
@@ -38,6 +39,17 @@ export async function generarAnalisis(state) {
       decision[p.id] = { ...decision[p.id], analisis_ia: fallbackTexto(p, analisis, cantidad, monto_total) + ' (estimación automática)' };
       continue;
     }
+    // SPEC-16: mismo input (ventas + producto + config → misma
+    // demanda → misma cantidad/monto) → la justificación también es
+    // la misma; reusarla ahorra la llamada más cara del grafo.
+    const hash = state.hashPorProducto?.[p.id];
+    const cacheada = hash ? buscarJustificacion(p.id, hash, analisis) : null;
+    if (cacheada) {
+      metrics.cacheHit();
+      decision[p.id] = { ...decision[p.id], analisis_ia: cacheada };
+      log(`  ${p.sku}: justificación reusada del cache (input sin cambios)`);
+      continue;
+    }
     try {
       metrics.llamadaLlm();
       const respuesta = await conReintentos(
@@ -51,6 +63,7 @@ export async function generarAnalisis(state) {
         { intentos: 2, etiqueta: `justificación de ${p.sku}` },
       );
       decision[p.id] = { ...decision[p.id], analisis_ia: respuesta };
+      if (hash) guardarJustificacion(p.id, hash, analisis, respuesta);
     } catch (err) {
       metrics.fallback();
       decision[p.id] = { ...decision[p.id], analisis_ia: fallbackTexto(p, analisis, cantidad, monto_total) };

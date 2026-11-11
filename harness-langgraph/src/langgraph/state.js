@@ -41,6 +41,14 @@ export const EstadoGrafo = Annotation.Root({
   analisisPorProducto: mergeObjeto(),
 
   /**
+   * { [productoId]: hash sha256 del input LLM (ventas + producto +
+   * config) — SPEC-16: lo escribe analizar-demanda junto con el
+   * análisis y lo lee generar-analisis para el cache de
+   * justificaciones (mismo input → mismo análisis → mismo texto).
+   */
+  hashPorProducto: mergeObjeto(),
+
+  /**
    * { [productoId]: { cantidad, monto_total, requiere_aprobacion, analisis_ia } }
    * Escriben: calcular-cantidad → generar-analisis → decidir-aprobacion
    * (cada uno agrega su parte). Lee: crear-orden.

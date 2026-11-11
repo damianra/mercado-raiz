@@ -39,6 +39,8 @@ export function iniciarServidor() {
         ordenes_pausadas_hith: m.ordenes_pausadas_hith,
         conteo_fallbacks: m.conteo_fallbacks,
         llm_evitadas: m.llm_evitadas,
+        cache_hits: m.cache_hits,
+        reintentos: m.reintentos,
         tasa_fallback: m.tasa_fallback,
         mensaje_sistema: metrics.mensajeSistema(orchestrator.corrida.fase),
       },
