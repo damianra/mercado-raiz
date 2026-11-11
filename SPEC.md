@@ -605,6 +605,13 @@ sub-agente (detectó el bug TDZ del handler de señal). El monitoreo
 de GPU durante la corrida se hizo con `nvidia-smi` externo — fuera
 del script.
 
+Corridas registradas: baseline 100 artículos pre-tuning
+(`benchmark-qwen3-8b-2026-11-11.md`) y validación 500 artículos
+post-SPEC-12 (`benchmark-qwen3-8b-500-2026-11-11.md`) — throughput
+idéntico (23,2 art/min), demanda p99 −56%, VRAM −380 MB, GPU/power
+sin cambio; proyección de llamadas evitadas por el grafo (~49%
+sobre el dataset sintético) documentada en el reporte.
+
 ---
 
 ## SPEC-12 · Optimización de rendimiento del agente (demo productiva)
