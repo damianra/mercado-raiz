@@ -1,0 +1,67 @@
+{
+  "config": {
+    "articulos": 100,
+    "procesados": 100,
+    "concurrencia": 1,
+    "modo": "completo",
+    "modelo": "qwen3:8b",
+    "reporte_parcial": false
+  },
+  "duracion_total_s": 258.4,
+  "throughput": {
+    "articulos_por_min": 23.2,
+    "llamadas_por_min": 46.4
+  },
+  "por_tipo": {
+    "demanda": {
+      "llamadas": 100,
+      "wall_ms": {
+        "p50": 897,
+        "p95": 948,
+        "p99": 2317,
+        "max": 2317
+      },
+      "ollama_total_ms_prom": 905,
+      "tokens_in": 24579,
+      "tokens_out": 4275
+    },
+    "justificacion": {
+      "llamadas": 100,
+      "wall_ms": {
+        "p50": 1707,
+        "p95": 1879,
+        "p99": 1949,
+        "max": 1949
+      },
+      "ollama_total_ms_prom": 1676,
+      "tokens_in": 16441,
+      "tokens_out": 9994
+    }
+  },
+  "resiliencia": {
+    "fallbacks": 0,
+    "errores": 0,
+    "muestra_errores": []
+  },
+  "recursos_ollama": {
+    "rss_mb": {
+      "min": 1476,
+      "max": 1564
+    },
+    "cpu_pct": {
+      "min": 114,
+      "max": 115
+    }
+  },
+  "cost_tracker": {
+    "modelo": "qwen3:8b",
+    "llamadas_totales": 200,
+    "tokens_prompt_acumulados": 41020,
+    "tokens_generacion_acumulados": 14269,
+    "tiempo_carga_promedio_ms": 54,
+    "tiempo_procesamiento_prompt_promedio_ms": 97,
+    "tiempo_generacion_promedio_ms": 1107,
+    "tiempo_total_promedio_ms": 1290,
+    "costo_estimado_usd": 0
+  }
+}

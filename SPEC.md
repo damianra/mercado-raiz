@@ -558,18 +558,21 @@ node scripts/stress-llm.mjs [--articulos N] [--concurrencia K]
   de salir (helpers de reporte declarados antes del `await` del pool
   — como `const` después caían en TDZ y el volcado crasheaba).
 
-### Resultados de referencia (qwen3:8b, RTX 3060 Ti 8GB, 2026-11-10)
+### Resultados documentados
 
-Lote cortado a ~675/1000 artículos (~29 min), throughput plano:
-
-| Métrica | Valor |
-|---|---|
-| Throughput | 23 art/min (~46 llamadas/min), ~2.6s/artículo (2 llamadas) |
-| p50 demanda / justificación | ~900ms / ~1.700ms |
-| GPU util / potencia | 95% sostenido / ~197W (TDP ~200W → **power-limited**) |
-| GPU temp / VRAM | ~70°C / 6.2GB estable (sin cuello de memoria) |
-| Concurrencia K=4 | +12% throughput, colas de 5-6s → Ollama serializa |
-| Fallbacks/errores | 0 observados |
+- **Benchmark completo (qwen3:8b, RTX 3060 Ti, 2026-11-11)**:
+  `harness-langgraph/docs/benchmarks/benchmark-qwen3-8b-2026-11-11.md`
+  + datos agregados `stress-qwen3-8b-2026-11-11.json`.
+  100/100 artículos, 258s, 23,2 art/min, 0 fallbacks; GPU
+  power-limited (195,6W/200W prom., 69,7°C, VRAM 6,2/8GB).
+- **Convención de persistencia**: en el repo solo se commitea el
+  `.json` agregado + `.md` narrativo por corrida (en
+  `docs/benchmarks/`); el `--salida` JSONL por artículo es efímero
+  y está en `.gitignore` — así cada prueba queda comparable contra
+  corridas futuras sin inflar el repo.
+- Referencia histórica — lote cortado a ~675/1000 (2026-11-10):
+  mismo throughput plano (23 art/min), confirma que el cuello es
+  potencia de GPU, no duración del lote.
 
 ### Requisitos
 
