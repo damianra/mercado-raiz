@@ -110,10 +110,10 @@ una API ajena.
 - `conReintentos` espera exactamente eso (tope 60 s) — un backoff
   fijo corto caería dentro de la misma ventana saturada y agotaría
   intentos sin llegar a un slot libre.
-- `api.post` reintenta hasta 4 veces; si agota, el error va a
+- `api.post` hace hasta 4 intentos totales; si agota, el error va a
   `errores_no_criticos` de la corrida (visible, nunca silencioso).
-- Los reintentos se cuentan en `reintentos` de `/metrics` — no son
-  llamadas LLM ni fallbacks.
+- Los reintentos se cuentan en `reintentos` del resumen de métricas
+  de la corrida — no son llamadas LLM ni fallbacks.
 
 Alternativas descartadas: `max` mayor para loopback (asimetría
 frágil ante un harness remoto) y bypass por API key (credencial
