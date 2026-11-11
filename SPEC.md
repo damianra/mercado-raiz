@@ -840,6 +840,87 @@ original quedó medido en
 
 ---
 
+## SPEC-14 · Paginación completa de productos a reponer
+
+- **Fecha:** 2026-11-14
+- **Estado global:** ⏳ registrada — pendiente de implementación
+
+### Contexto técnico
+
+`productos.client.js` pide `?estado=STOCK_BAJO&limit=100` y
+`?estado=CRITICO&limit=100` — **una sola página por estado**. La API
+toca `limit` en 100, así que con más de 100 productos en un estado la
+lista se **trunca en silencio**: productos bajos de stock que el
+agente nunca evalúa (ni LLM ni orden — simplemente no existen para la
+corrida). Quedó medido en la validación real: de 100 productos BENCH
+sembrados, entraron 99 (SPEC-12 §validación).
+
+El envelope ya trae `pagination: { page, limit, total, totalPages }` —
+la API soporta `page=N`, no hace falta tocar el backend.
+
+### Requisitos
+
+- **R14.1** `listarProductosAReponer` debe traer **todas** las páginas
+  de cada estado: pedir página 1, leer `totalPages` del envelope y
+  completar las restantes (los GET están exentos del limiter — se
+  pueden paralelizar). Comportamiento de degradación: si el envelope
+  no trae `pagination`, devolver `data` como hoy.
+- **R14.2** No inventar límite nuevo: se respeta el `limit ≤ 100` del
+  backend paginando, no subiendo el tope.
+- **R14.3** Métrica/observabilidad: `total_productos_evaluados` debe
+  reflejar el total real (ya lo hace al contar la lista retornada —
+  sin cambio, pero verificar en el smoke).
+- **R14.4** Tests: cliente mockeado con `totalPages > 1` (verificar
+  que itera), `pagination` ausente (fallback), y deduplicación si un
+  producto apareciera en ambos estados (la API no lo permite por
+  definición de estado, pero el merge debe ser seguro).
+
+### Tareas
+
+- **T14.1** Paginación en `productos.client.js` (R14.1–R14.3)
+- **T14.2** Tests de paginación (R14.4)
+
+### Verificado por
+
+Pendiente — se completa al implementar.
+
+---
+
+## SPEC-15 · Higiene: dejar de trackear `.last-thread`
+
+- **Fecha:** 2026-11-14
+- **Estado global:** ⏳ registrada — pendiente de implementación
+
+### Contexto técnico
+
+`harness-langgraph/.last-thread` guarda el último `thread_id` para
+que `POST /resume` sobreviva a un reinicio del harness (compat con
+checkpoints pausados viejos). Es **estado de runtime** pero está
+trackeado en git: cada ejecución del agente lo modifica y aparece
+como `M` en el working tree, con riesgo de commitearlo por accidente
+en un PR ajeno (ya pasó cerca en varios).
+
+### Requisitos
+
+- **R15.1** Quitar del índice (`git rm --cached`) y agregar
+  `.last-thread` a `harness-langgraph/.gitignore` (el archivo ya
+  existe e ignora `docs/benchmarks/*.jsonl`).
+- **R15.2** El archivo debe seguir existiendo en disco y funcionando
+  — solo deja de estar trackeado. Documentar en el comentario de
+  `orchestrator.js` si hace falta aclarar que es runtime-local.
+- **R15.3** Verificar: `git status` limpio después de una ejecución
+  del agente; el archivo no reaparece en `git ls-files`.
+
+### Tareas
+
+- **T15.1** `git rm --cached` + `.gitignore` (R15.1–R15.3)
+
+### Verificado por
+
+Pendiente — se completa al implementar.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -857,6 +938,8 @@ original quedó medido en
 | (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
 | (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
 | (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
+| (post-gen) | SPEC-14 ⏳ | `integrations/productos.client.js` | pendiente |
+| (post-gen) | SPEC-15 ⏳ | `harness-langgraph/.gitignore` | verificación git |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
