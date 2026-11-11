@@ -4,6 +4,7 @@ import {
   SORT_COLUMNS,
   aprobarOrden,
   createOrden,
+  createOrdenesBatch,
   getOrden,
   listOrdenes,
   rechazarOrden,
@@ -67,31 +68,80 @@ export function detail(req, res) {
   res.json(orden);
 }
 
-export function create(req, res) {
-  const { producto_id, cantidad, requiere_aprobacion, analisis_ia } = req.body ?? {};
-
+// Valida un item de orden y lo normaliza al shape del model.
+// Devuelve el item listo o un string con el error de validación.
+function validarItemOrden({ producto_id, cantidad, requiere_aprobacion, analisis_ia } = {}) {
   if (!Number.isInteger(producto_id)) {
-    return badRequest(res, 'producto_id es requerido y debe ser entero');
+    return 'producto_id es requerido y debe ser entero';
   }
   if (!Number.isInteger(cantidad) || cantidad <= 0) {
-    return badRequest(res, 'cantidad es requerida y debe ser un entero > 0');
+    return 'cantidad es requerida y debe ser un entero > 0';
   }
   if (requiere_aprobacion !== undefined && typeof requiere_aprobacion !== 'boolean') {
-    return badRequest(res, 'requiere_aprobacion debe ser boolean');
+    return 'requiere_aprobacion debe ser boolean';
   }
-
-  const orden = createOrden({
+  return {
     productoId: producto_id,
     cantidad,
     requiereAprobacion: requiere_aprobacion,
     analisisIa: analisis_ia ? capString(analisis_ia, 2000) : null,
-  });
+  };
+}
+
+export function create(req, res) {
+  const item = validarItemOrden(req.body ?? {});
+  if (typeof item === 'string') return badRequest(res, item);
+
+  const orden = createOrden(item);
   if (!orden) return res.status(404).json({ error: 'producto no encontrado' });
 
   res.status(201).json({
     success: true,
     message: `Orden ${orden.orden_id} creada exitosamente`,
     data: orden,
+  });
+}
+
+/**
+ * POST /api/ordenes/batch — array de órdenes en una transacción
+ * (SPEC-16). Todo o nada: si CUALQUIER item no valida (forma o
+ * producto inexistente) → 400 con detalle por índice y no se
+ * persiste nada. Una request = una escritura para el rate
+ * limiter, por eso el harness la usa para sus corridas.
+ */
+const MAX_LOTE_ORDENES = 200;
+
+export function createBatch(req, res) {
+  const items = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return badRequest(res, 'el body debe ser un array de órdenes no vacío');
+  }
+  if (items.length > MAX_LOTE_ORDENES) {
+    return badRequest(res, `el lote supera el máximo de ${MAX_LOTE_ORDENES} órdenes`);
+  }
+
+  const errores = [];
+  const validados = items.map((raw, indice) => {
+    const item = validarItemOrden(raw ?? {});
+    if (typeof item === 'string') errores.push({ indice, error: item });
+    return item;
+  });
+  if (errores.length) {
+    return res.status(400).json({ error: 'items inválidos en el lote', detalle: errores });
+  }
+
+  const resultado = createOrdenesBatch(validados);
+  if (resultado.faltantes) {
+    return res.status(400).json({
+      error: 'productos inexistentes en el lote — no se creó ninguna orden',
+      detalle: resultado.faltantes.map((f) => ({ ...f, error: 'producto no encontrado' })),
+    });
+  }
+
+  res.status(201).json({
+    success: true,
+    message: `${resultado.ordenes.length} órdenes creadas exitosamente`,
+    data: resultado.ordenes,
   });
 }
 

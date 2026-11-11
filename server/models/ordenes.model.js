@@ -150,6 +150,32 @@ export function getOrden(ordenId) {
   return row ? mapOrdenDetalle(row) : null;
 }
 
+const INSERT_ORDEN = `INSERT INTO ordenes_compra
+  (orden_id, producto_id, proveedor_id, cantidad, precio_unitario, monto_total,
+   estado, requiere_aprobacion, analisis_ia, aprobado_por, fecha_aprobacion,
+   fecha_creacion, fecha_actualizacion)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function insertarOrden(db, ordenId, producto, { cantidad, requiereAprobacion, analisisIa }, ts) {
+  const montoTotal = Math.round(cantidad * producto.precio_unitario * 100) / 100;
+  const requiere = requiereAprobacion ?? montoTotal >= UMBRAL_APROBACION;
+  db.prepare(INSERT_ORDEN).run(
+    ordenId,
+    producto.id,
+    producto.proveedor_id,
+    cantidad,
+    producto.precio_unitario,
+    montoTotal,
+    requiere ? 'PENDIENTE_APROBACION' : 'APROBADA',
+    requiere ? 1 : 0,
+    analisisIa ?? null,
+    requiere ? null : 'auto',
+    requiere ? null : ts,
+    ts,
+    ts,
+  );
+}
+
 // Crea la orden: precio y proveedor salen del producto, el monto se
 // calcula server-side y el orden_id es el próximo 'OC-NNN' secuencial.
 // Devuelve null si el producto no existe (el controller → 404).
@@ -157,11 +183,6 @@ export function createOrden({ productoId, cantidad, requiereAprobacion, analisis
   const db = openDb();
   const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(productoId);
   if (!producto) return null;
-
-  const montoTotal = Math.round(cantidad * producto.precio_unitario * 100) / 100;
-  const requiere = requiereAprobacion ?? montoTotal >= UMBRAL_APROBACION;
-  const estado = requiere ? 'PENDIENTE_APROBACION' : 'APROBADA';
-  const ts = now();
 
   // Transacción: el MAX(orden_id) y el INSERT deben ser atómicos o dos
   // creaciones concurrentes podrían generar el mismo OC-NNN.
@@ -172,31 +193,49 @@ export function createOrden({ productoId, cantidad, requiereAprobacion, analisis
       )
       .get();
     const nextId = `OC-${String((maxId ?? 0) + 1).padStart(3, '0')}`;
-    db.prepare(
-      `INSERT INTO ordenes_compra
-        (orden_id, producto_id, proveedor_id, cantidad, precio_unitario, monto_total,
-         estado, requiere_aprobacion, analisis_ia, aprobado_por, fecha_aprobacion,
-         fecha_creacion, fecha_actualizacion)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      nextId,
-      producto.id,
-      producto.proveedor_id,
-      cantidad,
-      producto.precio_unitario,
-      montoTotal,
-      estado,
-      requiere ? 1 : 0,
-      analisisIa ?? null,
-      requiere ? null : 'auto',
-      requiere ? null : ts,
-      ts,
-      ts,
-    );
+    insertarOrden(db, nextId, producto, { cantidad, requiereAprobacion, analisisIa }, now());
     return nextId;
   })();
 
   return getOrden(ordenId);
+}
+
+/**
+ * Crea N órdenes en UNA transacción (SPEC-16): todo o nada — si un
+ * item es inválido no se persiste ninguno. Primero verifica que
+ * TODOS los productos existan (devuelve { faltantes } con detalle
+ * por índice para el 400 del controller); después genera la
+ * secuencia OC-NNN y los INSERT en una sola transacción.
+ * items: [{ productoId, cantidad, requiereAprobacion?, analisisIa? }]
+ */
+export function createOrdenesBatch(items) {
+  const db = openDb();
+  const buscarProducto = db.prepare('SELECT * FROM productos WHERE id = ?');
+
+  const faltantes = [];
+  const resueltos = items.map((item, indice) => {
+    const producto = buscarProducto.get(item.productoId);
+    if (!producto) faltantes.push({ indice, producto_id: item.productoId });
+    return { item, producto };
+  });
+  if (faltantes.length) return { faltantes };
+
+  const ordenIds = db.transaction(() => {
+    const { maxId } = db
+      .prepare(
+        "SELECT MAX(CAST(SUBSTR(orden_id, 4) AS INTEGER)) AS maxId FROM ordenes_compra WHERE orden_id LIKE 'OC-%'",
+      )
+      .get();
+    let next = (maxId ?? 0) + 1;
+    const ts = now();
+    return resueltos.map(({ item, producto }) => {
+      const ordenId = `OC-${String(next++).padStart(3, '0')}`;
+      insertarOrden(db, ordenId, producto, item, ts);
+      return ordenId;
+    });
+  })();
+
+  return { ordenes: ordenIds.map(getOrden) };
 }
 
 // Las transiciones solo son válidas desde PENDIENTE_APROBACION — el
