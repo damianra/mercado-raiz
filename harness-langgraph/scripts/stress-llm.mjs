@@ -142,7 +142,7 @@ async function procesarArticulo(p) {
 
   // Misma aritmética que el nodo calcular-cantidad (demanda × (lead+7) − stock)
   const objetivo = Math.ceil(analisis.demanda_diaria * (p.proveedor.tiempo_entrega_dias + 7));
-  const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo - p.stock_actual, 1);
+  const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
   const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
   try {
     const r = await llamada('justificacion', llm, promptGenerarAnalisis(p, analisis, cantidad, monto));
