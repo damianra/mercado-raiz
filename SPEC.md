@@ -451,6 +451,7 @@ reestructurar a esta forma, breaking change interno del sub-proyecto)
     "ordenes_creadas": 2,
     "ordenes_pausadas_hith": 1,
     "conteo_fallbacks": 1,
+    "llm_evitadas": 2,
     "tasa_fallback": 20.0,
     "mensaje_sistema": "Ejecución completada con 1 fallback heurístico."
   },
