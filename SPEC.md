@@ -843,7 +843,7 @@ original quedó medido en
 ## SPEC-14 · Paginación completa de productos a reponer
 
 - **Fecha:** 2026-11-14
-- **Estado global:** ⏳ registrada — pendiente de implementación
+- **Estado global:** ✅ implementada — ver "Verificado por"
 
 ### Contexto técnico
 
@@ -878,7 +878,10 @@ la API soporta `page=N`, no hace falta tocar el backend.
 - **R14.4** Tests: cliente mockeado con `totalPages > 1` (verificar
   que itera), `pagination` ausente (fallback), y deduplicación si un
   producto apareciera en ambos estados (la API no lo permite por
-  definición de estado, pero el merge debe ser seguro).
+  definición de estado, pero el merge debe ser seguro). ✅
+  — `tests/nodes/paginacion-productos.test.js` (5 tests): single
+  página, iteración multi-página, fallback sin envelope, dedup por
+  id, propagación de error en página intermedia.
 
 ### Tareas
 
@@ -887,7 +890,10 @@ la API soporta `page=N`, no hace falta tocar el backend.
 
 ### Verificado por
 
-Pendiente — se completa al implementar.
+Devin — suite 83/83 (5 tests nuevos de paginación). Pitfall de
+vitest documentado: `beforeEach(() => mock.mockReset())` con arrow
+de expresión devuelve el mock y vitest lo ejecuta como cleanup hook
+— usar siempre cuerpo de bloque `{ ... }`.
 
 ---
 
@@ -943,7 +949,7 @@ Pendiente — se completa al implementar.
 | (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
 | (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
 | (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
-| (post-gen) | SPEC-14 ⏳ | `integrations/productos.client.js` | pendiente |
+| (post-gen) | SPEC-14 ✅ | `integrations/productos.client.js` | `paginacion-productos.test.js` (5) |
 | (post-gen) | SPEC-15 ⏳ | `harness-langgraph/.gitignore` | verificación git |
 
 ## Anexo B — Divergencias brief ↔ implementación
