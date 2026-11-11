@@ -938,6 +938,98 @@ verificado que el archivo permanece en disco, `git ls-files` vacío y
 
 ---
 
+## SPEC-16 · Optimización de throughput del agente
+
+- **Fecha:** 2026-11-14
+- **Estado global:** ⏳ registrada — pendiente de implementación
+
+### Contexto técnico
+
+La corrida real de ~100 productos tardó ~5,2 min (stress sintético
+500 artículos: ~21,5 min). Desglose medido:
+
+- **~55-60% del wall-clock son llamadas LLM** (~1,3 s/llamada
+  promedio, una por vez, secuencial por producto).
+- ~30% HTTP/backend/esperas del limiter (mejorado con SPEC-13, sigue
+  secuencial).
+- La GPU corre al 93-96% y ~196 W — saturada, pero el decode de LLM
+  es memory-bandwidth bound: requests en paralelo suben el
+  throughput agregado de tokens aunque cada uno sea más lento.
+- El agente corre a diario → **las ventas de hoy difieren de las de
+  ayer en un dato**: el análisis es cacheable por producto.
+
+Ya implementado (SPEC-12): triage CV (~50% demandas sin LLM),
+justificación condicional, `num_ctx`/`num_predict` tuneados (~380 MB
+VRAM liberados — headroom para paralelismo).
+
+Palancas elegidas (en este orden de implementación):
+
+1. **Incremental**: cache de análisis por producto keyed por hash de
+   la ventana de ventas — días estables casi gratis.
+2. **Concurrencia**: `OLLAMA_NUM_PARALLEL` + procesamiento en chunks
+   paralelos dentro de los nodos.
+3. **Batch prompts**: N productos volátiles por llamada de demanda,
+   respuesta JSON array validada.
+4. **Endpoint batch**: `POST /api/ordenes/batch` — una escritura por
+   corrida en vez de una por producto.
+
+### Requisitos
+
+- **R16.1** Cache incremental: para cada producto que va al LLM,
+  computar un hash del input (**ventas usadas + campos del producto
+  que entran al prompt** — `stock_actual`, `stock_minimo`,
+  `precio_unitario`, `categoria`, `proveedor.tiempo_entrega_dias` —
+  + modelo + umbrales); si coincide con la entrada cacheada, reusar
+  `demanda_estimada` y `analisis` sin llamar al LLM — cubre ambas
+  llamadas del producto (la justificación deriva de
+  demanda→cantidad→monto, mismos inputs). Sin los campos de producto
+  en el hash, un movimiento AJUSTE/REPOSICION cambiaría el stock sin
+  invalidar la justificación cacheada.
+  Persistencia: archivo JSON local del harness
+  (`data/analisis-cache.json`), gitignored — es cache descartable,
+  no fuente de verdad. Crear el dir y agregar la entrada a
+  `harness-langgraph/.gitignore`. Contador `cache_hits` en métricas
+  (separado de `llm_evitadas`, que cuenta decisiones estructurales).
+- **R16.2** Concurrencia: los nodos que iteran productos llamando al
+  LLM procesan en paralelo con límite configurable
+  (`AGENTE_CONCURRENCIA`, default 3). Documentar
+  `OLLAMA_NUM_PARALLEL` en `.env.example`/README como requisito del
+  lado del servidor Ollama (sin él, las requests se encolan — el
+  cliente paralelo no ayuda). Métricas deben seguir agregando bien
+  (costTracker es acumulador, thread-safe por ser single-thread).
+- **R16.3** Batch prompts: `analizar-demanda` agrupa productos
+  volátiles en llamadas de hasta `DEMANDA_BATCH` productos (default
+  5, configurable); respuesta JSON array validada item por item —
+  items inválidos/faltantes caen a llamada individual (fallback
+  granular, no a todo el lote). Detalles de implementación (del
+  review): `parseJsonResponse` hoy solo parsea objetos (`\{...\}`
+  greedy no captura arrays) → necesita variante array-aware; el cap
+  `numPredict` debe escalar con el tamaño del lote (≈50 tok/item) o
+  el JSON truncado degrada todo a llamadas individuales.
+- **R16.4** `POST /api/ordenes/batch`: acepta array de órdenes, las
+  valida una por una (400 con detalle del item si alguna falla, sin
+  parciales silenciosos — transacción), las crea en una transacción
+  y devuelve el array creado. `crear-orden` lo usa para persistir el
+  lote de la corrida en una llamada (o en pocos lotes si son muchas).
+- **R16.5** Tests + medición: tests por pieza (cache hit/miss,
+  concurrencia respeta el límite, batch con item inválido hace
+  fallback, endpoint batch transaccional) + corrida comparativa del
+  agente real documentando speedup vs `validacion-grafo-real`.
+
+### Tareas
+
+- **T16.1** Cache incremental + `cache_hits` (R16.1)
+- **T16.2** Concurrencia en nodos LLM + env/docs (R16.2)
+- **T16.3** Batch prompts en analizar-demanda (R16.3)
+- **T16.4** `POST /api/ordenes/batch` + uso en crear-orden (R16.4)
+- **T16.5** Tests + benchmark comparativo (R16.5)
+
+### Verificado por
+
+Pendiente — se completa al implementar y medir.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -957,6 +1049,7 @@ verificado que el archivo permanece en disco, `git ls-files` vacío y
 | (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
 | (post-gen) | SPEC-14 ✅ | `integrations/productos.client.js` | `paginacion-productos.test.js` (5) |
 | (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
+| (post-gen) | SPEC-16 ⏳ | `langgraph/nodes/*`, `integrations/ordenes.client.js`, `server/*` | pendiente |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
