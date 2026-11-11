@@ -22,6 +22,18 @@ vi.mock('../../src/integrations/historial.client.js', () => ({
   ventasDeProducto: (...a) => ventasDeProducto(...a),
 }));
 
+// Sin el mock, guardarDemanda escribiría data/analisis-cache.json
+// real y una segunda corrida del suite haría hit (suite flaky +
+// contamina el cache del dev).
+const cacheFns = {
+  buscarDemanda: vi.fn(() => null),
+  buscarJustificacion: vi.fn(() => null),
+  guardarDemanda: vi.fn(),
+  guardarJustificacion: vi.fn(),
+  hashAnalisis: vi.fn(() => 'hash-fake'),
+};
+vi.mock('../../src/harness/analisis-cache.js', () => cacheFns);
+
 const { coeficienteVariacion, analizarDemanda } = await import(
   '../../src/langgraph/nodes/analizar-demanda.js'
 );
@@ -78,6 +90,8 @@ describe('analizar-demanda — triage heurístico (SPEC-12)', () => {
     expect(errores).toEqual([]); // triage no es error ni fallback
     expect(metrics.resumen().llm_evitadas).toBe(1);
     expect(metrics.resumen().conteo_fallbacks).toBe(0);
+    // el triage no toca el cache — el input no pasó por el LLM
+    expect(cacheFns.guardarDemanda).not.toHaveBeenCalled();
   });
 
   it('ventas volátiles: llama al LLM como siempre', async () => {
@@ -93,6 +107,9 @@ describe('analizar-demanda — triage heurístico (SPEC-12)', () => {
     expect(invokeJson).toHaveBeenCalledTimes(1);
     expect(analisisPorProducto[1].demanda_diaria).toBe(4);
     expect(metrics.resumen().llm_evitadas).toBe(0);
+    // el análisis LLM queda cacheado para la próxima corrida
+    expect(cacheFns.guardarDemanda).toHaveBeenCalledTimes(1);
+    expect(cacheFns.guardarDemanda.mock.calls[0][2].demanda_diaria).toBe(4);
   });
 
   it('pocos datos (<3 días): va al LLM, no al heurístico', async () => {

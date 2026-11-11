@@ -1,2 +1,3 @@
 docs/benchmarks/*.jsonl
 .last-thread
+data/analisis-cache.json

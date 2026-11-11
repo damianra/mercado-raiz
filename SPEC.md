@@ -989,7 +989,18 @@ Palancas elegidas (en este orden de implementación):
   (`data/analisis-cache.json`), gitignored — es cache descartable,
   no fuente de verdad. Crear el dir y agregar la entrada a
   `harness-langgraph/.gitignore`. Contador `cache_hits` en métricas
-  (separado de `llm_evitadas`, que cuenta decisiones estructurales).
+  (separado de `llm_evitadas`, que cuenta decisiones estructurales). ✅
+  — `harness/analisis-cache.js` (sha256 de ventas + campos del
+  producto —incl. sku— + modelo + umbrales →
+  `data/analisis-cache.json`); `analizar-demanda` cachea demanda,
+  `generar-analisis` cachea justificación **keyed también por el
+  análisis que la produjo** (la prosa cita cifras — si el análisis
+  difiere, el texto es inválido). Flag `analisis_llm` marca la
+  proveniencia: el fallback heurístico nunca se devuelve como
+  demanda cacheada (el LLM se reintenta la próxima corrida), pero
+  sí puede llevar justificación reusada por ser determinista.
+  `hashPorProducto` nuevo campo de estado; `cache_hits` +
+  `reintentos` ahora expuestos en `/metrics`.
 - **R16.2** Concurrencia: los nodos que iteran productos llamando al
   LLM procesan en paralelo con límite configurable
   (`AGENTE_CONCURRENCIA`, default 3). Documentar
