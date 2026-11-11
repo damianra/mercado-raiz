@@ -53,7 +53,8 @@ Artefacto de datos agregados: `stress-qwen3-8b-500-2026-11-11.json`.
 
 → El típico no cambia (la salida ya era corta), pero `num_predict: 300`
 **recorta la cola**: el outlier de generación desbocada (2.317 ms)
-desaparece — p99 queda a ±6% del p50.
+desaparece — p95 queda a +5% y p99/max a +10%/+13% del p50 (baseline:
+p99 a +158%).
 
 ### `generar-analisis` (wall-clock, ms)
 
@@ -136,11 +137,13 @@ con la lógica del grafo SPEC-12 (triage CV + aprobación por monto):
 | Requiere aprobación (justificación LLM) | 487 / 500 | 97,4% |
 | **Llamadas LLM que haría el grafo** | **~514 / 1.000** | **51,4%** |
 
-→ Sobre este dataset sintético, el grafo real consumiría **~11 min** de
-LLM vs los 21,5 medidos — **~2,1× menos GPU-segundos**. La palanca aquí es
-el triage (las ventas sintéticas son de baja varianza por construcción);
-la justificación condicional apenas aplica porque el set genera montos
-altos ($32–$3.765, prom. $930).
+→ El grafo haría el **51,4% de las llamadas**, pero solo **~35% menos
+tiempo**: el triage elimina las llamadas baratas. Proyección con los
+promedios medidos — 27 × 905 ms (demanda) + 487 × 1.676 ms
+(justificación) ≈ **14,0 min de LLM vs los 21,5 medidos (~1,5×)**.
+La palanca aquí es el triage (las ventas sintéticas son de baja varianza
+por construcción); la justificación condicional apenas aplica porque el
+set genera montos altos ($32–$3.765, prom. $930).
 
 ⚠ **La mezcla es dependiente del dataset**: este set es demanda-estable +
 monto-alto. Con datos reales las tasas de triage y auto-aprobación serán
