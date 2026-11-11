@@ -195,23 +195,9 @@ async function worker() {
     }
   }
 }
-let cortado = false;
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    if (cortado) process.exit(1);
-    cortado = true;
-    // El pool deja de tomar artículos nuevos; volcamos lo procesado.
-    cursor = articulos.length;
-    console.log(`\n⚠ ${sig} recibida — volcando reporte parcial de ${procesados} artículos…`);
-    const rep = generarReporte(true);
-    console.log(JSON.stringify(rep, null, 2));
-    if (REPORTE) writeFileSync(REPORTE, JSON.stringify(rep, null, 2));
-    process.exit(0);
-  });
-}
-await Promise.all(Array.from({ length: CONCURRENCIA }, worker));
-
 // ---------- Reporte ----------
+// Las helpers van ANTES del await del pool: el handler de señal las
+// llama con el módulo suspendido — como const estarían en TDZ.
 const pct = (arr, q) => {
   if (!arr.length) return 0;
   const s = [...arr].sort((a, b) => a - b);
@@ -228,6 +214,22 @@ const porTipo = (tipo) => {
     tokens_out: l.reduce((a, x) => a + x.tokOut, 0),
   };
 };
+
+let cortado = false;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (cortado) process.exit(1);
+    cortado = true;
+    // El pool deja de tomar artículos nuevos; volcamos lo procesado.
+    cursor = articulos.length;
+    console.log(`\n⚠ ${sig} recibida — volcando reporte parcial de ${procesados} artículos…`);
+    const rep = generarReporte(true);
+    console.log(JSON.stringify(rep, null, 2));
+    if (REPORTE) writeFileSync(REPORTE, JSON.stringify(rep, null, 2));
+    process.exit(0);
+  });
+}
+await Promise.all(Array.from({ length: CONCURRENCIA }, worker));
 
 function generarReporte(parcial = false) {
   const wallTotal = Date.now() - inicio;
