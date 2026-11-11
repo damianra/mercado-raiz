@@ -864,12 +864,17 @@ la API soporta `page=N`, no hace falta tocar el backend.
   de cada estado: pedir página 1, leer `totalPages` del envelope y
   completar las restantes (los GET están exentos del limiter — se
   pueden paralelizar). Comportamiento de degradación: si el envelope
-  no trae `pagination`, devolver `data` como hoy.
+  no trae `pagination`, devolver `data` como hoy. ✅
+  — `listarTodos()` interno: page 1 → `totalPages` → restantes en
+  `Promise.all`; fallback `?? 1` si no hay `pagination`.
 - **R14.2** No inventar límite nuevo: se respeta el `limit ≤ 100` del
-  backend paginando, no subiendo el tope.
+  backend paginando, no subiendo el tope. ✅
+  — `LIMIT_PAGINA = 100` constante; se pagina con `page=N`.
 - **R14.3** Métrica/observabilidad: `total_productos_evaluados` debe
   reflejar el total real (ya lo hace al contar la lista retornada —
-  sin cambio, pero verificar en el smoke).
+  sin cambio, pero verificar en el smoke). ✅
+  — El nodo cuenta `state.productosBajos.length`; al completarse la
+  lista el total se corrige solo.
 - **R14.4** Tests: cliente mockeado con `totalPages > 1` (verificar
   que itera), `pagination` ausente (fallback), y deduplicación si un
   producto apareciera en ambos estados (la API no lo permite por
