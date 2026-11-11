@@ -520,6 +520,80 @@ Notas de diseño validadas:
 
 ---
 
+## SPEC-11 · Stress testing del LLM
+
+- **Origen:** pedido del usuario (2026-11-10) — validar tiempos y
+  cuellos de botella por recursos procesando ~1000 artículos
+- **Implementación:** `harness-langgraph/scripts/stress-llm.mjs`
+- **Estado global:** ✅ implementado (mergeado; incluye persistencia
+  incremental tras detectar pérdida de resultados ante kill)
+
+### Propósito
+
+Medir throughput, latencia, tokens y resiliencia del LLM (Ollama)
+bajo lote grande, usando el **pipeline real del agente**
+(`promptAnalisisDemanda` → `llmJson` → `parseJsonResponse`;
+`promptGenerarAnalisis` → `llm`) sobre artículos **sintéticos** —
+no toca backend ni DB: aísla el modelo como recurso.
+
+### Contrato CLI
+
+```bash
+node scripts/stress-llm.mjs [--articulos N] [--concurrencia K]
+  [--solo-demanda] [--muestra-cada N] [--salida file.jsonl]
+  [--reporte file.json]
+```
+
+- `--salida` (persistencia incremental): appendea **un JSON por
+  artículo al procesarlo** — los resultados sobreviven a un kill.
+  Schema por línea: `{sku, nombre, ts, llamadas[{tipo, wallMs,
+  totalMs, loadMs, promptMs, genMs, tokIn, tokOut}], analisis,
+  justificacion, ok}`.
+- `--reporte`: JSON final con `config`, `duracion_total_s`,
+  `throughput` (art/min y llamadas/min), `por_tipo` (percentiles
+  wall-clock por nodo + tokens), `resiliencia` (fallbacks, errores),
+  `recursos_ollama` (RSS/CPU del proceso) y `cost_tracker` (el mismo
+  acumulador de SPEC-10).
+- **SIGINT/SIGTERM**: frena el pool y vuelca `reporte_parcial` antes
+  de salir (helpers de reporte declarados antes del `await` del pool
+  — como `const` después caían en TDZ y el volcado crasheaba).
+
+### Resultados de referencia (qwen3:8b, RTX 3060 Ti 8GB, 2026-11-10)
+
+Lote cortado a ~675/1000 artículos (~29 min), throughput plano:
+
+| Métrica | Valor |
+|---|---|
+| Throughput | 23 art/min (~46 llamadas/min), ~2.6s/artículo (2 llamadas) |
+| p50 demanda / justificación | ~900ms / ~1.700ms |
+| GPU util / potencia | 95% sostenido / ~197W (TDP ~200W → **power-limited**) |
+| GPU temp / VRAM | ~70°C / 6.2GB estable (sin cuello de memoria) |
+| Concurrencia K=4 | +12% throughput, colas de 5-6s → Ollama serializa |
+| Fallbacks/errores | 0 observados |
+
+### Requisitos
+
+- **R11.1** El script reusa el código real del agente (prompts,
+  `llm`/`llmJson`, `parseJsonResponse`, `costTracker`) — no
+  reimplementa el pipeline. ✅
+- **R11.2** Pool de concurrencia con cursor compartido (K
+  configurable; K=1 replica el comportamiento secuencial del grafo).
+  ✅
+- **R11.3** Persistencia incremental por artículo (`--salida` JSONL)
+  + volcado de reporte parcial ante señal. ✅
+- **R11.4** Métricas por llamada iguales a SPEC-10 §1 (duraciones
+  nativas ns→ms, tokens) + muestreo de recursos del proceso Ollama.
+  ✅
+
+### Verificado por
+
+Smoke tests del script (piloto + kill test); revisión funcional por
+sub-agente (detectó el bug TDZ del handler de señal). El monitoreo
+de GPU durante la corrida se hizo con `nvidia-smi` externo — fuera
+del script.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -534,6 +608,7 @@ Notas de diseño validadas:
 | (post-gen) | SPEC-08 | `harness-langgraph/` | `tests/nodes/` |
 | (skeleton) | SPEC-09 | `Dockerfile`, `ci.yml`, configs | CI |
 | (post-gen) | SPEC-10 | `harness-langgraph/src/harness/*` | `harness-langgraph/tests/` |
+| (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
