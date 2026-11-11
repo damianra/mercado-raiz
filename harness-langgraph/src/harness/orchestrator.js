@@ -26,6 +26,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // El checkpoint del grafo está en SQLite — sobrevive a reinicios
 // del proceso. Guardamos el último thread_id para que POST /resume
 // siga funcionando aunque el harness se haya caído y vuelto.
+// .last-thread es estado de runtime local — está en .gitignore
+// (SPEC-15): cada corrida lo reescribe y no debe commitearse.
 const ARCHIVO_THREAD = join(here, '../../.last-thread');
 
 export const orchestrator = {

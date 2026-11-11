@@ -900,7 +900,7 @@ de expresión devuelve el mock y vitest lo ejecuta como cleanup hook
 ## SPEC-15 · Higiene: dejar de trackear `.last-thread`
 
 - **Fecha:** 2026-11-14
-- **Estado global:** ⏳ registrada — pendiente de implementación
+- **Estado global:** ✅ implementada — ver "Verificado por"
 
 ### Contexto técnico
 
@@ -915,12 +915,16 @@ en un PR ajeno (ya pasó cerca en varios).
 
 - **R15.1** Quitar del índice (`git rm --cached`) y agregar
   `.last-thread` a `harness-langgraph/.gitignore` (el archivo ya
-  existe e ignora `docs/benchmarks/*.jsonl`).
+  existe e ignora `docs/benchmarks/*.jsonl`). ✅
 - **R15.2** El archivo debe seguir existiendo en disco y funcionando
   — solo deja de estar trackeado. Documentar en el comentario de
-  `orchestrator.js` si hace falta aclarar que es runtime-local.
+  `orchestrator.js` si hace falta aclarar que es runtime-local. ✅
+  — Sigue en disco con el thread_id actual; comentario agregado en
+  `ARCHIVO_THREAD` aclarando que es runtime-local gitignored.
 - **R15.3** Verificar: `git status` limpio después de una ejecución
-  del agente; el archivo no reaparece en `git ls-files`.
+  del agente; el archivo no reaparece en `git ls-files`. ✅
+  — `git ls-files` ya no lo lista; `git status` limpio pese a que el
+  archivo existe y fue modificado por corridas.
 
 ### Tareas
 
@@ -928,7 +932,9 @@ en un PR ajeno (ya pasó cerca en varios).
 
 ### Verificado por
 
-Pendiente — se completa al implementar.
+Devin — `git rm --cached` + entrada en `harness-langgraph/.gitignore`;
+verificado que el archivo permanece en disco, `git ls-files` vacío y
+`git status` limpio con el archivo modificado.
 
 ---
 
@@ -950,7 +956,7 @@ Pendiente — se completa al implementar.
 | (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
 | (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
 | (post-gen) | SPEC-14 ✅ | `integrations/productos.client.js` | `paginacion-productos.test.js` (5) |
-| (post-gen) | SPEC-15 ⏳ | `harness-langgraph/.gitignore` | verificación git |
+| (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
