@@ -1056,9 +1056,10 @@ Palancas elegidas (en este orden de implementación):
   concurrencia respeta el límite, batch con item inválido hace
   fallback, endpoint batch transaccional) + corrida comparativa del
   agente real documentando speedup vs `validacion-grafo-real`. ✅ —
-  22 tests nuevos (`analisis-cache.test.js`, `concurrencia.test.js`,
-  `crear-orden.test.js`, `server/ordenes-batch.test.js`, +2 casos de
-  formato de lote en `triage-y-justificacion`); suite 109/109.
+  32 tests nuevos (`analisis-cache.test.js` 11, `concurrencia.test.js`
+  5, `llm-json.test.js` 8, `crear-orden.test.js` 2,
+  `server/ordenes-batch.test.js` 4, +2 casos de formato de lote en
+  `triage-y-justificacion`); suite 117/117.
   Benchmark documentado en
   `docs/benchmarks/benchmark-spec16-optimizacion-2026-11-11.md`:
   **frío 79 s vs ~312 s baseline (~3,9×)** con 87 llamadas LLM
@@ -1078,8 +1079,8 @@ Palancas elegidas (en este orden de implementación):
 ### Verificado por
 
 Revisión por sub-agente en cada PR (R16.1→PR#14, R16.2→#15, R16.3→#16
-con 2 pasadas, R16.4→#17 con 2 pasadas, R16.5→pendiente) + suite
-Vitest + benchmark real con GPU/Ollama monitorizados.
+con 2 pasadas, R16.4→#17 con 2 pasadas, R16.5→#18) + suite Vitest +
+benchmark real con GPU/Ollama monitorizados.
 
 ---
 

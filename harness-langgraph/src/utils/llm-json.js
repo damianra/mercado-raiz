@@ -23,8 +23,11 @@ export function parseJsonResponse(content, schema) {
 }
 
 /**
- * Variante para respuestas en lote (SPEC-16, R16.3): extrae el
- * primer [...] del texto y valida CADA item por separado contra
+ * Variante para respuestas en lote (SPEC-16, R16.3): localiza el
+ * array de items — desnudo `[...]`, dentro de un objeto
+ * `{"resultados": [...]}` (forma que pide el prompt porque
+ * format:'json' sesga a objetos) u objeto suelto (→ item único) —
+ * y valida CADA item por separado contra
  * `itemSchema` — un item malformado no tira el lote entero.
  * Devuelve { items, invalidos }: los que cumplen el schema y la
  * cantidad descartada (el nodo les hace llamada individual).
@@ -52,7 +55,13 @@ export function parseJsonArrayResponse(content, itemSchema) {
         break;
       }
       if (parsed && typeof parsed === 'object') {
-        const items = Object.values(parsed).find((v) => Array.isArray(v));
+        // Preferir keys conocidas (el prompt pide "resultados") —
+        // si el modelo agrega otra propiedad array (ej. "meta"),
+        // el primer find podría elegir el array equivocado.
+        const items = ['resultados', 'items', 'analisis', 'data']
+          .map((k) => parsed[k])
+          .find((v) => Array.isArray(v))
+          ?? Object.values(parsed).find((v) => Array.isArray(v));
         data = items ?? [parsed];
         break;
       }

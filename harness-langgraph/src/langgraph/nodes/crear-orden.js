@@ -58,6 +58,12 @@ export async function crearOrdenes(state) {
         requiere_aprobacion: d.requiere_aprobacion,
         analisis_ia: d.analisis_ia,
       })));
+      // El contrato es todo-o-nada; si el backend devolviera menos
+      // órdenes de las pedidas, las faltantes se perderían en
+      // silencio — forzar el fallback individual en ese caso.
+      if (!Array.isArray(res.data) || res.data.length !== lote.length) {
+        throw new Error(`el batch devolvió ${res.data?.length ?? 0} órdenes de ${lote.length} pedidas`);
+      }
       const porProducto = new Map(lote.map((e) => [e.p.id, e]));
       for (const orden of res.data) {
         const pedido = porProducto.get(orden.producto.id);
