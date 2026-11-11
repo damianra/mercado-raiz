@@ -26,7 +26,10 @@ index.js
   │                no → corrida = { fase: 'idle' }
   │
   ├─ iniciarServidor()              → Express en :4110
-  │     GET /status · GET /metrics · POST /resume · POST /run
+  │     GET /status · GET /metrics · POST /run · POST /resume*
+  │     * /resume queda solo para compat con corridas pausadas
+  │       viejas (SPEC-12: el grafo ya no emite interrupts — sin
+  │       pausa responde 409)
   │     ← este proceso queda vivo por el servidor, no por el grafo
   │
   └─ orchestrator.iniciar()
@@ -74,7 +77,7 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | | |
 |---|---|
 | **Lee** | `productosBajos` |
-| **Por cada producto** | `GET /api/historial?producto_id=N&tipo=VENTA` → `llmJson.invoke(prompt)` → valida con zod → `costTracker.registrar(r)` |
+| **Por cada producto** | `GET /api/historial?producto_id=N&tipo=VENTA` → **triage** (`SPEC-12`): si `CV(ventas) < UMBRAL_CV` → promedio histórico directo, sin LLM (`llm_evitadas+1`) · si no → `llmJson.invoke(prompt)` → valida con zod → `costTracker.registrar(r)` |
 | **Si el LLM falla ×2** | fallback: promedio histórico + string en `errores` |
 | **Devuelve** | `{ analisisPorProducto: {1:{…}, 2:{…}}, errores: [] }` |
 | **Reducer** | `mergeObjeto` → fusiona las claves por producto; `acumulativo` concatena errores |
@@ -87,26 +90,30 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | **Lee** | `productosBajos` + `analisisPorProducto` |
 | **Cuenta** | `cantidad = max(demanda×(lead+7) − stock, 2×mínimo − stock, 1)`; `monto = cantidad × precio` |
 | **Devuelve** | `{ decisionPorProducto: {1:{cantidad,monto_total}, 2:{…}} }` |
-| **Edge** | fijo → `generar-analisis` |
+| **Edge** | fijo → `decidir-aprobacion` (SPEC-12: decide antes de redactar) |
 
-### Nodo 4 · `generar-analisis` (**LLM**)
-
-| | |
-|---|---|
-| **Lee** | `productosBajos`, `analisisPorProducto`, `decisionPorProducto` |
-| **Por cada producto** | `llm.invoke(prompt)` → texto justificación → `analisis_ia` (≤1900 chars; <20 → retry) |
-| **Si falla ×2** | template con los mismos datos + error |
-| **Devuelve** | `{ decisionPorProducto: {…, analisis_ia}, errores }` — merge sobre lo del nodo 3 |
-| **Edge** | fijo → `decidir-aprobacion` |
-
-### Nodo 5 · `decidir-aprobacion` (código, regla de negocio)
+### Nodo 4 · `decidir-aprobacion` (código, regla de negocio)
 
 | | |
 |---|---|
 | **Lee** | `decisionPorProducto[].monto_total` |
 | **Regla** | `monto >= UMBRAL_APROBACION` ($100, `.env`) → `requiere_aprobacion: true` |
 | **Devuelve** | `{ decisionPorProducto: {…, requiere_aprobacion} }` |
+| **Edge** | fijo → `generar-analisis` |
+
+### Nodo 5 · `generar-analisis` (**LLM condicional** — SPEC-12)
+
+| | |
+|---|---|
+| **Lee** | `productosBajos`, `analisisPorProducto`, `decisionPorProducto` |
+| **Por cada producto** | si `requiere_aprobacion` → `llm.invoke(prompt)` → prosa → `analisis_ia` (≤1900 chars; <20 → retry) · si no (auto-aprobada) → template determinista + marca `(estimación automática)` (`llm_evitadas+1`) |
+| **Si falla ×2** | template con los mismos datos + error |
+| **Devuelve** | `{ decisionPorProducto: {…, analisis_ia}, errores }` |
 | **Edge** | fijo → `crear-orden` |
+
+La prosa solo la lee un humano cuando la orden queda pendiente —
+generarla para las auto-aprobadas era el 66% del tiempo de GPU
+(benchmark SPEC-11).
 
 ### Nodo 6 · `crear-orden` (código, toca el mundo)
 
@@ -128,79 +135,33 @@ state.ordenesPendientes.length > 0 ? 'notificar' : 'fin'
 
 ### Nodo 7 · `notificar` (stub)
 
-Devuelve `{}` — solo loguea las pendientes. Edge fijo → `esperar-aprobacion`.
+Devuelve `{}` — solo loguea las pendientes. Edge fijo → `fin`.
 
-### Nodo 8 · `esperar-aprobacion` — **LA PAUSA**
+### Nodo 8 · `fin` → `END`
 
-```js
-const senal = interrupt({ mensaje: '…', ordenes_pendientes: state.ordenesPendientes });
-```
-
-`interrupt()` **congela la ejecución**:
-
-1. LangGraph serializa TODO el estado a `checkpoints.sqlite`.
-2. El stream emite `{__interrupt__: …}` → el monitor imprime `⏸ INTERRUPCIÓN`.
-3. `ejecutar()` detecta `estado.next.length > 0` → `corrida.fase = 'pausado'`.
-4. El proceso **sigue vivo solo por el servidor Express** — el grafo está dormido en disco.
-
-```
-═══ ⏸  AGENTE PAUSADO — esperando decisión humana ═══
-Órdenes pendientes: OC-101
-Pasos: aprobar/rechazar en http://localhost:5173
-       (el backend dispara POST :4110/resume automáticamente)
-```
+Lee `ordenesCreadas`, `ordenesPendientes`, `errores`; pide
+`GET /api/dashboard/stats`; devuelve `{}`. Edge → `END`.
 
 ---
 
-## Intermedio — el humano actúa (afuera del agente)
+## El humano actúa — afuera del agente (SPEC-12)
+
+El grafo **ya no pausa**: con la corrida terminada, las órdenes
+`PENDIENTE_APROBACION` esperan en la base — el dashboard las lista
+igual que antes:
 
 ```
 Humano → dashboard :5173 → "Aprobar OC-101"
    └─ POST :4000/api/ordenes/OC-101/aprobar {aprobado_por}
         └─ backend persiste: estado = APROBADA        ← FUENTE DE VERDAD
-        └─ notificarResume({orden_id, decision, por})  ← server/harness-notify.js
-             └─ POST :4110/resume  (fire-and-forget)
-                  └─ orchestrator.reanudar(payload)
-                       ├─ ¿grafo corriendo? → encola la señal, sigue después
-                       └─ ¿pausado? → ejecutar(threadId, Command({resume: payload}))
+             (fin del circuito — nada vuelve al agente)
 ```
 
-Nota clave: el payload del `/resume` **no es la decisión** — es solo
-la señal de "ya podés mirar". La verdad se relee del backend.
-
-## Ejecución 2 — Reanudación (mismo código, otro input)
-
-`grafo.stream(Command({resume: …}), {thread_id})` restaura el estado
-desde el checkpoint y **re-ejecuta `esperar-aprobacion` desde el
-inicio** — pero esta vez `interrupt()` no pausa: devuelve el
-payload. El nodo termina devolviendo `{ senalReanudacion }`. Edge
-fijo → `procesar-decision`.
-
-### Nodo 9 · `procesar-decision` (relee la verdad)
-
-| | |
-|---|---|
-| **Lee** | `ordenesPendientes` |
-| **Por cada orden_id** | `GET /api/ordenes/:id` → estado **real** |
-| **Devuelve** | `{ ordenesPendientes: [las que siguen], ordenesResueltas: [las cerradas] }` |
-| **Edge** | **condicional** → `despuesDeProcesar(state)` |
-
-```
-ordenesPendientes.length > 0 ? 'esperar-aprobacion' (↺ otra pausa)
-                             : 'fin'
-```
-
-- Aprobó OC-101 pero OC-102 sigue pendiente → vuelve a pausar. El
-  humano resuelve la siguiente → otro `/resume` → **ejecución 3**…
-  así hasta vaciar la lista. Si el humano aprobó varias de golpe,
-  las señales se **encolan** en `_resumePendiente` y se procesan en
-  cadena al volver a pausar.
-- Si al reanudar todo está resuelto → `fin`.
-
-### Nodo 10 · `fin` → `END`
-
-Lee `ordenesCreadas`, `ordenesResueltas`, `errores`; pide
-`GET /api/dashboard/stats`; devuelve `{}`. Edge → `END`.
+La aprobación es REST puro del backend, igual que cualquier otra
+edición de orden. Antes el backend además disparaba `POST /resume`
+al harness para despertar el grafo (SPEC-08); desde SPEC-12 el
+grafo es atómico y esa notificación se eliminó
+(`server/harness-notify.js` ya no existe).
 
 `ejecutar()` ve que no quedan nodos pendientes →
 `corrida.fase='terminado'` → `resumenFinal()`:
@@ -214,26 +175,23 @@ El servidor del harness sigue en :4110 — Ctrl+C para salir.
 
 ---
 
-## Resumen: una corrida = N ejecuciones del grafo
+## Resumen: una corrida = una ejecución del grafo (SPEC-12)
 
 ```
-iniciar()    → ejecución 1: nodos 1→8, corta en interrupt()        ⏸
-resume #1    → ejecución 2: re-corre nodo 8 → nodo 9 → ¿pendientes? ⏸/fin
-resume #2    → ejecución 3: igual …                                ⏸/fin
-    …          (una ejecución por cada señal del humano)
-fin          → nodo 10 → END → resumen
+iniciar() → nodos 1→8 → END → resumen   (atómica, sin pausas)
 ```
 
-Cada ejecución abarca **desde donde quedó el checkpoint hasta el
-próximo interrupt o el END**. El `thread_id` es la identidad de la
-corrida — con él LangGraph sabe qué checkpoint restaurar.
+El `thread_id` sigue siendo la identidad de la corrida y el
+checkpointer sigue escribiendo `checkpoints.sqlite` tras cada nodo
+— la infraestructura de pause/resume queda disponible pero el grafo
+ya no la usa.
 
 ## Qué podés observar desde afuera en cada momento
 
 | Momento | Consulta | Respuesta |
 |---|---|---|
 | Corriendo | `GET :4110/status` | `{threadId, fase:'corriendo'}` |
-| Pausado | `GET :4110/status` | `{fase:'pausado', detalle:['OC-101']}` |
+| Terminado | `GET :4110/status` | `{fase:'terminado'}` — las pendientes se ven en el dashboard por REST |
 | Siempre | `GET :4110/metrics` | `estado_corrida` + contadores de negocio + rendimiento LLM (tokens, tiempos ms) + errores |
 | Consola | stream del grafo | `▶ nodo "x" terminó (Nms) → estado: campos` |
 | Disco | `checkpoints.sqlite` | estado completo tras cada nodo |

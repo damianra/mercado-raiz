@@ -4,8 +4,9 @@
  *
  *   GET  /status   → devuelve orchestrator.corrida (fase actual)
  *   GET  /metrics  → devuelve metrics + costTracker de la corrida
- *   POST /resume   → llama orchestrator.reanudar(body); lo dispara
- *                    el backend tras cada aprobar/rechazar
+ *   POST /resume   → llama orchestrator.reanudar(body) — compat con
+ *                    checkpoints pausados viejos (SPEC-12: el grafo
+ *                    ya no emite interrupts; sin pausa devuelve 409)
  *   POST /run      → llama orchestrator.iniciar() para una corrida
  *                    nueva (409 si ya hay una en curso)
  *
@@ -37,6 +38,7 @@ export function iniciarServidor() {
         ordenes_creadas: m.ordenes_creadas,
         ordenes_pausadas_hith: m.ordenes_pausadas_hith,
         conteo_fallbacks: m.conteo_fallbacks,
+        llm_evitadas: m.llm_evitadas,
         tasa_fallback: m.tasa_fallback,
         mensaje_sistema: metrics.mensajeSistema(orchestrator.corrida.fase),
       },

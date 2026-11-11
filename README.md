@@ -25,7 +25,7 @@ prompt front - back Qwen 3.7
 
 ```bash
 npm install
-cp .env.example .env   # opcional: PORT, HARNESS_URL
+cp .env.example .env   # opcional: PORT
 npm run seed           # puebla la DB con datos realistas
 npm run dev            # frontend en http://localhost:5173
 npm run api            # API Express en http://localhost:4000
@@ -39,7 +39,7 @@ El proxy de Vite redirige `/api` y `/uploads` al puerto 4000 en dev.
 npm run agente   # harness-langgraph (requiere la API en :4000 y Ollama en :11434)
 ```
 
-El agente lee productos con stock bajo, estima demanda con el LLM, crea órdenes vía HTTP y pausa el grafo cuando una orden requiere aprobación humana; al aprobar/rechazar desde el dashboard, el backend dispara `POST /resume` y el grafo reanuda. Ver `harness-langgraph/README.md`.
+El agente lee productos con stock bajo, estima demanda con el LLM, crea órdenes vía HTTP y termina — la corrida es atómica (SPEC-12). Las órdenes que superan el umbral quedan `PENDIENTE_APROBACION` y se aprueban/rechazan desde el dashboard por REST puro del backend. Ver `harness-langgraph/README.md`.
 
 ## Scripts
 

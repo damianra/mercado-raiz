@@ -7,11 +7,12 @@ Mercado Raíz con un **LLM local** (Ollama + llama3.2:1b).
 
 ## Qué hace el agente
 
-Detecta productos con stock bajo → analiza su demanda con el LLM →
-calcula cuánto reponer → crea las órdenes de compra en el backend →
-si alguna supera $100, **se pausa y espera que un humano apruebe**
-desde el dashboard → al recibir la señal, **retoma exactamente donde
-quedó** y cierra la corrida.
+Detecta productos con stock bajo → analiza su demanda con el LLM
+(triage heurístico: las ventas estables se estiman sin LLM, SPEC-12)
+→ calcula cuánto reponer → crea las órdenes de compra en el backend
+→ **termina**. Las que superan $100 quedan `PENDIENTE_APROBACION`:
+el humano las aprueba/rechaza desde el dashboard por REST del
+backend — el grafo ya no espera (aprobación desacoplada, SPEC-12).
 
 ## Cómo correr la demo (4 piezas)
 
@@ -29,15 +30,14 @@ npm run dev
 npm run agente                   # desde la raíz, o cd harness-langgraph && npm run agente
 ```
 
-Cuando el agente pause en `esperar-aprobacion`:
+Cuando el agente termina:
 
-1. Abrí http://localhost:5173 → aprobá o rechazá la orden pendiente.
-2. **El backend dispara `POST :4110/resume` solo** (ver
-   `server/harness-notify.js`) — el grafo despierta, re-lee las
-   órdenes y sigue: si quedan pendientes vuelve a pausar, si no,
-   termina. Aprobar/rechazar varias seguidas también funciona —
-   las señales se encolan.
-3. `curl http://localhost:4110/metrics` → métricas de la corrida: negocio + rendimiento del LLM (tokens, tiempos en ms).
+1. Abrí http://localhost:5173 → las órdenes `PENDIENTE_APROBACION`
+   se listan en el dashboard → aprobá o rechazá desde ahí (REST del
+   backend, el agente no participa).
+2. `curl http://localhost:4110/metrics` → métricas de la corrida:
+   negocio + rendimiento del LLM (tokens, tiempos en ms) +
+   `llm_evitadas` (triage + justificación condicional).
 
 ## Mapa del código
 
@@ -78,8 +78,10 @@ serie.
 - **Fallbacks**: si el LLM responde mal, el nodo usa un plan B
   (promedio histórico / template) y registra el error — la corrida
   no muere.
-- **Checkpoints**: la pausa humana persiste en `checkpoints.sqlite`
-  — el proceso puede morir y la corrida se reanuda igual.
+- **Aprobación desacoplada** (SPEC-12): el grafo es atómico — las
+  pendientes esperan en la DB y se resuelven por REST. El
+  checkpointer sigue escribiendo `checkpoints.sqlite` tras cada
+  nodo (infra disponible, sin uso por el flujo actual).
 - **Umbral duplicado a propósito**: el agente decide
   `requiere_aprobacion` (demo del agente decidiendo) y el backend
   re-deriva la misma regla como red de seguridad
