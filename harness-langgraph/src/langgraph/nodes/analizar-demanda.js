@@ -18,6 +18,7 @@ import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
 import { buscarDemanda, guardarDemanda, hashAnalisis } from '../../harness/analisis-cache.js';
 import { parseJsonResponse } from '../../utils/llm-json.js';
+import { conLimite } from '../../utils/concurrencia.js';
 import { promptAnalisisDemanda } from '../prompts/analisis-demanda.js';
 import { log } from '../../utils/logger.js';
 
@@ -57,57 +58,71 @@ function fallbackDesdeVentas(ventas) {
   };
 }
 
+async function analizarUno(p) {
+  const ventas = await ventasDeProducto(p.id);
+  // SPEC-16: el hash cubre ventas + producto + config — generar-
+  // analisis lo reusa para cachear la justificación (mismo input).
+  const hash = hashAnalisis(p, ventas);
+  // SPEC-12: demanda estable (CV < UMBRAL_CV) → promedio histórico
+  // directo; el LLM se reserva para los patrones volátiles.
+  const cv = coeficienteVariacion(ventas);
+  if (cv < config.umbralCv) {
+    metrics.llmEvitada();
+    log(`  ${p.sku}: demanda estable (CV=${cv.toFixed(2)}) — estimado heurístico, sin LLM`);
+    return {
+      id: p.id,
+      hash,
+      analisis: {
+        ...fallbackDesdeVentas(ventas),
+        observacion: `Demanda estable (CV=${cv.toFixed(2)}), estimado por promedio histórico`,
+      },
+    };
+  }
+  // SPEC-16: input idéntico al de una corrida anterior → la
+  // respuesta también; reusarla ahorra la llamada.
+  const cacheada = buscarDemanda(p.id, hash);
+  if (cacheada) {
+    metrics.cacheHit();
+    log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
+    return { id: p.id, hash, analisis: cacheada };
+  }
+  try {
+    metrics.llamadaLlm();
+    const respuesta = await conReintentos(
+      async () => {
+        const r = await llmJson.invoke(promptAnalisisDemanda(p, ventas));
+        costTracker.registrar(r);
+        return parseJsonResponse(r.content, schemaAnalisis);
+      },
+      { intentos: 2, etiqueta: `análisis de ${p.sku}` },
+    );
+    guardarDemanda(p.id, hash, respuesta);
+    log(`  ${p.sku}: ~${respuesta.demanda_diaria} u/día, ${respuesta.tendencia} — ${respuesta.observacion}`);
+    return { id: p.id, hash, analisis: respuesta };
+  } catch (err) {
+    metrics.fallback();
+    log(`  ${p.sku}: LLM falló, usando promedio histórico`);
+    return {
+      id: p.id,
+      hash,
+      analisis: fallbackDesdeVentas(ventas),
+      error: `analizar-demanda(${p.sku}): ${err.message} — se usó fallback heurístico`,
+    };
+  }
+}
+
 export async function analizarDemanda(state) {
+  // SPEC-16: hasta `concurrencia` productos en vuelo — gana si
+  // Ollama corre con OLLAMA_NUM_PARALLEL >= ese valor.
+  const resultados = await conLimite(state.productosBajos, config.concurrencia, analizarUno);
+
   const analisis = {};
   const hashes = {};
   const errores = [];
-
-  for (const p of state.productosBajos) {
-    const ventas = await ventasDeProducto(p.id);
-    // SPEC-16: el hash cubre ventas + producto + config — generar-
-    // analisis lo reusa para cachear la justificación (mismo input).
-    const hash = hashAnalisis(p, ventas);
-    hashes[p.id] = hash;
-    // SPEC-12: demanda estable (CV < UMBRAL_CV) → promedio histórico
-    // directo; el LLM se reserva para los patrones volátiles.
-    const cv = coeficienteVariacion(ventas);
-    if (cv < config.umbralCv) {
-      metrics.llmEvitada();
-      analisis[p.id] = {
-        ...fallbackDesdeVentas(ventas),
-        observacion: `Demanda estable (CV=${cv.toFixed(2)}), estimado por promedio histórico`,
-      };
-      log(`  ${p.sku}: demanda estable (CV=${cv.toFixed(2)}) — estimado heurístico, sin LLM`);
-      continue;
-    }
-    // SPEC-16: input idéntico al de una corrida anterior → la
-    // respuesta también; reusarla ahorra la llamada.
-    const cacheada = buscarDemanda(p.id, hash);
-    if (cacheada) {
-      metrics.cacheHit();
-      analisis[p.id] = cacheada;
-      log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
-      continue;
-    }
-    try {
-      metrics.llamadaLlm();
-      const respuesta = await conReintentos(
-        async () => {
-          const r = await llmJson.invoke(promptAnalisisDemanda(p, ventas));
-          costTracker.registrar(r);
-          return parseJsonResponse(r.content, schemaAnalisis);
-        },
-        { intentos: 2, etiqueta: `análisis de ${p.sku}` },
-      );
-      analisis[p.id] = respuesta;
-      guardarDemanda(p.id, hash, respuesta);
-      log(`  ${p.sku}: ~${respuesta.demanda_diaria} u/día, ${respuesta.tendencia} — ${respuesta.observacion}`);
-    } catch (err) {
-      metrics.fallback();
-      analisis[p.id] = fallbackDesdeVentas(ventas);
-      errores.push(`analizar-demanda(${p.sku}): ${err.message} — se usó fallback heurístico`);
-      log(`  ${p.sku}: LLM falló, usando promedio histórico`);
-    }
+  for (const r of resultados) {
+    analisis[r.id] = r.analisis;
+    hashes[r.id] = r.hash;
+    if (r.error) errores.push(r.error);
   }
 
   return { analisisPorProducto: analisis, hashPorProducto: hashes, errores };
