@@ -783,11 +783,16 @@ reanudables.
 - **R13.2** `crear-orden` (o `ordenes.client`) debe reintentar ante
   429 con backoff — respetar `Retry-After` si viene, exponencial con
   tope si no (ej. 2s→4s→8s, máx ~5 intentos). Si agota, el error
-  sigue yendo a `errores_no_criticos` como hoy.
+  sigue yendo a `errores_no_criticos` como hoy. ✅
+  — Implementado en `backend-client`/`conReintentos` (la envoltura ya
+  existía; el fix fue propagar `err.retryAfter` del header y
+  esperarlo — tope 60s — en vez del backoff fijo de 1-2s que caía
+  dentro de la misma ventana saturada; `api.post` con `intentos: 4`).
 - **R13.3** Métrica: los reintentos 429 no deben contarse como
-  `llamadas_llm` ni como fallbacks — son fricción de transporte.
-  Evaluar si conviene un contador `ordenes_rechazadas_429` en
-  `/metrics` para observabilidad.
+  `llamadas_llm` ni como fallbacks — son fricción de transporte. ✅
+  — Ya cubierto por el contador `reintentos` de `/metrics`
+  (`metrics.reintento()`); no se agregó un 429-counter dedicado
+  (el log ⚠ por reintento + el agregado alcanzan para observar).
 - **R13.4** Decidir y documentar la política del limiter para el
   cliente interno: opciones — subir `max` para `127.0.0.1`/loopback,
   `HARNESS_API_KEY` bypass, o aceptar el límite y dejar que el retry
