@@ -976,14 +976,20 @@ Palancas elegidas (en este orden de implementación):
 ### Requisitos
 
 - **R16.1** Cache incremental: para cada producto que va al LLM,
-  computar un hash del input (ventas usadas + modelo + umbrales); si
-  coincide con la entrada cacheada, reusar `demanda_estimada` y
-  `analisis` sin llamar al LLM — cubre ambas llamadas del producto
-  (la justificación deriva de demanda→cantidad→monto, mismos inputs).
+  computar un hash del input (**ventas usadas + campos del producto
+  que entran al prompt** — `stock_actual`, `stock_minimo`,
+  `precio_unitario`, `categoria`, `proveedor.tiempo_entrega_dias` —
+  + modelo + umbrales); si coincide con la entrada cacheada, reusar
+  `demanda_estimada` y `analisis` sin llamar al LLM — cubre ambas
+  llamadas del producto (la justificación deriva de
+  demanda→cantidad→monto, mismos inputs). Sin los campos de producto
+  en el hash, un movimiento AJUSTE/REPOSICION cambiaría el stock sin
+  invalidar la justificación cacheada.
   Persistencia: archivo JSON local del harness
   (`data/analisis-cache.json`), gitignored — es cache descartable,
-  no fuente de verdad. Contador `cache_hits` en métricas (separado
-  de `llm_evitadas`, que cuenta decisiones estructurales).
+  no fuente de verdad. Crear el dir y agregar la entrada a
+  `harness-langgraph/.gitignore`. Contador `cache_hits` en métricas
+  (separado de `llm_evitadas`, que cuenta decisiones estructurales).
 - **R16.2** Concurrencia: los nodos que iteran productos llamando al
   LLM procesan en paralelo con límite configurable
   (`AGENTE_CONCURRENCIA`, default 3). Documentar
@@ -995,7 +1001,11 @@ Palancas elegidas (en este orden de implementación):
   volátiles en llamadas de hasta `DEMANDA_BATCH` productos (default
   5, configurable); respuesta JSON array validada item por item —
   items inválidos/faltantes caen a llamada individual (fallback
-  granular, no a todo el lote).
+  granular, no a todo el lote). Detalles de implementación (del
+  review): `parseJsonResponse` hoy solo parsea objetos (`\{...\}`
+  greedy no captura arrays) → necesita variante array-aware; el cap
+  `numPredict` debe escalar con el tamaño del lote (≈50 tok/item) o
+  el JSON truncado degrada todo a llamadas individuales.
 - **R16.4** `POST /api/ordenes/batch`: acepta array de órdenes, las
   valida una por una (400 con detalle del item si alguna falla, sin
   parciales silenciosos — transacción), las crea en una transacción
