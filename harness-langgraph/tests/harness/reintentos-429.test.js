@@ -193,6 +193,7 @@ describe('integración — limiter real (server/security.js) + api.post', () => 
       expect(metricsLocal.resumen().reintentos).toBeGreaterThanOrEqual(1);
     } finally {
       server.close();
+      delete process.env.BACKEND_URL;
       vi.resetModules();
     }
   }, 30_000);
