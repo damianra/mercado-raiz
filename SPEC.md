@@ -597,6 +597,123 @@ del script.
 
 ---
 
+## SPEC-12 · Optimización de rendimiento del agente (demo productiva)
+
+- **Origen:** análisis del benchmark SPEC-11 (`harness-langgraph/
+  docs/benchmarks/benchmark-qwen3-8b-2026-11-11.md`) — el 86% del tiempo LLM es
+  generación de tokens y el 66% del tiempo por artículo es la
+  justificación en prosa. Objetivo del usuario: performance para
+  demo productiva, **sin topes de GPU** y **sin cambio de modelo**
+  (qwen3:8b se mantiene; A/B de modelos menores queda para otra spec).
+- **Estado global:** ❌ pendiente de implementación
+
+### Decisiones tomadas
+
+1. **Aprobación desacoplada del grafo**: LangGraph deja de esperar
+   al humano — se eliminan `esperar-aprobacion` (interrupt) y
+   `procesar-decision`. El grafo termina en `crear-orden` →
+   `notificar` → `fin`. La aprobación vive 100% en el backend
+   (endpoints existentes de `/api/ordenes` ya escriben
+   `aprobado_por`/`motivo_rechazo` — eran la fuente de verdad real
+   incluso con el interrupt, ver `procesar-decision` read-only).
+   El backend deja de llamar `POST /resume` del harness.
+2. **Justificación condicional en el grafo** (decisión del usuario):
+   `generar-analisis` solo invoca al LLM para órdenes con
+   `requiere_aprobacion` — las que el humano efectivamente lee.
+   Auto-aprobadas reciben el template determinista existente
+   (`fallbackTexto`). Requiere invertir el orden
+   `calcular-cantidad → decidir-aprobacion → generar-analisis`
+   (hoy `decidir` corre después — seguro: solo necesita
+   `monto_total`).
+3. **Triage heurístico** (decisión del usuario): en
+   `analizar-demanda`, si el coeficiente de variación (CV) de las
+   ventas diarias del producto < `UMBRAL_CV` (default 0,3), se usa
+   `fallbackDesdeVentas` directo — el LLM se reserva para demandas
+   volátiles. Se contabiliza como `llm_evitadas`, NO como fallback
+   (es decisión deliberada, no fallo).
+4. **Tuning de runtime**: `num_ctx` 2048 (los prompts usan ~250
+   tokens; libera KV-cache para paralelismo), `num_predict` acotado
+   en la justificación (~160 tokens — los p99 2.317/1.949 ms fueron
+   outliers de generación), y documentar `OLLAMA_NUM_PARALLEL=4` server-side
+   para corridas concurrentes.
+
+### Diseño objetivo del grafo
+
+```
+leer-inventario → analizar-demanda (triage CV → LLM solo volátiles)
+→ calcular-cantidad → decidir-aprobacion
+→ generar-analisis (LLM solo si requiere_aprobacion, sino template)
+→ crear-orden → ¿pendientes? → notificar → fin
+```
+
+Sin `interrupt`, sin resume: la corrida es atómica. Estado post-run:
+órdenes `PENDIENTE_APROBACION` esperan en la DB — el dashboard las
+muestra igual que hoy; aprobar/rechazar es REST puro del backend.
+
+### Requisitos
+
+- **R12.1** Eliminar `esperar-aprobacion` + `procesar-decision` +
+  `despuesDeProcesar` del grafo; `notificar → fin`. `notificar` sigue
+  informando las pendientes por consola/dashboard. ❌
+- **R12.2** El backend deja de llamar `POST /resume`
+  (`server/harness-notify.js` / `ordenes.controller.js`). El endpoint
+  `/resume` del harness queda para compat con checkpoints pausados
+  viejos (devuelve 409 sin corrida pausada — comportamiento actual).
+  ❌
+- **R12.3** Invertir `decidir-aprobacion` antes de
+  `generar-analisis` en los edges del grafo. ❌
+- **R12.4** `generar-analisis`: LLM solo si
+  `decisionPorProducto[].requiere_aprobacion`; resto →
+  `fallbackTexto` con marca `(estimación automática)` en
+  `analisis_ia`. Nuevo contador `metrics.llmEvitada()` separado de
+  `fallbacks`. ❌
+- **R12.5** Triage en `analizar-demanda`: CV de ventas diarias
+  (agrupar por fecha, σ/μ de unidades) < `UMBRAL_CV` (env, default
+  0,3) → `fallbackDesdeVentas` con `observacion` marcando
+  `heurístico`. Contar en `llm_evitadas`. ❌
+- **R12.6** Config: `num_ctx: 2048` y `num_predict` ≈160 en las
+  instancias `ChatOllama` pertinentes; `UMBRAL_CV` declarado en
+  `.env.example`; `OLLAMA_NUM_PARALLEL` documentado en
+  harness README. ❌
+- **R12.7** Tests: CV/triage, justificación condicional, wiring del
+  grafo nuevo (sin interrupt, termina en `fin`), backend ya no
+  llama `/resume`. Docs actualizadas (arquitectura.md,
+  EXPLICACION.md, flujo-ejecucion.md — describen el loop HITL). ❌
+
+### Impacto proyectado (sobre benchmark 2026-11-11)
+
+| Cambio | s/artículo | art/min | Factor |
+|---|---|---|---|
+| Base (hoy) | 2,58 | 23,2 | 1× |
+| Justificación condicional (~60% auto) | ~1,6 | ~37 | ~1,6× |
+| + triage CV (~50% estables típico) | ~1,1 | ~55 | ~2,4× |
+
+Los porcentajes de auto-aprobación y estabilidad dependen de los
+datos — validar con `--salida`/`--solo-demanda` del stress script
+(A/B contra `stress-qwen3-8b-2026-11-11.json`).
+
+### Tareas
+
+- **T12.1** Invertir orden `decidir`/`generar` + justificación
+  condicional + `llm_evitadas` (R12.3, R12.4)
+- **T12.2** Desacople HITL: nodos, edges, `/resume` backend (R12.1,
+  R12.2) — incluye limpiar residuos: campos `ordenesResueltas` /
+  `senalReanudacion` del estado si quedan huérfanos
+- **T12.3** Triage heurístico CV (R12.5)
+- **T12.4** Tuning config + env/docs runtime (R12.6)
+- **T12.5** Tests del flujo nuevo (R12.7 tests)
+- **T12.6** Docs del harness al flujo desacoplado (R12.7 docs)
+
+### Nota sobre SPEC-08
+
+R12.1/R12.2 reemplazan el diseño HITL-vía-`interrupt` documentado
+en SPEC-08 y los docs del harness: el patrón sigue soportado por la
+infraestructura (checkpointer, `/resume`, `.last-thread`) pero el
+grafo ya no lo usa — las corridas pausadas viejas siguen
+reanudables.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -612,6 +729,7 @@ del script.
 | (skeleton) | SPEC-09 | `Dockerfile`, `ci.yml`, configs | CI |
 | (post-gen) | SPEC-10 | `harness-langgraph/src/harness/*` | `harness-langgraph/tests/` |
 | (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
+| (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
