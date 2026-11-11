@@ -406,8 +406,8 @@ del grafo — salvo `errores`, que ya es parte del estado por diseño.
 ### 1. Datos nativos capturados de Ollama (por cada llamada al LLM)
 
 `cost-tracker.js` ya recibe la respuesta completa de LangChain; debe
-leer además `response_metadata` (verificado: trae los 7 campos en
-nanosegundos) y transformarlos a ms:
+leer además `response_metadata` (verificado: trae los 7 campos; las
+duraciones vienen en nanosegundos) y transformarlas a ms:
 
 | Campo (Origen Ollama, `response_metadata`) | Campo en Métrica | Descripción | Estado |
 |---|---|---|---|
@@ -428,7 +428,7 @@ nanosegundos) y transformarlos a ms:
 | `ordenes_pausadas_hith` | `state.ordenesPendientes` / flag `requiere_aprobacion` | ❌ pendiente — misma vía |
 | `conteo_fallbacks` | `metrics.erroresFallback` → `fallbacks_usados` | ✅ existe, renombrar/exponer |
 | `tasa_fallback` | `conteo_fallbacks / total_productos_evaluados * 100` | ❌ pendiente — **acotación**: hay 2 nodos LLM, así el máximo teórico es 200%; alerta >15% se mantiene como umbral |
-| `errores_no_criticos` | `state.errores` (reducer acumulativo, ya escriben todos los nodos) | 🟡 existe en el grafo; falta exponerlo en `/metrics` |
+| `errores_no_criticos` | `state.errores` (reducer acumulativo — ya lo escriben los nodos con errores no fatales: analizar-demanda, generar-analisis, crear-orden) | 🟡 existe en el grafo; falta exponerlo en `/metrics` |
 
 ### 3. Contrato de API
 
@@ -453,6 +453,7 @@ reestructurar a esta forma, breaking change interno del sub-proyecto)
     "tokens_prompt_acumulados": 4500,
     "tokens_generacion_acumulados": 1200,
     "tiempo_carga_promedio_ms": 150,
+    "tiempo_procesamiento_prompt_promedio_ms": 60,
     "tiempo_generacion_promedio_ms": 850,
     "tiempo_total_promedio_ms": 1000
   },
@@ -477,10 +478,10 @@ Notas de diseño validadas:
   acumula tokens + las 4 duraciones (ns→ms) y guarda `modelo` de la
   última llamada. 🟡 tokens ya; ❌ duraciones y modelo.
 - **R10.2** El harness obtiene `productosBajos`, `ordenesCreadas`,
-  `ordenesPendientes`, `ordenesResueltas` y `errores` del estado final
-  del grafo (`grafo.getState()` tras cada `stream`, ya disponible en
-  `orchestrator.ejecutar`) y los vuelca a `metrics` — sin duplicarlos
-  en el estado del grafo. ❌
+  `decisionPorProducto` (para contar `requiere_aprobacion`) y
+  `errores` del estado final del grafo (`grafo.getState()` tras cada
+  `stream`, ya disponible en `orchestrator.ejecutar`) y los vuelca a
+  `metrics` — sin duplicarlos en el estado del grafo. ❌
 - **R10.3** `GET /metrics` devuelve el contrato de §3 con
   `estado_corrida`, `resumen_ejecucion` (incl. `tasa_fallback` y
   `mensaje_sistema`), `rendimiento_llm` (`null` sin llamadas) y
