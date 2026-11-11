@@ -65,7 +65,7 @@ export const metrics = {
     state.productosEvaluados = values.productosBajos?.length ?? 0;
     state.ordenesCreadas = values.ordenesCreadas?.length ?? 0;
     state.ordenesPausadas = Object.values(values.decisionPorProducto ?? {}).filter(
-      (d) => d.requiere_aprobacion,
+      (d) => d?.requiere_aprobacion,
     ).length;
     state.erroresNoCriticos = values.errores ?? [];
   },
