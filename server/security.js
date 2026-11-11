@@ -36,8 +36,12 @@ export function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
     }
     if (list.length >= max) {
       hits.set(key, list);
+      // Retry-After: segundos hasta que expire el hit más viejo —
+      // el harness (crear-orden en ráfaga) lo usa para el backoff.
+      const retryAfter = Math.max(1, Math.ceil((list[0] + windowMs - now) / 1000));
       return res
         .status(429)
+        .set('Retry-After', retryAfter)
         .json({ error: 'demasiadas solicitudes — probá de nuevo en unos segundos' });
     }
     list.push(now);
