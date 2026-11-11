@@ -27,8 +27,12 @@ export async function conReintentos(fn, { intentos = 3, esperaMs = 1000, etiquet
       const reintentable = !err.status || err.status === 429 || err.status >= 500;
       if (!reintentable || i === intentos) break;
       metrics.reintento();
-      log(`  ⚠ ${etiqueta} falló (intento ${i}/${intentos}): ${err.message} — reintentando en ${esperaMs * i}ms`);
-      await esperar(esperaMs * i);
+      // Si el server mandó Retry-After (429 del limiter), se espera
+      // eso — un backoff fijo de 1-2s cae dentro de la misma ventana
+      // saturada y agota los intentos sin llegar nunca a un slot libre.
+      const espera = err.retryAfter ? Math.min(err.retryAfter * 1000, 60_000) : esperaMs * i;
+      log(`  ⚠ ${etiqueta} falló (intento ${i}/${intentos}): ${err.message} — reintentando en ${espera}ms`);
+      await esperar(espera);
     }
   }
   throw ultimoError;

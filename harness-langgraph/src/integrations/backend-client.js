@@ -8,8 +8,8 @@
  *  1. El backend responde listas como { data, pagination } — acá se
  *     devuelve ese envelope tal cual y cada client toma lo suyo.
  *  2. /api limita escrituras a 20 req/min — todo pasa por
- *     conReintentos (harness/error-handler), que reintenta con
- *     backoff ante 429 o 5xx.
+ *     conReintentos (harness/error-handler), que ante 429 espera el
+ *     Retry-After del server y ante 5xx hace backoff propio.
  *  3. Las respuestas de error se convierten en Error con `.status`,
  *     así el retry sabe que un 4xx no vale reintentar.
  */
@@ -26,6 +26,9 @@ async function request(path, { method = 'GET', body } = {}) {
   if (!res.ok) {
     const err = new Error(data.error ?? `HTTP ${res.status}`);
     err.status = res.status;
+    // El backend manda Retry-After en los 429 (R13.1) — conReintentos
+    // lo usa para esperar lo que el limiter indica, no un fijo.
+    err.retryAfter = Number(res.headers.get('retry-after')) || null;
     throw err;
   }
   return data;
@@ -37,5 +40,8 @@ async function request(path, { method = 'GET', body } = {}) {
  */
 export const api = {
   get: (path) => conReintentos(() => request(path), { etiqueta: `GET ${path}` }),
-  post: (path, body) => conReintentos(() => request(path, { method: 'POST', body }), { etiqueta: `POST ${path}` }),
+  // POST con un intento extra: ante 429 cada reintento espera el
+  // Retry-After del limiter (hasta ~60s), y una ráfaga puede necesitar
+  // más de una ventana de espera.
+  post: (path, body) => conReintentos(() => request(path, { method: 'POST', body }), { intentos: 4, etiqueta: `POST ${path}` }),
 };

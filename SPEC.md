@@ -766,12 +766,16 @@ reanudables.
 
 ### Contexto técnico
 
+Estado previo al fix (hallazgo):
+
 - `server/security.js:22` — limiter in-memory por IP, solo métodos de
-  escritura (GET/HEAD exentos). El 429 devuelve JSON de error **sin
-  header `Retry-After`**.
+  escritura (GET/HEAD exentos). El 429 devolvía JSON de error **sin
+  header `Retry-After`** (hoy sí, R13.1).
 - `harness-langgraph/src/langgraph/nodes/crear-orden.js` — POST por
-  producto sin retry: `catch → errores[]`, el producto se pierde para
-  esta corrida.
+  producto sin retry efectivo: `conReintentos` existía pero esperaba
+  1-2s fijos — caía dentro de la misma ventana de 60s y agotaba
+  intentos; `catch → errores[]`, el producto se pierde para la
+  corrida.
 - Las ventas (`GET /api/historial`) no cuentan contra el límite
   (solo escritura), así que el cuello es exclusivamente `crear-orden`.
 
@@ -783,11 +787,18 @@ reanudables.
 - **R13.2** `crear-orden` (o `ordenes.client`) debe reintentar ante
   429 con backoff — respetar `Retry-After` si viene, exponencial con
   tope si no (ej. 2s→4s→8s, máx ~5 intentos). Si agota, el error
-  sigue yendo a `errores_no_criticos` como hoy.
+  sigue yendo a `errores_no_criticos` como hoy. ✅
+  — Implementado en `backend-client`/`conReintentos` (la envoltura ya
+  existía; el fix fue propagar `err.retryAfter` del header y
+  esperarlo — tope 60s — en vez del backoff fijo de 1-2s que caía
+  dentro de la misma ventana saturada; `api.post` con `intentos: 4`.
+  Sin header el fallback sigue lineal `esperaMs*i` — el "exponencial"
+  era ejemplo, el mecanismo primario es `Retry-After`).
 - **R13.3** Métrica: los reintentos 429 no deben contarse como
-  `llamadas_llm` ni como fallbacks — son fricción de transporte.
-  Evaluar si conviene un contador `ordenes_rechazadas_429` en
-  `/metrics` para observabilidad.
+  `llamadas_llm` ni como fallbacks — son fricción de transporte. ✅
+  — Ya cubierto por el contador `reintentos` de `/metrics`
+  (`metrics.reintento()`); no se agregó un 429-counter dedicado
+  (el log ⚠ por reintento + el agregado alcanzan para observar).
 - **R13.4** Decidir y documentar la política del limiter para el
   cliente interno: opciones — subir `max` para `127.0.0.1`/loopback,
   `HARNESS_API_KEY` bypass, o aceptar el límite y dejar que el retry
