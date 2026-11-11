@@ -9,7 +9,7 @@
  * Devuelve el grafo compilado que ejecuta harness/orchestrator.js.
  *
  *   leer-inventario → analizar-demanda → calcular-cantidad
- *     → generar-analisis → decidir-aprobacion → crear-orden
+ *     → decidir-aprobacion → generar-analisis → crear-orden
  *     → ¿pendientes? → notificar → esperar-aprobacion ⏸
  *       → procesar-decision → ¿quedan? ↺ esperar-aprobacion / fin
  *                    └─ no → fin
