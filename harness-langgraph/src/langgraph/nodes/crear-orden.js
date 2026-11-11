@@ -59,7 +59,7 @@ export async function crearOrdenes(state) {
         analisis_ia: d.analisis_ia,
       })));
       const porProducto = new Map(lote.map((e) => [e.p.id, e]));
-      for (const orden of res.data.data) {
+      for (const orden of res.data) {
         const pedido = porProducto.get(orden.producto.id);
         registrar(orden, pedido?.p ?? orden.producto, pedido?.d.cantidad ?? orden.cantidad, salida);
       }

@@ -62,6 +62,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/ordenes` — lista paginada (filtros: `estado`, `requiere_aprobacion`, `fecha_desde/hasta`, `search`, `sort`)
 - `GET /api/ordenes/:orden_id` — detalle con `producto{}` y `proveedor{}` anidados
 - `POST /api/ordenes` — crea orden (`monto_total` calculado server-side; `>= $100` → `PENDIENTE_APROBACION`)
+- `POST /api/ordenes/batch` — array de órdenes en una transacción (todo o nada; 400 con detalle por índice si algún item falla — SPEC-16)
 - `POST /api/ordenes/:orden_id/aprobar` · `POST /api/ordenes/:orden_id/rechazar` (requiere `motivo`)
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
 - `GET /api/dashboard/stats` — KPIs del dashboard
