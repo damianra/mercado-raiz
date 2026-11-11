@@ -766,12 +766,16 @@ reanudables.
 
 ### Contexto técnico
 
+Estado previo al fix (hallazgo):
+
 - `server/security.js:22` — limiter in-memory por IP, solo métodos de
-  escritura (GET/HEAD exentos). El 429 devuelve JSON de error **sin
-  header `Retry-After`**.
+  escritura (GET/HEAD exentos). El 429 devolvía JSON de error **sin
+  header `Retry-After`** (hoy sí, R13.1).
 - `harness-langgraph/src/langgraph/nodes/crear-orden.js` — POST por
-  producto sin retry: `catch → errores[]`, el producto se pierde para
-  esta corrida.
+  producto sin retry efectivo: `conReintentos` existía pero esperaba
+  1-2s fijos — caía dentro de la misma ventana de 60s y agotaba
+  intentos; `catch → errores[]`, el producto se pierde para la
+  corrida.
 - Las ventas (`GET /api/historial`) no cuentan contra el límite
   (solo escritura), así que el cuello es exclusivamente `crear-orden`.
 
@@ -787,7 +791,9 @@ reanudables.
   — Implementado en `backend-client`/`conReintentos` (la envoltura ya
   existía; el fix fue propagar `err.retryAfter` del header y
   esperarlo — tope 60s — en vez del backoff fijo de 1-2s que caía
-  dentro de la misma ventana saturada; `api.post` con `intentos: 4`).
+  dentro de la misma ventana saturada; `api.post` con `intentos: 4`.
+  Sin header el fallback sigue lineal `esperaMs*i` — el "exponencial"
+  era ejemplo, el mecanismo primario es `Retry-After`).
 - **R13.3** Métrica: los reintentos 429 no deben contarse como
   `llamadas_llm` ni como fallbacks — son fricción de transporte. ✅
   — Ya cubierto por el contador `reintentos` de `/metrics`
