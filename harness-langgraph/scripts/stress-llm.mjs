@@ -19,9 +19,13 @@
  * Uso:
  *   node scripts/stress-llm.mjs --articulos 1000 --concurrencia 1
  *   node scripts/stress-llm.mjs --articulos 50 --concurrencia 8 --solo-demanda
+ *
+ * Persistencia: con --salida file.jsonl cada artículo se appendea al
+ * terminar (resultados sobreviven a un kill), y ante SIGINT/SIGTERM
+ * el script vuelca el reporte parcial en --reporte antes de salir.
  */
 import { execSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { llm, llmJson } from '../src/config/ollama.js';
 import { costTracker } from '../src/harness/cost-tracker.js';
@@ -39,6 +43,7 @@ const CONCURRENCIA = Math.max(1, Number(args.concurrencia ?? 1));
 const SOLO_DEMANDA = 'solo-demanda' in args;
 const MUESTRA_CADA = Math.max(1, Number(args['muestra-cada'] ?? 25));
 const REPORTE = args.reporte ?? null;
+const SALIDA = args.salida ?? null;
 
 // Mismo schema que valida el nodo analizar-demanda (state real del grafo).
 const schemaAnalisis = z.object({
@@ -110,7 +115,7 @@ async function llamada(tipo, instancia, prompt) {
   const wallMs = Math.round(performance.now() - t0);
   costTracker.registrar(r);
   const m = r.response_metadata ?? {};
-  llamadas.push({
+  const reg = {
     tipo, wallMs,
     totalMs: nsAms(m.total_duration),
     loadMs: nsAms(m.load_duration),
@@ -118,8 +123,9 @@ async function llamada(tipo, instancia, prompt) {
     genMs: nsAms(m.eval_duration),
     tokIn: r.usage_metadata?.input_tokens ?? m.prompt_eval_count ?? 0,
     tokOut: r.usage_metadata?.output_tokens ?? m.eval_count ?? 0,
-  });
-  return r;
+  };
+  llamadas.push(reg);
+  return { r, reg };
 }
 
 function fallbackDemanda(p) {
@@ -129,29 +135,40 @@ function fallbackDemanda(p) {
 }
 
 async function procesarArticulo(p) {
+  const salida = { sku: p.sku, nombre: p.nombre, ts: new Date().toISOString(), llamadas: [], analisis: null, justificacion: null, ok: true };
   let analisis;
   try {
-    const r = await llamada('demanda', llmJson, promptAnalisisDemanda(p, p.ventas));
+    const { r, reg } = await llamada('demanda', llmJson, promptAnalisisDemanda(p, p.ventas));
+    salida.llamadas.push(reg);
     analisis = parseJsonResponse(r.content, schemaAnalisis);
   } catch (e) {
     fallbacks++;
+    salida.ok = false;
     errores.push(`${p.sku}/demanda: ${e.message.slice(0, 80)}`);
     analisis = fallbackDemanda(p);
   }
-  if (SOLO_DEMANDA) return;
+  salida.analisis = analisis;
 
-  // Misma aritmética que el nodo calcular-cantidad (demanda × (lead+7) − stock)
-  const objetivo = Math.ceil(analisis.demanda_diaria * (p.proveedor.tiempo_entrega_dias + 7));
-  const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
-  const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
-  try {
-    const r = await llamada('justificacion', llm, promptGenerarAnalisis(p, analisis, cantidad, monto));
-    const texto = String(r.content).trim();
-    if (texto.length < 20) throw new Error('justificación demasiado corta');
-  } catch (e) {
-    fallbacks++;
-    errores.push(`${p.sku}/justificacion: ${e.message.slice(0, 80)}`);
+  if (!SOLO_DEMANDA) {
+    // Misma aritmética que el nodo calcular-cantidad (demanda × (lead+7) − stock)
+    const objetivo = Math.ceil(analisis.demanda_diaria * (p.proveedor.tiempo_entrega_dias + 7));
+    const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
+    const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
+    try {
+      const { r, reg } = await llamada('justificacion', llm, promptGenerarAnalisis(p, analisis, cantidad, monto));
+      salida.llamadas.push(reg);
+      const texto = String(r.content).trim();
+      if (texto.length < 20) throw new Error('justificación demasiado corta');
+      salida.justificacion = texto;
+    } catch (e) {
+      fallbacks++;
+      salida.ok = false;
+      errores.push(`${p.sku}/justificacion: ${e.message.slice(0, 80)}`);
+    }
   }
+  // Una línea por artículo — si el proceso muere, los resultados ya
+  // procesados quedan en disco (fsync implícito de appendFileSync).
+  if (SALIDA) appendFileSync(SALIDA, JSON.stringify(salida) + '\n');
 }
 
 // ---------- Runner con pool de concurrencia ----------
@@ -178,10 +195,23 @@ async function worker() {
     }
   }
 }
+let cortado = false;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (cortado) process.exit(1);
+    cortado = true;
+    // El pool deja de tomar artículos nuevos; volcamos lo procesado.
+    cursor = articulos.length;
+    console.log(`\n⚠ ${sig} recibida — volcando reporte parcial de ${procesados} artículos…`);
+    const rep = generarReporte(true);
+    console.log(JSON.stringify(rep, null, 2));
+    if (REPORTE) writeFileSync(REPORTE, JSON.stringify(rep, null, 2));
+    process.exit(0);
+  });
+}
 await Promise.all(Array.from({ length: CONCURRENCIA }, worker));
 
 // ---------- Reporte ----------
-const wallTotal = Date.now() - inicio;
 const pct = (arr, q) => {
   if (!arr.length) return 0;
   const s = [...arr].sort((a, b) => a - b);
@@ -199,24 +229,28 @@ const porTipo = (tipo) => {
   };
 };
 
-const reporte = {
-  config: { articulos: N_ARTICULOS, concurrencia: CONCURRENCIA, modo: SOLO_DEMANDA ? 'solo-demanda' : 'completo', modelo: config.ollamaModel },
-  duracion_total_s: Math.round(wallTotal / 100) / 10,
-  throughput: {
-    articulos_por_min: Math.round((N_ARTICULOS / (wallTotal / 60000)) * 10) / 10,
-    llamadas_por_min: Math.round((llamadas.length / (wallTotal / 60000)) * 10) / 10,
-  },
-  por_tipo: { demanda: porTipo('demanda'), justificacion: porTipo('justificacion') },
-  resiliencia: { fallbacks, errores: errores.length, muestra_errores: errores.slice(0, 5) },
-  recursos_ollama: recursos.length
-    ? {
-        rss_mb: { min: Math.min(...recursos.map((r) => r.rss_mb)), max: Math.max(...recursos.map((r) => r.rss_mb)) },
-        cpu_pct: { min: Math.min(...recursos.map((r) => r.cpu_pct)), max: Math.max(...recursos.map((r) => r.cpu_pct)) },
-      }
-    : null,
-  cost_tracker: costTracker.resumen(),
-};
+function generarReporte(parcial = false) {
+  const wallTotal = Date.now() - inicio;
+  return {
+    config: { articulos: N_ARTICULOS, procesados, concurrencia: CONCURRENCIA, modo: SOLO_DEMANDA ? 'solo-demanda' : 'completo', modelo: config.ollamaModel, reporte_parcial: parcial },
+    duracion_total_s: Math.round(wallTotal / 100) / 10,
+    throughput: {
+      articulos_por_min: wallTotal ? Math.round((procesados / (wallTotal / 60000)) * 10) / 10 : 0,
+      llamadas_por_min: wallTotal ? Math.round((llamadas.length / (wallTotal / 60000)) * 10) / 10 : 0,
+    },
+    por_tipo: { demanda: porTipo('demanda'), justificacion: porTipo('justificacion') },
+    resiliencia: { fallbacks, errores: errores.length, muestra_errores: errores.slice(0, 5) },
+    recursos_ollama: recursos.length
+      ? {
+          rss_mb: { min: Math.min(...recursos.map((r) => r.rss_mb)), max: Math.max(...recursos.map((r) => r.rss_mb)) },
+          cpu_pct: { min: Math.min(...recursos.map((r) => r.cpu_pct)), max: Math.max(...recursos.map((r) => r.cpu_pct)) },
+        }
+      : null,
+    cost_tracker: costTracker.resumen(),
+  };
+}
 
+const reporte = generarReporte();
 console.log('\n=== REPORTE ===');
 console.log(JSON.stringify(reporte, null, 2));
 if (REPORTE) writeFileSync(REPORTE, JSON.stringify(reporte, null, 2));
