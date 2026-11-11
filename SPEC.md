@@ -1038,6 +1038,15 @@ Palancas elegidas (en este orden de implementación):
   parciales silenciosos — transacción), las crea en una transacción
   y devuelve el array creado. `crear-orden` lo usa para persistir el
   lote de la corrida en una llamada (o en pocos lotes si son muchas).
+  ✅ — model: `createOrdenesBatch` (verifica todos los productos
+  → `faltantes` por índice; secuencia OC-NNN + INSERTs en una
+  `db.transaction`, insert compartido con `createOrden` via
+  `insertarOrden`); controller: `validarItemOrden` extraído y
+  reusado item a item, `MAX_LOTE_ORDENES=200`; route
+  `POST /batch` antes de `/:orden_id`. Harness:
+  `crearOrdenesBatch` en `ordenes.client`; nodo `crear-orden`
+  chunkea a 100/request y cae al loop individual si un lote
+  falla (registrado en `errores`).
 - **R16.5** Tests + medición: tests por pieza (cache hit/miss,
   concurrencia respeta el límite, batch con item inválido hace
   fallback, endpoint batch transaccional) + corrida comparativa del

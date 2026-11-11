@@ -97,8 +97,11 @@ corresponde, en las órdenes.
 
 El backend limita escrituras a **20 req/min por IP**
 (`server/security.js`, ventana deslizante de 60 s; GET/HEAD exentos).
-`crear-orden` dispara un `POST /api/ordenes` por producto — en lotes
-grandes la ráfaga excede el límite.
+`crear-orden` usa `POST /api/ordenes/batch` (SPEC-16) — hasta 100
+órdenes por request en una transacción, así una corrida entera
+cuenta como 1-2 escrituras; si el endpoint falla, el nodo cae a
+`POST /api/ordenes` por producto y la ráfaga puede exceder el
+límite (el retry con `Retry-After` lo absorbe).
 
 **Política adoptada (R13.4)**: se mantiene el límite uniforme para
 todos los clientes y el harness lo absorbe con retry — es el

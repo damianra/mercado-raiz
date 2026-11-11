@@ -18,6 +18,17 @@ export function crearOrden({ productoId, cantidad, requiereAprobacion, analisisI
   });
 }
 
+/**
+ * POST /api/ordenes/batch — N órdenes en una request y una
+ * transacción (SPEC-16). Una sola escritura para el rate limiter.
+ * Todo o nada: si el backend devuelve 400 por un item, ninguna
+ * se persistió — el nodo decide el fallback a llamadas sueltas.
+ * items: [{ producto_id, cantidad, requiere_aprobacion, analisis_ia }]
+ */
+export function crearOrdenesBatch(items) {
+  return api.post('/ordenes/batch', items);
+}
+
 export function obtenerOrden(ordenId) {
   return api.get(`/ordenes/${encodeURIComponent(ordenId)}`);
 }

@@ -121,7 +121,7 @@ generarla para las auto-aprobadas era el 66% del tiempo de GPU
 | | |
 |---|---|
 | **Lee** | `productosBajos` + `decisionPorProducto` |
-| **Por cada producto** | `POST :4000/api/ordenes {productoId, cantidad, requiereAprobacion, analisisIa}` |
+| **Por cada lote** | `POST :4000/api/ordenes/batch` (SPEC-16) — hasta 100 órdenes/request en una transacción; si el lote falla → fallback `POST /api/ordenes` por producto |
 | **Devuelve** | `{ ordenesCreadas: [orden…], ordenesPendientes: ["OC-101"], errores }` — pendientes = las que el backend dejó en `PENDIENTE_APROBACION` |
 | **Edge** | **condicional** → `despuesDeCrearOrdenes(state)` |
 
