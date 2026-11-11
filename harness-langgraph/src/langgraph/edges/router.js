@@ -9,8 +9,3 @@
 export function despuesDeCrearOrdenes(state) {
   return state.ordenesPendientes.length > 0 ? 'notificar' : 'fin';
 }
-
-/** Sale de procesar-decision: quedan órdenes sin resolver → otra pausa; si no → fin. */
-export function despuesDeProcesar(state) {
-  return state.ordenesPendientes.length > 0 ? 'esperar-aprobacion' : 'fin';
-}

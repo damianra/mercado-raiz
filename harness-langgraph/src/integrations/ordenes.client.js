@@ -4,9 +4,8 @@
  *    Manda requiere_aprobacion explícito (la decisión la toma el
  *    nodo decidir-aprobacion; el backend la re-deriva solo si no
  *    viene el flag).
- *  - obtenerOrden() → GET /api/ordenes/:orden_id — la usa el nodo
- *    procesar-decision tras la pausa para ver en qué quedó cada
- *    orden (APROBADA / RECHAZADA / sigue pendiente).
+ *  - obtenerOrden() → GET /api/ordenes/:orden_id — consulta puntual
+ *    del estado de una orden (APROBADA / RECHAZADA / pendiente).
  */
 import { api } from './backend-client.js';
 

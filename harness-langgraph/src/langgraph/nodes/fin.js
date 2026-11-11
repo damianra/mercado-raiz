@@ -1,7 +1,7 @@
 /**
  * NODO 10 — CIERRE
  *
- * Lee ordenesCreadas, ordenesResueltas y errores para loguear el
+ * Lee ordenesCreadas, ordenesPendientes y errores para loguear el
  * resumen de la corrida, y pide GET /api/dashboard/stats para
  * mostrar los KPIs del tablero después de la ejecución. No escribe
  * en el estado ni modifica el backend.
@@ -11,7 +11,7 @@ import { log } from '../../utils/logger.js';
 
 export async function fin(state) {
   log(`  Órdenes creadas: ${state.ordenesCreadas.length}`);
-  log(`  Resueltas por el humano: ${state.ordenesResueltas.length}`);
+  log(`  Pendientes de aprobación humana: ${state.ordenesPendientes.length}`);
   log(`  Errores no fatales: ${state.errores.length}`);
   try {
     const stats = await obtenerStats();
