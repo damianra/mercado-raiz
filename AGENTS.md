@@ -75,3 +75,13 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 ## Arquitectura backend
 
 **Arquitectura MVC**: `server/routes/*.js` solo mapean HTTP → `server/controllers/`; los controllers orquestan request/response y delegan a `server/models/` (fat models con toda la lógica de negocio y las queries SQLite via `server/db.js`). Al agregar endpoints: route fino + método en controller + lógica en model.
+
+## Workflow de cambios (obligatorio)
+
+Toda modificación al repo sigue este pipeline:
+
+1. **Spec primero**: antes de tocar código, registrar el cambio en `SPEC.md` — como SPEC nuevo o como tarea (`TN.x`) dentro del SPEC vigente. El repo se mantiene documentado: specs, `README` y `docs/` reflejan el estado real (al implementar, marcar estados/tareas como completados).
+2. **Rama por tarea**: una rama por tarea, creada desde `main` actualizado — `feat/`, `fix/`, `docs/`, `test/`, `refactor/` + nombre descriptivo.
+3. **Commits semánticos**: `tipo(scope): descripción` (`feat`, `fix`, `docs`, `test`, `refactor`, `chore`).
+4. **Aprobación funcional por sub-agente**: cada rama se revisa con un sub-agente que verifica el comportamiento real (diff, tests, smokes) antes del merge. Si no aprueba, iterar la corrección y re-enviar hasta obtener la aprobación.
+5. **Merge a `main`**: `git merge --no-ff` recién aprobada; actualizar `main` antes de abrir la siguiente rama. No pushear salvo pedido explícito; borrar la rama una vez mergeada.
