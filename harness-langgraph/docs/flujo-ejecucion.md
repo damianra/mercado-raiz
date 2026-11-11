@@ -234,7 +234,7 @@ corrida — con él LangGraph sabe qué checkpoint restaurar.
 |---|---|---|
 | Corriendo | `GET :4110/status` | `{threadId, fase:'corriendo'}` |
 | Pausado | `GET :4110/status` | `{fase:'pausado', detalle:['OC-101']}` |
-| Siempre | `GET :4110/metrics` | tiempos por nodo, llamadas LLM, tokens |
+| Siempre | `GET :4110/metrics` | `estado_corrida` + contadores de negocio + rendimiento LLM (tokens, tiempos ms) + errores |
 | Consola | stream del grafo | `▶ nodo "x" terminó (Nms) → estado: campos` |
 | Disco | `checkpoints.sqlite` | estado completo tras cada nodo |
 | Disco | `.last-thread` | thread_id para reanudar tras reinicio |
