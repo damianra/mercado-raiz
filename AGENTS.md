@@ -78,10 +78,13 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 
 ## Workflow de cambios (obligatorio)
 
-Toda modificación al repo sigue este pipeline:
+Toda modificación al repo sigue este pipeline — **PR por tarea en
+github.com/damianra/mercado-raiz**:
 
-1. **Spec primero**: antes de tocar código, registrar el cambio en `SPEC.md` — como SPEC nuevo o como tarea (`TN.x`) dentro del SPEC vigente. El repo se mantiene documentado: specs, `README` y `docs/` reflejan el estado real (al implementar, marcar estados/tareas como completados).
+1. **Spec primero**: antes de tocar código, registrar el cambio en `SPEC.md` — como SPEC nuevo o como tarea (`TN.x`) dentro del SPEC vigente.
 2. **Rama por tarea**: una rama por tarea, creada desde `main` actualizado — `feat/`, `fix/`, `docs/`, `test/`, `refactor/` + nombre descriptivo.
 3. **Commits semánticos**: `tipo(scope): descripción` (`feat`, `fix`, `docs`, `test`, `refactor`, `chore`).
-4. **Aprobación funcional por sub-agente**: cada rama se revisa con un sub-agente que verifica el comportamiento real (diff, tests, smokes) antes del merge. Si no aprueba, iterar la corrección y re-enviar hasta obtener la aprobación.
-5. **Merge a `main`**: `git merge --no-ff` recién aprobada; actualizar `main` antes de abrir la siguiente rama. No pushear salvo pedido explícito; borrar la rama una vez mergeada.
+4. **PR por tarea**: `git push -u origin <rama>` + `gh pr create` con summary y test plan — uno por tarea, no acumular cambios.
+5. **Aprobación funcional por sub-agente**: un sub-agente revisa el PR (diff, tests, smokes del comportamiento real) — **merge solo si aprueba**. Si no, iterar la corrección en la misma rama/PR y re-enviar hasta la aprobación.
+6. **Merge vía PR**: `gh pr merge` recién aprobado; `git checkout main && git pull` antes de abrir la siguiente rama.
+7. **Repo siempre documentado**: si la tarea toca comportamiento, actualizar en el mismo PR lo que corresponda — `SPEC.md` (estados/requisitos), `README.md`, `harness-langgraph/docs/`, `.env.example` y demás docs afectados.
