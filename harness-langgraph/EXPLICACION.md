@@ -8,10 +8,11 @@ dos piezas con nombres parecidos pero roles distintos:
 - **Harness** → decide *cómo se gobierna* esa ejecución (el supervisor).
 
 En una frase: **el agente detecta productos con stock bajo, pide al
-LLM que estime la demanda, calcula cuánto comprar, crea las órdenes
-de compra y —si alguna supera los $100— se pausa hasta que un
-humano la apruebe desde el dashboard; entonces retoma exactamente
-donde quedó y termina la corrida.**
+LLM que estime la demanda (saltándolo cuando las ventas son
+estables), calcula cuánto comprar, crea las órdenes de compra y
+termina — las que superan los $100 quedan pendientes en el sistema
+y el humano las aprueba desde el dashboard, sin que el agente
+tenga que esperar despierto (SPEC-12).**
 
 ---
 
@@ -27,25 +28,32 @@ En `src/langgraph/` el agente se define así:
   Ej: `leer-inventario`, `analizar-demanda`, `crear-orden`.
 - **Edges** (`edges/router.js`): las conexiones entre pasos.
   Algunos son fijos ("siempre después de A va B") y otros
-  condicionales ("si quedan pendientes, volvé a esperar").
+  condicionales ("si hay órdenes pendientes, pasá por notificar").
 - **Estado** (`state.js`): un objeto compartido que pasa de nodo
   en nodo — es la "memoria" de la corrida.
 - **Checkpoints**: después de cada nodo, LangGraph persiste el
-  estado en `checkpoints.sqlite`. Esto es lo que permite que el
-  agente se **pause** esperando al humano y se **reanude** después
-  sin perder nada — incluso si el proceso muere en el medio.
+  estado en `checkpoints.sqlite` — la corrida queda auditable paso
+  a paso y la infraestructura de pausa/reanudación queda disponible
+  (SPEC-12: el flujo actual es atómico y no la usa).
 
 El recorrido completo del grafo:
 
 ```
 leer-inventario → analizar-demanda → calcular-cantidad
-  → generar-analisis → decidir-aprobacion → crear-orden
+  → decidir-aprobacion → generar-analisis → crear-orden
   → ¿hay órdenes que necesitan aprobación?
       ├─ no  → fin
-      └─ sí  → notificar → esperar-aprobacion ⏸ (se congela)
-                 → procesar-decision
-                 → ¿quedan pendientes? ↺ vuelve a pausar / fin
+      └─ sí  → notificar → fin   (las pendientes esperan en la DB)
 ```
+
+Optimizaciones SPEC-12 dentro de este recorrido:
+
+- `analizar-demanda`: si el CV de las ventas < `UMBRAL_CV` la
+  demanda se estima por promedio histórico — el LLM solo ve los
+  patrones volátiles.
+- `decidir-aprobacion` corre **antes** de `generar-analisis`: la
+  justificación en prosa solo se genera para las órdenes que el
+  humano va a revisar; las auto-aprobadas llevan un template.
 
 Idea clave: **el LLM estima, el código decide**. El modelo solo se
 usa donde aporta criterio (estimar demanda, redactar la
@@ -63,17 +71,16 @@ confiable*. Vive en `src/harness/`:
 
 | Pieza | Qué hace |
 |---|---|
-| `orchestrator.js` | Ejecuta el grafo, detecta cuándo quedó pausado (`interrupt`), lo reanuda con `Command({resume})`. Es el único que conoce el ciclo de vida de la corrida. |
+| `orchestrator.js` | Ejecuta el grafo y reporta el ciclo de vida de la corrida (conserva la capacidad de reanudar checkpoints pausados de corridas viejas). |
 | `server.js` | Servidor Express en el puerto **4110** — la única puerta de entrada del mundo exterior al agente. |
 | `monitor.js` | Imprime cada transición del grafo en consola — ves al agente "moverse" en vivo. |
 | `error-handler.js` | Reintentos con backoff ante fallas transitorias. |
 | `cost-tracker.js` | Cuenta tokens y tiempos de inferencia del LLM por llamada — modelo, duraciones en ms (con un modelo pago, los tokens serían la factura). |
 | `metrics.js` | Duración de corrida, llamadas al LLM, fallbacks y contadores de negocio (productos evaluados, órdenes creadas/pausadas, errores). |
 
-Además el servidor tiene un rol sutil pero importante: **es lo que
-mantiene vivo el proceso** mientras el grafo está congelado
-esperando aprobación humana. Sin él, el agente pausado simplemente
-moriría.
+Además el servidor es lo que mantiene vivo el proceso entre
+corridas: el grafo termina, pero `/status`, `/metrics` y `/run`
+siguen respondiendo para consultas o una nueva ejecución.
 
 ---
 
@@ -110,18 +117,14 @@ npm run agente          # desde la raíz; o cd harness-langgraph && npm run agen
     │                   │                    │               │ ... LLM ... crear-orden
     │                   │               POST /api/ordenes ◀──│ crea órdenes
     │                   │                    │               │
-    │                   │                    │               │ ⏸ PAUSA en esperar-aprobacion
-    │                   │                    │               │   (estado guardado en checkpoints.sqlite)
+    │                   │                    │               │ ✅ TERMINA (atómica)
+    │                   │                    │               │   las pendientes quedan
+    │                   │                    │               │   PENDIENTE_APROBACION en la DB
     │                   │                    │               │
     │  abre :5173 ─────▶│                    │               │
     │  aprueba/rechaza  │                    │               │
-    │                   │  POST /api/ordenes/:id/aprobar ──▶ │ persiste decisión
-    │                   │                    │               │
-    │                   │                    │  POST /resume ─▶ DESPIERTA
-    │                   │                    │  (automático,  │ procesar-decision
-    │                   │                    │   fire-and-    │ ↺ ¿quedan pendientes?
-    │                   │                    │   forget)      │   sí → pausa otra vez
-    │                   │                    │               │   no → fin ✅
+    │                   │  POST /api/ordenes/:id/aprobar ──▶ │ persiste decisión — FIN
+    │                   │                    │               │   (nada vuelve al agente)
     │                   │                    │               │
     │  GET /status ────────────────────────────────────────▶ │ fase actual
     │  GET /metrics ───────────────────────────────────────▶ │ negocio + LLM
@@ -134,19 +137,14 @@ En criollo, la conversación es:
    disparar otra después con `POST :4110/run`.)
 2. **El agente trabaja solo**: lee productos del backend por HTTP,
    consulta al LLM local, crea órdenes en el backend.
-3. **El agente se congela**: si creó órdenes que requieren
-   aprobación (≥ $100), el nodo `esperar-aprobacion` corta la
-   ejecución. El proceso sigue vivo solo para escuchar `/resume`.
-4. **El humano actúa afuera del agente**: aprueba/rechaza desde el
-   dashboard (:5173). **Nunca habla directo con el agente** — la
-   decisión se guarda en la base del backend, que es la fuente de
-   verdad.
-5. **El backend avisa**: tras persistir la decisión,
-   `server/harness-notify.js` hace `POST :4110/resume`
-   (fire-and-forget). El orchestrator reanuda el grafo **desde el
-   checkpoint**, `procesar-decision` relee las órdenes reales, y
-   el loop se repite hasta que no queden pendientes.
-6. **Cierre**: `fin` imprime el resumen. El servidor queda
+3. **El agente cierra**: las órdenes que requieren aprobación
+   (≥ $100) quedan `PENDIENTE_APROBACION` en la base — la corrida
+   termina sin esperar a nadie (SPEC-12).
+4. **El humano actúa cuando quiere**: aprueba/rechaza desde el
+   dashboard (:5173). **Nunca habla con el agente** — la decisión
+   se guarda en la base del backend, que es la fuente de verdad,
+   y ahí termina el circuito.
+5. **Cierre**: `fin` imprime el resumen. El servidor queda
    escuchando para consultas (`/status`, `/metrics`) o una nueva
    corrida (`/run`).
 
@@ -155,18 +153,18 @@ En criollo, la conversación es:
 | Endpoint | Para qué |
 |---|---|
 | `POST http://localhost:4110/run` | Disparar una corrida nueva (409 si ya hay una en curso) |
-| `POST http://localhost:4110/resume` | Despertar al agente pausado (lo dispara el backend solo) |
-| `GET http://localhost:4110/status` | Ver en qué fase está: `corriendo`, `pausado`, `terminado` |
+| `POST http://localhost:4110/resume` | Compat con checkpoints pausados viejos — 409 si no hay pausa (el grafo ya no emite interrupts) |
+| `GET http://localhost:4110/status` | Ver en qué fase está: `corriendo`, `terminado` (`pausado` queda para corridas viejas) |
 | `GET http://localhost:4110/metrics` | Contrato SPEC-10: `estado_corrida`, `resumen_ejecucion` (contadores de negocio + `mensaje_sistema`), `rendimiento_llm` (tokens y tiempos ms — `null` si no se usó el LLM), `errores_no_criticos` |
 
 ### Detalle fino: por qué el humano no habla con el agente
 
 Es una decisión de diseño deliberada: **la aprobación vive en el
-backend** (es el sistema real, la fuente de verdad). El `/resume`
-no le dice al agente "aprobada" — solo le dice "ya podés mirar de
-nuevo". El agente relee las órdenes desde el backend y saca sus
-propias conclusiones. Así, la señal de reanudación nunca puede
-mentirle sobre el estado del mundo.
+backend** (es el sistema real, la fuente de verdad). El agente no
+necesita enterarse de la decisión — su trabajo terminó al crear la
+orden; resolverla es una operación de negocio, no del grafo. Por
+eso SPEC-12 pudo eliminar la pausa sin mover la verdad de lugar:
+ya estaba en el backend.
 
 ---
 
@@ -186,7 +184,7 @@ harness-langgraph/
 │   │   └── prompts/        → lo que se le pide al LLM
 │   ├── integrations/       → clientes HTTP para hablar con el backend :4000
 │   └── utils/              → logger, parser de JSON del LLM
-├── checkpoints.sqlite      → memoria persistente del grafo (la pausa)
-├── .last-thread            → thread_id de la última corrida (para reanudar tras reinicio)
+├── checkpoints.sqlite      → estado persistido tras cada nodo (auditoría / compat resume)
+├── .last-thread            → thread_id de la última corrida
 └── docs/                   → arquitectura.md, flujo-datos.md, prompts.md
 ```

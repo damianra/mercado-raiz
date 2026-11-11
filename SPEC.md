@@ -36,8 +36,8 @@ mocks. El orquestador lo ejecutó en 6 pasos → los SPECs 01–07 mapean
 │  Frontend    │ ◄────────────► │  Backend MVC (:4000) │
 │  React :5173 │                │  Express + SQLite    │
 └──────────────┘                └──────────▲───────────┘
-                                           │ POST /resume
-┌──────────────────┐   HTTP :4000          │
+                                           │ aprobación REST
+┌──────────────────┐   HTTP :4000          │ (SPEC-12)
 │  Agente (:4110)  │ ──────────────────────┘
 │  LangGraph +     │   crea órdenes / consulta stats
 │  Ollama :11434   │
@@ -261,9 +261,9 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
   finalidad, retención, derechos ARCO, contacto) + link visible en el
   footer del dashboard.
 - **R6.7** Ruta inexistente → página 404 con vuelta al inicio.
-- **R6.8** `harness-notify.js`: tras aprobar/rechazar, el backend
-  dispara `POST $HARNESS_URL/resume` fire-and-forget — la aprobación
-  nunca falla por la notificación.
+- **R6.8** ~~`harness-notify.js`: tras aprobar/rechazar, el backend
+  dispara `POST $HARNESS_URL/resume`~~ — **reemplazado por SPEC-12**:
+  la aprobación es REST puro, el backend ya no notifica al agente.
 - **R6.9** Sin auth: la tabla `usuarios` existe pero no hay login —
   `USUARIO_DEMO` hardcodeado en el cliente. Alcance demo.
 - **R6.10** Secretos solo por `.env` (gitignored) + `.env.example`;
@@ -322,27 +322,31 @@ Agente de reposición autónoma: lee productos con stock bajo → el LLM
 crea órdenes vía HTTP → si alguna supera $100, **pausa el grafo** hasta
 que un humano resuelve desde el dashboard → reanuda y cierra.
 
-### Grafo (10 nodos, 2 edges condicionales)
+### Grafo (8 nodos — 10 antes de SPEC-12)
 
 ```
-leer-inventario → analizar-demanda(LLM) → calcular-cantidad
-→ generar-analisis(LLM) → decidir-aprobacion → crear-orden
-→ ¿pendientes? ─ sí → notificar → esperar-aprobacion ⏸
-              └ no → fin            ↓ POST /resume
-              procesar-decision → ¿quedan? ─ sí → ⏸ / no → fin
+leer-inventario → analizar-demanda(LLM, triage CV) → calcular-cantidad
+→ decidir-aprobacion → generar-analisis(LLM condicional) → crear-orden
+→ ¿pendientes? ─ sí → notificar → fin
+              └ no → fin
 ```
+
+*(SPEC-12 eliminó `esperar-aprobacion`/`procesar-decision` — la
+aprobación humana se desacopló al backend REST; ver nota en SPEC-12
+sobre la compatibilidad de checkpoints viejos.)*
 
 ### Requisitos
 
 - **R8.1** Estado compartido declarado con `Annotation` + reducers
   (`state.js`) — un spec plano pierde estado al restaurar checkpoints.
-- **R8.2** Checkpoints en `checkpoints.sqlite` (`SqliteSaver`): la
-  pausa por `interrupt()` sobrevive a la muerte del proceso.
+- **R8.2** Checkpoints en `checkpoints.sqlite` (`SqliteSaver`) — la
+  infraestructura sigue; el `interrupt()` lo dejó de emitir el grafo
+  (SPEC-12).
 - **R8.3** Servidor de control (:4110): `GET /status`, `GET /metrics`,
   `POST /resume`, `POST /run`.
-- **R8.4** Human-in-the-loop cableado por el backend: aprobar/rechazar
-  dispara `POST /resume` (fire-and-forget, SPEC-06 R6.8); señales
-  múltiples se encolan.
+- **R8.4** ~~Human-in-the-loop cableado por el backend vía
+  `POST /resume`~~ — **reemplazado por SPEC-12**: aprobación
+  desacoplada, el grafo es atómico.
 - **R8.5** Fallbacks: si el LLM responde mal, los nodos usan plan B
   (promedio histórico / template) — la corrida no muere por un mal
   JSON del modelo (`utils/llm-json.js`).
@@ -381,10 +385,10 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
   estáticos en un solo contenedor (el backend sirve `dist/` si existe).
 - **R9.4** CI (`.github/workflows/ci.yml`): `npm ci`, `npm audit
   --audit-level=critical`, `npm test` en Node 22.
-- **R9.5** `.env.example` declara `PORT`, `HARNESS_URL` (comentadas);
-  el harness tiene su propio `.env.example` (`BACKEND_URL`,
-  `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`,
-  `UMBRAL_APROBACION`).
+- **R9.5** `.env.example` declara `PORT` (comentada; `HARNESS_URL`
+  eliminada en SPEC-12); el harness tiene su propio `.env.example`
+  (`BACKEND_URL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`,
+  `UMBRAL_APROBACION`, `UMBRAL_CV`).
 - **R9.6** Gitignored: `node_modules/`, `.env`, `*.sqlite`,
   `server/uploads/*`, `dist/`.
 
@@ -605,7 +609,7 @@ del script.
   justificación en prosa. Objetivo del usuario: performance para
   demo productiva, **sin topes de GPU** y **sin cambio de modelo**
   (qwen3:8b se mantiene; A/B de modelos menores queda para otra spec).
-- **Estado global:** ❌ pendiente de implementación
+- **Estado global:** ✅ implementado
 
 ### Decisiones tomadas
 
@@ -654,31 +658,31 @@ muestra igual que hoy; aprobar/rechazar es REST puro del backend.
 
 - **R12.1** Eliminar `esperar-aprobacion` + `procesar-decision` +
   `despuesDeProcesar` del grafo; `notificar → fin`. `notificar` sigue
-  informando las pendientes por consola/dashboard. ❌
+  informando las pendientes por consola/dashboard. ✅
 - **R12.2** El backend deja de llamar `POST /resume`
   (`server/harness-notify.js` / `ordenes.controller.js`). El endpoint
   `/resume` del harness queda para compat con checkpoints pausados
   viejos (devuelve 409 sin corrida pausada — comportamiento actual).
-  ❌
+  ✅
 - **R12.3** Invertir `decidir-aprobacion` antes de
-  `generar-analisis` en los edges del grafo. ❌
+  `generar-analisis` en los edges del grafo. ✅
 - **R12.4** `generar-analisis`: LLM solo si
   `decisionPorProducto[].requiere_aprobacion`; resto →
   `fallbackTexto` con marca `(estimación automática)` en
   `analisis_ia`. Nuevo contador `metrics.llmEvitada()` separado de
-  `fallbacks`. ❌
+  `fallbacks`. ✅
 - **R12.5** Triage en `analizar-demanda`: CV de ventas diarias
   (agrupar por fecha, σ/μ de unidades) < `UMBRAL_CV` (env, default
   0,3) → `fallbackDesdeVentas` con `observacion` marcando
-  `heurístico`. Contar en `llm_evitadas`. ❌
+  `heurístico`. Contar en `llm_evitadas`. ✅
 - **R12.6** Config: `num_ctx: 2048` y `num_predict` ≈160 en las
   instancias `ChatOllama` pertinentes; `UMBRAL_CV` declarado en
   `.env.example`; `OLLAMA_NUM_PARALLEL` documentado en
-  harness README. ❌
+  harness README. ✅
 - **R12.7** Tests: CV/triage, justificación condicional, wiring del
   grafo nuevo (sin interrupt, termina en `fin`), backend ya no
   llama `/resume`. Docs actualizadas (arquitectura.md,
-  EXPLICACION.md, flujo-ejecucion.md — describen el loop HITL). ❌
+  EXPLICACION.md, flujo-ejecucion.md — describen el loop HITL). ✅
 
 ### Impacto proyectado (sobre benchmark 2026-11-11)
 
@@ -703,6 +707,15 @@ datos — validar con `--salida`/`--solo-demanda` del stress script
 - **T12.4** Tuning config + env/docs runtime (R12.6)
 - **T12.5** Tests del flujo nuevo (R12.7 tests)
 - **T12.6** Docs del harness al flujo desacoplado (R12.7 docs)
+
+### Verificado por
+
+Tests unitarios `tests/nodes/triage-y-justificacion.test.js` (11
+tests: CV, triage, condicional, router) + suite completa 70 verdes;
+smokes reales: invoke con `numCtx`/`numPredict` contra qwen3:8b
+(context_length 2048 confirmado por `/api/ps`), aprobar/rechazar
+por REST sin harness-notify; revisión funcional por sub-agente en
+cada tarea.
 
 ### Nota sobre SPEC-08
 

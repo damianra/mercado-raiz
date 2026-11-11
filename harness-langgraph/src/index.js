@@ -4,8 +4,8 @@
  * Secuencia: carga config (.env) → compila el grafo → levanta el
  * servidor Express del harness (:4110) → dispara la corrida. El
  * servidor se levanta primero porque es lo que mantiene vivo el
- * proceso y recibe los POST /resume mientras el grafo está
- * pausado en un interrupt().
+ * proceso entre corridas (SPEC-12: el grafo ya no emite
+ * interrupts — /resume queda para compat de pausas viejas).
  */
 import { orchestrator } from './harness/orchestrator.js';
 import { iniciarServidor } from './harness/server.js';
