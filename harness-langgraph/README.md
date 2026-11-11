@@ -57,7 +57,19 @@ Detalles en `docs/`: `arquitectura.md`, `flujo-datos.md`,
 ## Configuración
 
 Ver `.env.example` (copiado a `.env`): `BACKEND_URL`,
-`OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`, `UMBRAL_APROBACION`.
+`OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`, `UMBRAL_APROBACION`,
+`UMBRAL_CV` (triage heurístico — SPEC-12).
+
+Runtime del LLM (`src/config/ollama.js`): `numCtx: 2048` y
+`numPredict` acotado por instancia — los prompts usan ~250 tokens y
+las salidas ~100-160, holgura innecesaria solo gasta KV-cache.
+
+Paralelismo server-side: `OLLAMA_NUM_PARALLEL` es variable del
+proceso `ollama serve` (no del agente). Con el modelo actual
+(8B ≈ 6,2 GB VRAM + ~0,3 GB/seq de KV-cache a ctx 2048) un valor de
+4 habilita ~4 secuencias concurrentes en 8 GB de VRAM — relevante
+solo para corridas concurrentes; el grafo procesa productos en
+serie.
 
 ## Notas de diseño (para contar en la presentación)
 
