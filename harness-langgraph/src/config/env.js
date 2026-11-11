@@ -40,4 +40,14 @@ export const config = {
    * por promedio histórico sin llamar al LLM.
    */
   umbralCv: Number(required('UMBRAL_CV', '0.3')),
+
+  /**
+   * Concurrencia del agente (SPEC-16): cuántos productos procesan
+   * llamadas LLM en paralelo por nodo. Ojo — esto solo paraleliza
+   * el LADO CLIENTE: para que Ollama atienda varias requests a la
+   * vez, el servidor tiene que arrancar con OLLAMA_NUM_PARALLEL>=N
+   * (env del proceso `ollama serve`, no del harness); si no, las
+   * requests se encolan en Ollama y el speedup es mínimo.
+   */
+  concurrencia: Math.max(1, Number(required('AGENTE_CONCURRENCIA', '3')) || 3),
 };

@@ -58,18 +58,22 @@ Detalles en `docs/`: `arquitectura.md`, `flujo-datos.md`,
 
 Ver `.env.example` (copiado a `.env`): `BACKEND_URL`,
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`, `UMBRAL_APROBACION`,
-`UMBRAL_CV` (triage heurístico — SPEC-12).
+`UMBRAL_CV` (triage heurístico — SPEC-12), `AGENTE_CONCURRENCIA`
+(default 3 — productos en vuelo por nodo LLM, SPEC-16).
 
 Runtime del LLM (`src/config/ollama.js`): `numCtx: 2048` y
 `numPredict` acotado por instancia — los prompts usan ~250 tokens y
 las salidas ~100-160, holgura innecesaria solo gasta KV-cache.
 
-Paralelismo server-side: `OLLAMA_NUM_PARALLEL` es variable del
-proceso `ollama serve` (no del agente). Con el modelo actual
+Paralelismo: los nodos que iteran productos llamando al LLM
+(`analizar-demanda`, `generar-analisis`) procesan hasta
+`AGENTE_CONCURRENCIA` items en vuelo (`utils/concurrencia.js` —
+worker pool). **Lado cliente no alcanza**: `OLLAMA_NUM_PARALLEL`
+es variable del proceso `ollama serve` (no del agente) y debe ser
+>= `AGENTE_CONCURRENCIA` — sin eso Ollama encola las requests y el
+paralelismo casi no gana tiempo. Con el modelo actual
 (8B ≈ 6,2 GB VRAM + ~0,3 GB/seq de KV-cache a ctx 2048) un valor de
-4 habilita ~4 secuencias concurrentes en 8 GB de VRAM — relevante
-solo para corridas concurrentes; el grafo procesa productos en
-serie.
+3-4 entra en 8 GB de VRAM.
 
 ## Notas de diseño (para contar en la presentación)
 

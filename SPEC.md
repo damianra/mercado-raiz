@@ -1007,7 +1007,14 @@ Palancas elegidas (en este orden de implementación):
   `OLLAMA_NUM_PARALLEL` en `.env.example`/README como requisito del
   lado del servidor Ollama (sin él, las requests se encolan — el
   cliente paralelo no ayuda). Métricas deben seguir agregando bien
-  (costTracker es acumulador, thread-safe por ser single-thread).
+  (costTracker es acumulador, thread-safe por ser single-thread). ✅
+  — `utils/concurrencia.js` (`conLimite`: worker pool que preserva
+  orden y aborta al primer error como el `for` secuencial);
+  `analizar-demanda` y `generar-analisis` extraen la lógica por
+  producto (`analizarUno`/`justificarUno`) y la mapean con límite
+  `config.concurrencia` (`AGENTE_CONCURRENCIA`, default 3).
+  `OLLAMA_NUM_PARALLEL` documentado en `.env.example` y README
+  como requisito del proceso `ollama serve`.
 - **R16.3** Batch prompts: `analizar-demanda` agrupa productos
   volátiles en llamadas de hasta `DEMANDA_BATCH` productos (default
   5, configurable); respuesta JSON array validada item por item —
