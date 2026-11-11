@@ -25,7 +25,7 @@ Proyección: 120/200 llamadas (60%), 80 evitadas (40%).
 
 | Métrica | Proyectado | **Medido** |
 |---|---|---|
-| Productos evaluados | ~100 | **101** (99 BENCH + 2 originales) |
+| Productos evaluados | ~100 | **101** (99 BENCH + 2 originales)¹ |
 | Llamadas LLM posibles | 200 | 202 |
 | Llamadas LLM reales | 120 (60%) | **137 (68%)** |
 | `llm_evitadas` | 80 (40%) | **65 (32%)** |
@@ -33,6 +33,11 @@ Proyección: 120/200 llamadas (60%), 80 evitadas (40%).
 | Fallbacks / errores LLM | 0 | **0 / 0** |
 | Tokens (in / out) | — | 26.266 / 10.260 |
 | Duración | ~3 min | **~5,2 min** |
+
+¹ Solo 99/100 BENCH entraron a la corrida: `listarProductosAReponer`
+pide `limit=100` por estado (`productos.client.js`) y había 107
+candidatos STOCK_BAJO — **paginación no manejada**: `leer-inventario`
+trunca silenciosamente el inventario >100. Issue latente a registrar.
 
 **Desglose de las 65 evitadas**: ~50 por triage CV (los 50 productos
 estables saltaron el LLM — el mecanismo funciona en el flujo real) +
@@ -73,6 +78,10 @@ limiter para cliente interno).
 
 - **El ahorro estructural existe y se midió: 32% menos llamadas LLM**
   en una corrida real (~1,5× menos GPU-segundos que el flujo viejo).
+  Nota: el wall-clock por producto (~19,4 prod/min) fue *menor* que el
+  throughput del stress (23,2 art/min) — el grafo suma overhead de
+  HTTP por producto (ventas, orden) y esperas del limiter; el ahorro
+  es en GPU-segundos, no necesariamente en tiempo de pared.
 - El triage CV es la palanca que más rinde en demandas estables;
   la justificación condicional depende de la distribución de montos.
 - El siguiente cuello de botella no es el LLM sino el **rate limiter**
