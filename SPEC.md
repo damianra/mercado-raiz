@@ -803,7 +803,12 @@ Estado previo al fix (hallazgo):
   cliente interno: opciones — subir `max` para `127.0.0.1`/loopback,
   `HARNESS_API_KEY` bypass, o aceptar el límite y dejar que el retry
   absorba la ráfaga (más realista como demo productiva). Documentar
-  lo elegido en `arquitectura.md` y `.env.example` si hay variable.
+  lo elegido en `arquitectura.md` y `.env.example` si hay variable. ✅
+  — Decisión: **límite uniforme + retry del harness** (20 escrituras/min
+  para todos; el harness absorbe con `Retry-After` — comportamiento de
+  integración productiva real). Loopback-allowlist y API-key bypass
+  descartados; documentado en `docs/arquitectura.md` §"Rate limiting".
+  Sin variable de entorno nueva.
 - **R13.5** Tests: cliente que reintenta ante 429 mockeado
   (verificar backoff y corte al agotar intentos); smoke de corrida
   >20 productos sin órdenes perdidas.
