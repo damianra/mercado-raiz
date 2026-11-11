@@ -60,7 +60,7 @@ Resultados de la prueba de stress del pipeline LLM del agente de reabastecimient
 | Métrica | min | prom | max | Límite / contexto |
 |---|---|---|---|---|
 | Utilización | 63% | **91,5%** | 96% | saturada en forma casi permanente |
-| Potencia | 189,0 W | **195,6 W** | 199,9 W | **TDP 200 W → power-limited** |
+| Potencia | 189,8 W | **195,6 W** | 199,9 W | **TDP 200 W → power-limited** |
 | Temperatura | 65 °C | 69,7 °C | 71 °C | segura (límite térmico ~93 °C) |
 | VRAM | 6.153 MB | 6.178 MB | 6.237 MB | **76% de 8 GB — no es restricción** |
 | Clocks SM | 1.665 MHz | 1.758 MHz | 1.815 MHz | oscilan por límite de potencia |
