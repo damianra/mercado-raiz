@@ -599,8 +599,8 @@ del script.
 
 ## SPEC-12 · Optimización de rendimiento del agente (demo productiva)
 
-- **Origen:** análisis del benchmark SPEC-11 (`docs/benchmarks/
-  benchmark-qwen3-8b-2026-11-11.md`) — el 86% del tiempo LLM es
+- **Origen:** análisis del benchmark SPEC-11 (`harness-langgraph/
+  docs/benchmarks/benchmark-qwen3-8b-2026-11-11.md`) — el 86% del tiempo LLM es
   generación de tokens y el 66% del tiempo por artículo es la
   justificación en prosa. Objetivo del usuario: performance para
   demo productiva, **sin topes de GPU** y **sin cambio de modelo**
@@ -633,8 +633,8 @@ del script.
    (es decisión deliberada, no fallo).
 4. **Tuning de runtime**: `num_ctx` 2048 (los prompts usan ~250
    tokens; libera KV-cache para paralelismo), `num_predict` acotado
-   en la justificación (~160 tokens — el p99 2.317ms fue un outlier
-   de generación), y documentar `OLLAMA_NUM_PARALLEL=4` server-side
+   en la justificación (~160 tokens — los p99 2.317/1.949 ms fueron
+   outliers de generación), y documentar `OLLAMA_NUM_PARALLEL=4` server-side
    para corridas concurrentes.
 
 ### Diseño objetivo del grafo
@@ -697,7 +697,8 @@ datos — validar con `--salida`/`--solo-demanda` del stress script
 - **T12.1** Invertir orden `decidir`/`generar` + justificación
   condicional + `llm_evitadas` (R12.3, R12.4)
 - **T12.2** Desacople HITL: nodos, edges, `/resume` backend (R12.1,
-  R12.2)
+  R12.2) — incluye limpiar residuos: campos `ordenesResueltas` /
+  `senalReanudacion` del estado si quedan huérfanos
 - **T12.3** Triage heurístico CV (R12.5)
 - **T12.4** Tuning config + env/docs runtime (R12.6)
 - **T12.5** Tests del flujo nuevo (R12.7 tests)
