@@ -86,5 +86,5 @@ github.com/damianra/mercado-raiz**:
 3. **Commits semánticos**: `tipo(scope): descripción` (`feat`, `fix`, `docs`, `test`, `refactor`, `chore`).
 4. **PR por tarea**: `git push -u origin <rama>` + `gh pr create` con summary y test plan — uno por tarea, no acumular cambios.
 5. **Aprobación funcional por sub-agente**: un sub-agente revisa el PR (diff, tests, smokes del comportamiento real) — **merge solo si aprueba**. Si no, iterar la corrección en la misma rama/PR y re-enviar hasta la aprobación.
-6. **Merge vía PR**: `gh pr merge` recién aprobado; `git checkout main && git pull` antes de abrir la siguiente rama.
+6. **Merge vía PR**: `gh pr merge --merge --delete-branch` recién aprobado (merge commit, preserva los commits semánticos de la tarea); `git checkout main && git pull` antes de abrir la siguiente rama.
 7. **Repo siempre documentado**: si la tarea toca comportamiento, actualizar en el mismo PR lo que corresponda — `SPEC.md` (estados/requisitos), `README.md`, `harness-langgraph/docs/`, `.env.example` y demás docs afectados.
