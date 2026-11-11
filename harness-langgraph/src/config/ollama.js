@@ -21,6 +21,8 @@ export const llm = new ChatOllama({
   model: config.ollamaModel,
   temperature: 0.3, // bajo: queremos análisis consistentes, no creatividad
   think: false, // modelos con razonamiento (qwen3): sin think el bloque <think> quedaría dentro del texto
+  numCtx: 2048, // prompts ~250 tok + salida ~160 — libera KV-cache para paralelismo (SPEC-12)
+  numPredict: 160, // tope de generación: evita outliers de latencia (p99 benchmark)
 });
 
 /**
@@ -33,4 +35,6 @@ export const llmJson = new ChatOllama({
   temperature: 0.1,
   format: 'json',
   think: false,
+  numCtx: 2048,
+  numPredict: 300, // JSON de 3 campos corto; margen sobre los ~43 tok típicos
 });
