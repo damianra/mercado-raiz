@@ -18,6 +18,7 @@ const state = {
   llamadasLlm: 0,
   reintentos: 0,
   erroresFallback: 0, // veces que un nodo usó su plan B
+  llmEvitadas: 0, // llamadas LLM evitadas deliberadamente (triage/condicional SPEC-12)
   // Métricas de negocio — las escribe sincronizarEstadoGrafo()
   productosEvaluados: 0,
   ordenesCreadas: 0,
@@ -33,6 +34,7 @@ export const metrics = {
     state.llamadasLlm = 0;
     state.reintentos = 0;
     state.erroresFallback = 0;
+    state.llmEvitadas = 0;
     state.productosEvaluados = 0;
     state.ordenesCreadas = 0;
     state.ordenesPausadas = 0;
@@ -52,6 +54,9 @@ export const metrics = {
   },
   fallback() {
     state.erroresFallback++;
+  },
+  llmEvitada() {
+    state.llmEvitadas++;
   },
   /**
    * Vuelca los valores del estado del grafo (values de getState) a
@@ -105,6 +110,7 @@ export const metrics = {
       ordenes_creadas: state.ordenesCreadas,
       ordenes_pausadas_hith: state.ordenesPausadas,
       conteo_fallbacks: state.erroresFallback,
+      llm_evitadas: state.llmEvitadas,
       tasa_fallback:
         state.productosEvaluados > 0
           ? Math.round((state.erroresFallback / state.productosEvaluados) * 1000) / 10

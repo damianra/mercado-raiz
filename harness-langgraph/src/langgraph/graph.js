@@ -9,7 +9,7 @@
  * Devuelve el grafo compilado que ejecuta harness/orchestrator.js.
  *
  *   leer-inventario → analizar-demanda → calcular-cantidad
- *     → generar-analisis → decidir-aprobacion → crear-orden
+ *     → decidir-aprobacion → generar-analisis → crear-orden
  *     → ¿pendientes? → notificar → esperar-aprobacion ⏸
  *       → procesar-decision → ¿quedan? ↺ esperar-aprobacion / fin
  *                    └─ no → fin
@@ -53,9 +53,9 @@ export async function construirGrafo() {
     .addEdge(START, 'leer-inventario')
     .addEdge('leer-inventario', 'analizar-demanda')
     .addEdge('analizar-demanda', 'calcular-cantidad')
-    .addEdge('calcular-cantidad', 'generar-analisis')
-    .addEdge('generar-analisis', 'decidir-aprobacion')
-    .addEdge('decidir-aprobacion', 'crear-orden')
+    .addEdge('calcular-cantidad', 'decidir-aprobacion')
+    .addEdge('decidir-aprobacion', 'generar-analisis')
+    .addEdge('generar-analisis', 'crear-orden')
     .addConditionalEdges('crear-orden', despuesDeCrearOrdenes, ['notificar', 'fin'])
     .addEdge('notificar', 'esperar-aprobacion')
     .addEdge('esperar-aprobacion', 'procesar-decision')
