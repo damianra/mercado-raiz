@@ -762,7 +762,7 @@ reanudables.
   pero la orden nunca se persistió: el trabajo LLM de esos productos
   (análisis + justificación) quedó desperdiciado y el producto no
   quedó repuesto.
-- **Estado global:** ⏳ registrada — pendiente de implementación
+- **Estado global:** ✅ implementada — ver "Verificado por"
 
 ### Contexto técnico
 
@@ -813,7 +813,13 @@ Estado previo al fix (hallazgo):
   Sin variable de entorno nueva.
 - **R13.5** Tests: cliente que reintenta ante 429 mockeado
   (verificar backoff y corte al agotar intentos); smoke de corrida
-  >20 productos sin órdenes perdidas.
+  >20 productos sin órdenes perdidas. ✅
+  — `tests/harness/reintentos-429.test.js` (8 tests): retryAfter
+  honrado, 5xx con backoff, 4xx sin retry, agotamiento, métricas
+  separadas de LLM/fallbacks, parseo del header e integración con el
+  limiter real (`security.js`) en ventana corta. Smoke real:
+  `scripts/smoke-rate-limit.mjs` → 25/25 POSTs creados, 2 reintentos
+  429 absorbidos, 0 órdenes perdidas.
 
 ### Tareas
 
@@ -826,7 +832,10 @@ Estado previo al fix (hallazgo):
 
 ### Verificado por
 
-Pendiente — se completa al implementar. El hallazgo quedó medido en
+Devin (hilo anterior, T13.1–T13.3) + T13.4: suite 78/78 (8 tests
+nuevos de rate-limit) y smoke real `smoke-rate-limit.mjs` 25/25
+POSTs sin pérdida contra el backend con límite 20/min. El hallazgo
+original quedó medido en
 `harness-langgraph/docs/benchmarks/validacion-grafo-real-2026-11-11.md`.
 
 ---
@@ -847,7 +856,7 @@ Pendiente — se completa al implementar. El hallazgo quedó medido en
 | (post-gen) | SPEC-10 | `harness-langgraph/src/harness/*` | `harness-langgraph/tests/` |
 | (post-gen) | SPEC-11 | `harness-langgraph/scripts/stress-llm.mjs` | smokes + kill test |
 | (post-gen) | SPEC-12 | `src/langgraph/{graph,nodes,edges}`, `server/harness-notify.js` | `tests/nodes/` |
-| (post-gen) | SPEC-13 ⏳ | `server/security.js`, `integrations/ordenes.client.js`, `nodes/crear-orden.js` | pendiente |
+| (post-gen) | SPEC-13 ✅ | `server/security.js`, `integrations/backend-client.js`, `harness/error-handler.js`, `tests/harness/reintentos-429.test.js` | `reintentos-429.test.js` (8) + smoke 25/25 |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
