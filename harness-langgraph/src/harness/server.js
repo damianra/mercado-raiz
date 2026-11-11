@@ -25,9 +25,25 @@ export function iniciarServidor() {
 
   app.get('/status', (req, res) => res.json(orchestrator.corrida));
 
-  app.get('/metrics', (req, res) =>
-    res.json({ ...metrics.resumen(), llm: costTracker.resumen() }),
-  );
+  // Contrato SPEC-10 §3: resumen_ejecucion (negocio) + rendimiento_llm
+  // (null si el LLM nunca se invocó — el frontend solo muestra el
+  // mensaje_sistema) + errores_no_criticos.
+  app.get('/metrics', (req, res) => {
+    const m = metrics.resumen();
+    res.json({
+      estado_corrida: orchestrator.corrida.fase,
+      resumen_ejecucion: {
+        total_productos_evaluados: m.total_productos_evaluados,
+        ordenes_creadas: m.ordenes_creadas,
+        ordenes_pausadas_hith: m.ordenes_pausadas_hith,
+        conteo_fallbacks: m.conteo_fallbacks,
+        tasa_fallback: m.tasa_fallback,
+        mensaje_sistema: metrics.mensajeSistema(orchestrator.corrida.fase),
+      },
+      rendimiento_llm: costTracker.resumen(),
+      errores_no_criticos: m.errores_no_criticos,
+    });
+  });
 
   app.post('/resume', async (req, res) => {
     try {
