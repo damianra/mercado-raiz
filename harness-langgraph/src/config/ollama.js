@@ -42,8 +42,9 @@ export const llmJson = new ChatOllama({
 /**
  * Modelo JSON para llamadas en lote (SPEC-16, R16.3): un prompt
  * con DEMANDA_BATCH productos espera un array de análisis.
- * numPredict y numCtx escalan con el tamaño del lote (~60 tok de
- * salida por item, ~250 tok de input por producto + scaffold).
+ * numPredict y numCtx escalan con el tamaño del lote (~100 tok de
+ * salida por item — la observación suele ser lo más verboso —
+ * ~250 tok de input por producto + scaffold).
  */
 export const llmJsonBatch = new ChatOllama({
   baseUrl: config.ollamaBaseUrl,
@@ -52,5 +53,5 @@ export const llmJsonBatch = new ChatOllama({
   format: 'json',
   think: false,
   numCtx: Math.max(2048, 512 + 320 * config.demandaBatch),
-  numPredict: 60 * config.demandaBatch,
+  numPredict: 100 * config.demandaBatch,
 });

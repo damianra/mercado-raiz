@@ -136,6 +136,45 @@ describe('analizar-demanda — triage heurístico (SPEC-12)', () => {
     expect(analisisPorProducto[2].demanda_diaria).toBe(7); // vía lote
   });
 
+  it('respuesta envuelta en objeto {"resultados": [...]}: se extrae el array', async () => {
+    ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
+    invokeBatch.mockResolvedValue({
+      // con format:'json' Ollama sesga a objetos — el modelo suele
+      // envolver el array en lugar de devolverlo desnudo
+      content: '{"resultados": [{"producto_id": 1, "demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}]}',
+      response_metadata: {},
+    });
+    const state = { productosBajos: [producto(1)] };
+
+    const { analisisPorProducto } = await analizarDemanda(state);
+
+    expect(invokeBatch).toHaveBeenCalledTimes(1);
+    expect(invokeJson).not.toHaveBeenCalled();
+    expect(analisisPorProducto[1].demanda_diaria).toBe(4);
+  });
+
+  it('objeto suelto de un item: resuelve ese producto y el resto cae a individual', async () => {
+    ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
+    invokeBatch.mockResolvedValue({
+      // el modelo respondió solo un producto sin array (formato
+      // real observado con qwen3:8b + format:'json')
+      content: '{"producto_id": 2, "demanda_diaria": 7, "tendencia": "estable", "observacion": "ok"}',
+      response_metadata: {},
+    });
+    invokeJson.mockResolvedValue({
+      content: '{"demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}',
+      response_metadata: {},
+    });
+    const state = { productosBajos: [producto(1), producto(2)] };
+
+    const { analisisPorProducto } = await analizarDemanda(state);
+
+    expect(invokeBatch).toHaveBeenCalledTimes(1); // 1 llamada, sin reintentos
+    expect(invokeJson).toHaveBeenCalledTimes(1); // solo el faltante
+    expect(analisisPorProducto[1].demanda_diaria).toBe(4); // vía individual
+    expect(analisisPorProducto[2].demanda_diaria).toBe(7); // vía lote
+  });
+
   it('lote entero inválido: todos caen a llamada individual', async () => {
     ventasDeProducto.mockResolvedValue(ventas([2, 10, 3, 9, 1]));
     invokeBatch.mockResolvedValue({ content: 'no json at all', response_metadata: {} });

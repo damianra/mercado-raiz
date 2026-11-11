@@ -23,8 +23,11 @@ export function parseJsonResponse(content, schema) {
 }
 
 /**
- * Variante para respuestas en lote (SPEC-16, R16.3): extrae el
- * primer [...] del texto y valida CADA item por separado contra
+ * Variante para respuestas en lote (SPEC-16, R16.3): localiza el
+ * array de items — desnudo `[...]`, dentro de un objeto
+ * `{"resultados": [...]}` (forma que pide el prompt porque
+ * format:'json' sesga a objetos) u objeto suelto (→ item único) —
+ * y valida CADA item por separado contra
  * `itemSchema` — un item malformado no tira el lote entero.
  * Devuelve { items, invalidos }: los que cumplen el schema y la
  * cantidad descartada (el nodo les hace llamada individual).
@@ -33,15 +36,38 @@ export function parseJsonResponse(content, schema) {
  */
 export function parseJsonArrayResponse(content, itemSchema) {
   const text = typeof content === 'string' ? content : String(content);
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error(`el LLM no devolvió un array JSON: ${text.slice(0, 120)}`);
+  // Con format:'json' Ollama sesga la salida hacia objetos — el
+  // modelo suele devolver {"resultados": [...]} en vez del array
+  // desnudo, o un objeto suelto cuando interpreta un solo item.
+  // Se prueban en orden: texto completo, primer [...], primer
+  // {...}; un objeto sin array adentro se trata como item único.
+  const candidatos = [text];
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (arrMatch) candidatos.push(arrMatch[0]);
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) candidatos.push(objMatch[0]);
   let data;
-  try {
-    data = JSON.parse(match[0]);
-  } catch {
-    throw new Error(`array JSON inválido del LLM: ${match[0].slice(0, 120)}`);
+  for (const candidato of candidatos) {
+    try {
+      const parsed = JSON.parse(candidato);
+      if (Array.isArray(parsed)) {
+        data = parsed;
+        break;
+      }
+      if (parsed && typeof parsed === 'object') {
+        // Preferir keys conocidas (el prompt pide "resultados") —
+        // si el modelo agrega otra propiedad array (ej. "meta"),
+        // el primer find podría elegir el array equivocado.
+        const items = ['resultados', 'items', 'analisis', 'data']
+          .map((k) => parsed[k])
+          .find((v) => Array.isArray(v))
+          ?? Object.values(parsed).find((v) => Array.isArray(v));
+        data = items ?? [parsed];
+        break;
+      }
+    } catch { /* sigue el siguiente candidato */ }
   }
-  if (!Array.isArray(data)) throw new Error('la respuesta del LLM no es un array');
+  if (!data) throw new Error(`el LLM no devolvió un array JSON: ${text.slice(0, 120)}`);
   const items = [];
   let invalidos = 0;
   for (const item of data) {

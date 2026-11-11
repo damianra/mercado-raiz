@@ -1,9 +1,9 @@
 # Prompts — qué le pedimos al LLM y por qué así
 
-El modelo es `llama3.2:1b`: chico, local, gratis. Las reglas de
-diseño de prompts para modelos chicos son distintas a las de un
-GPT-4: cortos, formato explícito, un solo trabajo por llamada, y
-NUNCA aritmética libre.
+El modelo se configura en `OLLAMA_MODEL` (hoy `qwen3:8b`, chico,
+local, gratis). Las reglas de diseño de prompts para modelos
+chicos son distintas a las de un GPT-4: cortos, formato explícito,
+un solo trabajo por llamada, y NUNCA aritmética libre.
 
 ## Prompt 1 — análisis de demanda
 
@@ -27,6 +27,32 @@ ventas recientes (`fecha: N unidades`).
   promedio exacto lo puede hacer el fallback; el valor del LLM es
   leer patrones (fines de semana, rachas).
 - Fallback si falla: promedio simple de unidades/días del historial.
+
+## Prompt 1b — análisis de demanda EN LOTE (SPEC-16)
+
+`src/langgraph/prompts/analisis-demanda-batch.js`
+
+Variante de Prompt 1 para `DEMANDA_BATCH` productos por llamada:
+mismo schema por item más `producto_id` repetido (matcheo
+respuesta ↔ producto). **Salida esperada**:
+
+```json
+{"resultados": [{"producto_id": 7, "demanda_diaria": 3, "tendencia": "estable", "observacion": "..."}]}
+```
+
+**Decisiones medidas en benchmark**:
+- El array va DENTRO de `{"resultados": [...]}` — con
+  `format:'json'` Ollama sesga la salida a objetos: pedir el array
+  desnudo hacía que el 100% de los lotes devolviera un objeto
+  suelto de UN item. El parser (`llm-json.js`) acepta las 3 formas
+  reales: array, objeto-envuelto, objeto suelto.
+- `observacion` pide máx 12 palabras — es lo más verboso y el
+  `numPredict` escala con el lote (100 tok/item).
+- Ventas acotadas a las últimas 10 por producto — historiales
+  largos inflarían el input más allá del `numCtx` del lote.
+- Un item faltante/inválido NO tira el lote: ese producto cae a la
+  llamada individual (Prompt 1). Solo si la respuesta entera no
+  parsea, todos caen a individual.
 
 ## Prompt 2 — justificación para el aprobador
 
