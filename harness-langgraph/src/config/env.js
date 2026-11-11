@@ -33,4 +33,11 @@ export const config = {
    * el flag no viene; mantener ambos valores iguales.
    */
   umbralAprobacion: Number(required('UMBRAL_APROBACION', '100')),
+
+  /**
+   * Triage heurístico (SPEC-12): si el coeficiente de variación de
+   * las ventas diarias es menor a este umbral, la demanda se estima
+   * por promedio histórico sin llamar al LLM.
+   */
+  umbralCv: Number(required('UMBRAL_CV', '0.3')),
 };
