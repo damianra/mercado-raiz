@@ -70,7 +70,7 @@ calcular → decidir → generar para decidir antes de redactar.)
 | `orchestrator.js` | ejecuta el grafo y reporta el ciclo de vida | un solo lugar conoce el thread_id |
 | `server.js` | GET /status, /metrics (contrato SPEC-10); POST /run; POST /resume (compat con checkpoints pausados viejos) | la puerta de entrada del mundo exterior |
 | `monitor.js` | imprime cada transición del grafo | ver el agente "moverse" durante la demo |
-| `error-handler.js` | retry con backoff | fallas transitorias (429, timeout) no matan la corrida |
+| `error-handler.js` | retry honrando `Retry-After` (429) o backoff (5xx/red) | fallas transitorias no matan la corrida |
 | `cost-tracker.js` | acumula tokens, duraciones (ns→ms) y modelo del LLM por llamada | con un modelo hosted esto ES la factura |
 | `metrics.js` | duración, llamadas, fallbacks + contadores de negocio (productos, órdenes, errores) | el "informe" que se muestra al final — el orchestrator lo alimenta con el estado del grafo |
 
@@ -92,3 +92,29 @@ corridas dormidas, no hay proceso reteniendo estado, no hay señal
 que pueda perderse. El costo: el resumen de la corrida ya no
 incluye cómo resolvió el humano — esa información vive donde
 corresponde, en las órdenes.
+
+## Rate limiting backend ↔ harness (SPEC-13)
+
+El backend limita escrituras a **20 req/min por IP**
+(`server/security.js`, ventana deslizante de 60 s; GET/HEAD exentos).
+`crear-orden` dispara un `POST /api/ordenes` por producto — en lotes
+grandes la ráfaga excede el límite.
+
+**Política adoptada (R13.4)**: se mantiene el límite uniforme para
+todos los clientes y el harness lo absorbe con retry — es el
+comportamiento que tendría una integración productiva real contra
+una API ajena.
+
+- El 429 incluye `Retry-After` = segundos hasta que expire el hit
+  más viejo de la ventana.
+- `conReintentos` espera exactamente eso (tope 60 s) — un backoff
+  fijo corto caería dentro de la misma ventana saturada y agotaría
+  intentos sin llegar a un slot libre.
+- `api.post` hace hasta 4 intentos totales; si agota, el error va a
+  `errores_no_criticos` de la corrida (visible, nunca silencioso).
+- Los reintentos se cuentan en `reintentos` del resumen de métricas
+  de la corrida — no son llamadas LLM ni fallbacks.
+
+Alternativas descartadas: `max` mayor para loopback (asimetría
+frágil ante un harness remoto) y bypass por API key (credencial
+extra sin beneficio real en una demo — el retry ya resuelve).

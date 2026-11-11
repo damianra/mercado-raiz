@@ -796,14 +796,21 @@ Estado previo al fix (hallazgo):
   era ejemplo, el mecanismo primario es `Retry-After`).
 - **R13.3** Métrica: los reintentos 429 no deben contarse como
   `llamadas_llm` ni como fallbacks — son fricción de transporte. ✅
-  — Ya cubierto por el contador `reintentos` de `/metrics`
-  (`metrics.reintento()`); no se agregó un 429-counter dedicado
-  (el log ⚠ por reintento + el agregado alcanzan para observar).
+  — Ya cubierto por el contador `reintentos` del resumen de métricas
+  de la corrida (`metrics.reintento()`); no se agregó un 429-counter
+  dedicado (el log ⚠ por reintento + el agregado alcanzan para
+  observar). Nota: `/metrics` HTTP no expone `reintentos` hoy — queda
+  visible en el resumen de consola de la corrida.
 - **R13.4** Decidir y documentar la política del limiter para el
   cliente interno: opciones — subir `max` para `127.0.0.1`/loopback,
   `HARNESS_API_KEY` bypass, o aceptar el límite y dejar que el retry
   absorba la ráfaga (más realista como demo productiva). Documentar
-  lo elegido en `arquitectura.md` y `.env.example` si hay variable.
+  lo elegido en `arquitectura.md` y `.env.example` si hay variable. ✅
+  — Decisión: **límite uniforme + retry del harness** (20 escrituras/min
+  para todos; el harness absorbe con `Retry-After` — comportamiento de
+  integración productiva real). Loopback-allowlist y API-key bypass
+  descartados; documentado en `docs/arquitectura.md` §"Rate limiting".
+  Sin variable de entorno nueva.
 - **R13.5** Tests: cliente que reintenta ante 429 mockeado
   (verificar backoff y corte al agotar intentos); smoke de corrida
   >20 productos sin órdenes perdidas.
