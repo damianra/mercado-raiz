@@ -49,5 +49,5 @@ export const config = {
    * (env del proceso `ollama serve`, no del harness); si no, las
    * requests se encolan en Ollama y el speedup es mínimo.
    */
-  concurrencia: Math.max(1, Number(required('AGENTE_CONCURRENCIA', '3'))),
+  concurrencia: Math.max(1, Number(required('AGENTE_CONCURRENCIA', '3')) || 3),
 };
