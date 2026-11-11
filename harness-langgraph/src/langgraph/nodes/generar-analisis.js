@@ -31,6 +31,13 @@ export async function generarAnalisis(state) {
   for (const p of state.productosBajos) {
     const analisis = state.analisisPorProducto[p.id];
     const { cantidad, monto_total } = decision[p.id];
+    // SPEC-12: la prosa solo la lee el humano cuando la orden supera
+    // el umbral — las auto-aprobadas reciben el template determinista.
+    if (!decision[p.id].requiere_aprobacion) {
+      metrics.llmEvitada();
+      decision[p.id] = { ...decision[p.id], analisis_ia: fallbackTexto(p, analisis, cantidad, monto_total) + ' (estimación automática)' };
+      continue;
+    }
     try {
       metrics.llamadaLlm();
       const respuesta = await conReintentos(
