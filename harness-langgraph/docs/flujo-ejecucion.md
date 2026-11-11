@@ -77,9 +77,10 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | | |
 |---|---|
 | **Lee** | `productosBajos` |
-| **Por cada producto** | `GET /api/historial?producto_id=N&tipo=VENTA` → **triage** (`SPEC-12`): si `CV(ventas) < UMBRAL_CV` → promedio histórico directo, sin LLM (`llm_evitadas+1`) · si no → `llmJson.invoke(prompt)` → valida con zod → `costTracker.registrar(r)` |
+| **Por cada producto** | `GET /api/historial?producto_id=N&tipo=VENTA` → **triage** (`SPEC-12`): si `CV(ventas) < UMBRAL_CV` → promedio histórico directo, sin LLM (`llm_evitadas+1`) → **cache** (`SPEC-16`): hash del input ya visto → respuesta reusada (`cache_hits+1`) · si no → queda pendiente → **lote** (`SPEC-16`): hasta `DEMANDA_BATCH` por llamada `llmJsonBatch` → array validado item a item, matcheo por `producto_id` → `costTracker.registrar(r)` |
+| **Si el lote omite/falla items** | esos productos caen a `llmJson.invoke(prompt individual)` — el lote que falla entero degrada completo |
 | **Si el LLM falla ×2** | fallback: promedio histórico + string en `errores` |
-| **Devuelve** | `{ analisisPorProducto: {1:{…}, 2:{…}}, errores: [] }` |
+| **Devuelve** | `{ analisisPorProducto: {1:{…}, 2:{…}}, hashPorProducto: {1:"…"}, errores: [] }` |
 | **Reducer** | `mergeObjeto` → fusiona las claves por producto; `acumulativo` concatena errores |
 | **Edge** | fijo → `calcular-cantidad` |
 

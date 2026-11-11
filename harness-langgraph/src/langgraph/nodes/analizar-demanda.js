@@ -1,13 +1,27 @@
 /**
  * NODO 2 — ANALIZAR DEMANDA (nodo con LLM)
  *
- * Lee del estado: productosBajos. Por cada producto trae sus ventas
- * del backend (historial.client → GET /api/historial) y manda el
- * prompt de prompts/analisis-demanda al modelo (llmJson). La
- * respuesta se valida con zod (schemaAnalisis + utils/llm-json);
- * si falla tras reintentos, usa un promedio de las ventas como
- * fallback. Escribe: analisisPorProducto (y concatena en errores
- * cuando hubo fallback).
+ * Lee del estado: productosBajos. Corre en dos fases:
+ *
+ *  Fase A (paralela, `prepararUno`): por cada producto trae sus
+ *  ventas del backend (historial.client → GET /api/historial),
+ *  calcula el hash del input (cache, SPEC-16) y aplica el triage
+ *  por CV (SPEC-12): demanda estable → promedio histórico directo;
+ *  input ya visto → respuesta del cache. Los volátiles sin cache
+ *  quedan `pendiente`.
+ *
+ *  Fase B (lotes, `analizarLote`): los pendientes se agrupan en
+ *  lotes de `config.demandaBatch` (SPEC-16) y cada lote es UNA
+ *  llamada a `llmJsonBatch` (prompt array). Los items válidos se
+ *  matchean por `producto_id`; los faltantes/inválidos — o el
+ *  lote entero si la llamada falla — caen a `analisisIndividual`
+ *  (llmJson + prompt por producto, el path pre-batch) en un solo
+ *  pool que respeta `config.concurrencia`.
+ *
+ *  Si el LLM falla también en la llamada individual, usa un
+ *  promedio de las ventas como fallback. Escribe:
+ *  analisisPorProducto + hashPorProducto (y concatena en errores
+ *  cuando hubo fallback).
  */
 import { z } from 'zod';
 import { config } from '../../config/env.js';
@@ -131,8 +145,11 @@ async function analisisIndividual({ p, ventas, hash }) {
 /**
  * Fase B — un lote de pendientes en UNA llamada al LLM (SPEC-16,
  * R16.3). El modelo devuelve un array; los items válidos se
- * matchean por producto_id y los faltantes/inválidos — o el lote
- * entero si la llamada falla — caen a llamadas individuales.
+ * matchean por producto_id. Devuelve { resueltos, faltantes }:
+ * los faltantes/inválidos — o el lote entero si la llamada
+ * falla — los resuelve `analizarDemanda` con llamadas
+ * individuales en un solo pool (así el límite de concurrencia
+ * global se respeta también en el fallback).
  */
 async function analizarLote(lote) {
   let items;
@@ -148,7 +165,7 @@ async function analizarLote(lote) {
     );
   } catch (err) {
     log(`  lote de ${lote.length}: LLM falló (${err.message}) — llamadas individuales`);
-    return conLimite(lote, config.concurrencia, analisisIndividual);
+    return { resueltos: [], faltantes: lote };
   }
   const porId = new Map(items.map((i) => [i.producto_id, i]));
   const resueltos = [];
@@ -170,9 +187,8 @@ async function analizarLote(lote) {
   }
   if (faltantes.length) {
     log(`  lote: ${faltantes.length} item(s) faltantes/inválidos — llamadas individuales`);
-    resueltos.push(...await conLimite(faltantes, config.concurrencia, analisisIndividual));
   }
-  return resueltos;
+  return { resueltos, faltantes };
 }
 
 export async function analizarDemanda(state) {
@@ -189,10 +205,21 @@ export async function analizarDemanda(state) {
   }
   const porLote = await conLimite(lotes, config.concurrencia, analizarLote);
 
+  // Fallback granular: todos los items que el LLM omitió o
+  // devolvió inválidos (en cualquier lote) en un solo pool —
+  // respeta el límite de concurrencia global.
+  const faltantes = porLote.flatMap((r) => r.faltantes);
+  const individuales = await conLimite(faltantes, config.concurrencia, analisisIndividual);
+
   const analisis = {};
   const hashes = {};
   const errores = [];
-  for (const r of [...preparados.filter((r) => !r.pendiente), ...porLote.flat()]) {
+  const resueltos = [
+    ...preparados.filter((r) => !r.pendiente),
+    ...porLote.flatMap((r) => r.resueltos),
+    ...individuales,
+  ];
+  for (const r of resueltos) {
     analisis[r.id] = r.analisis;
     hashes[r.id] = r.hash;
     if (r.error) errores.push(r.error);

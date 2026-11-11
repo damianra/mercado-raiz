@@ -9,8 +9,11 @@
  */
 export function promptAnalisisDemandaBatch(lote) {
   const bloques = lote.map(({ p: producto, ventas }) => {
+    // Las últimas 10 alcanzan para estimar el patrón reciente y
+    // acotan el prompt: historiales largos (hasta 50 movimientos)
+    // inflarían el input más allá del numCtx del modelo batch.
     const ventasTxt = ventas.length
-      ? ventas.map((v) => `${v.fecha.slice(0, 10)}: ${Math.abs(v.diferencia)} unidades`).join('; ')
+      ? ventas.slice(-10).map((v) => `${v.fecha.slice(0, 10)}: ${Math.abs(v.diferencia)} unidades`).join('; ')
       : 'sin ventas registradas';
     return [
       `ID ${producto.id} — ${producto.nombre} (SKU ${producto.sku}, categoría ${producto.categoria})`,
