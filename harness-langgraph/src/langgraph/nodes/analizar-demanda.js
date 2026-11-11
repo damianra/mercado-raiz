@@ -10,6 +10,7 @@
  * cuando hubo fallback).
  */
 import { z } from 'zod';
+import { config } from '../../config/env.js';
 import { llmJson } from '../../config/ollama.js';
 import { ventasDeProducto } from '../../integrations/historial.client.js';
 import { conReintentos } from '../../harness/error-handler.js';
@@ -24,6 +25,25 @@ const schemaAnalisis = z.object({
   tendencia: z.enum(['subiendo', 'estable', 'bajando']),
   observacion: z.string(),
 });
+
+/**
+ * Coeficiente de variación (σ/μ) de las unidades vendidas por día.
+ * Devuelve Infinity con menos de 3 días de datos — sin muestra
+ * suficiente el CV no dice nada y el producto va al LLM.
+ */
+export function coeficienteVariacion(ventas) {
+  const porDia = new Map();
+  for (const v of ventas) {
+    const dia = v.fecha.slice(0, 10);
+    porDia.set(dia, (porDia.get(dia) ?? 0) + Math.abs(v.diferencia));
+  }
+  const valores = [...porDia.values()];
+  if (valores.length < 3) return Infinity;
+  const media = valores.reduce((a, x) => a + x, 0) / valores.length;
+  if (media === 0) return Infinity;
+  const varianza = valores.reduce((a, x) => a + (x - media) ** 2, 0) / valores.length;
+  return Math.sqrt(varianza) / media;
+}
 
 /** Plan B sin LLM: promedio simple de unidades vendidas por día. */
 function fallbackDesdeVentas(ventas) {
@@ -42,6 +62,18 @@ export async function analizarDemanda(state) {
 
   for (const p of state.productosBajos) {
     const ventas = await ventasDeProducto(p.id);
+    // SPEC-12: demanda estable (CV < UMBRAL_CV) → promedio histórico
+    // directo; el LLM se reserva para los patrones volátiles.
+    const cv = coeficienteVariacion(ventas);
+    if (cv < config.umbralCv) {
+      metrics.llmEvitada();
+      analisis[p.id] = {
+        ...fallbackDesdeVentas(ventas),
+        observacion: `Demanda estable (CV=${cv.toFixed(2)}), estimado por promedio histórico`,
+      };
+      log(`  ${p.sku}: demanda estable (CV=${cv.toFixed(2)}) — estimado heurístico, sin LLM`);
+      continue;
+    }
     try {
       metrics.llamadaLlm();
       const respuesta = await conReintentos(
