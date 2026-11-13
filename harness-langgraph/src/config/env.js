@@ -20,7 +20,7 @@ export const config = {
 
   /** Servidor Ollama local. */
   ollamaBaseUrl: required('OLLAMA_BASE_URL', 'http://localhost:11434'),
-  ollamaModel: required('OLLAMA_MODEL', 'llama3.2:1b'),
+  ollamaModel: required('OLLAMA_MODEL', 'qwen3:8b'),
 
   /** Puerto del servidor HTTP del harness (recibe POST /resume). */
   harnessPort: Number(required('HARNESS_PORT', '4110')),

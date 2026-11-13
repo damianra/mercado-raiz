@@ -3,7 +3,7 @@
 Demo didáctica de **LangGraph** (máquina de estados para agentes) +
 una capa de **orquestación estilo Harness** (monitoreo, reintentos,
 costos, human-in-the-loop), corriendo sobre el backend MVC de
-Mercado Raíz con un **LLM local** (Ollama + llama3.2:1b).
+Mercado Raíz con un **LLM local** (Ollama + qwen3:8b).
 
 ## Qué hace el agente
 
@@ -24,7 +24,7 @@ npm run api
 npm run dev
 
 # terminal 3 — LLM local (:11434)
-~/ollama/bin/ollama serve        # la primera vez: ~/ollama/bin/ollama pull llama3.2:1b
+~/ollama/bin/ollama serve        # la primera vez: ~/ollama/bin/ollama pull qwen3:8b
 
 # terminal 4 — el agente (:4110)
 npm run agente                   # desde la raíz, o cd harness-langgraph && npm run agente
