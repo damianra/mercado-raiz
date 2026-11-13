@@ -2,7 +2,8 @@
 
 Traza completa de una corrida del agente: qué hace cada pieza, qué
 sale por consola, qué viaja por HTTP y cómo cambia el estado del
-grafo en cada paso.
+grafo en cada paso. Versión gráfica del recorrido:
+`diagramas/flujo-agente.svg` (fuente `.dot`, Graphviz).
 
 Convención del grafo: **un nodo no decide qué sigue — solo devuelve
 una actualización parcial del estado**. El rumbo lo deciden los

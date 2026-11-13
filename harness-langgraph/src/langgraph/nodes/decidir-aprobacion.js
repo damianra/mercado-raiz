@@ -1,5 +1,5 @@
 /**
- * NODO 5 — DECIDIR SI REQUIERE APROBACIÓN HUMANA
+ * NODO 4 — DECIDIR SI REQUIERE APROBACIÓN HUMANA
  *
  * Lee decisionPorProducto[].monto_total y aplica la regla
  * monto >= UMBRAL_APROBACION (.env) → marca requiere_aprobacion.

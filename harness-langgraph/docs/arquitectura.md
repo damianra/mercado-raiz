@@ -74,6 +74,10 @@ calcular → decidir → generar para decidir antes de redactar.)
 | `cost-tracker.js` | acumula tokens, duraciones (ns→ms) y modelo del LLM por llamada | con un modelo hosted esto ES la factura |
 | `metrics.js` | duración, llamadas, fallbacks + contadores de negocio (productos, órdenes, errores) | el "informe" que se muestra al final — el orchestrator lo alimenta con el estado del grafo |
 
+Ciclo de vida de `corrida.fase` (idle → corriendo → terminado,
+con las ramas legacy pausado/encolado para compat SPEC-12):
+`diagramas/flujo-orquestador.svg`.
+
 ## Human-in-the-loop, cómo está cableado (SPEC-12)
 
 El humano ya no está *dentro* del grafo — la aprobación es

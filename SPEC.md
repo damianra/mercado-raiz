@@ -1139,6 +1139,48 @@ Revisión por sub-agente del PR (diff + contraste docs↔código).
 
 ---
 
+## SPEC-18 · Diagramas Graphviz del flujo del agente y del orquestador
+
+- **Fecha:** 2026-11-12
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Contexto técnico
+
+La capa didáctica describe los flujos en prosa y ASCII
+(`flujo-ejecucion.md`, diagrama de secuencia de EXPLICACION.md);
+faltaba la versión gráfica para presentación. Dos diagramas:
+
+- `docs/diagramas/flujo-agente.*` — la corrida completa: 8 nodos
+  del grafo (código vs LLM) + llamadas HTTP al backend/Ollama +
+  el humano que resuelve pendientes por REST.
+- `docs/diagramas/flujo-orquestador.*` — ciclo de vida de
+  `orchestrator.corrida.fase`: entradas (`index.js`, `/run`,
+  `/resume`, `/status`) → `corriendo` → `terminado`/`error` +
+  ramas legacy `pausado`/`encolado` (compat SPEC-12).
+
+### Requisitos
+
+- **R18.1** Un `.dot` por diagrama en `harness-langgraph/docs/
+  diagramas/` + renders `.png` (140 dpi) y `.svg` commiteados —
+  regenerables con `dot -Tpng|-Tsvg` (Graphviz, no es dependencia
+  del proyecto). ✅
+- **R18.2** Referencias desde los docs: `flujo-ejecucion.md`
+  enlaza el diagrama del agente; `arquitectura.md` enlaza el del
+  orquestador; `EXPLICACION.md` lista `diagramas/` en el mapa. ✅
+
+### Tareas
+
+- **T18.1** flujo-agente (grafo + externos + leyenda). ✅
+- **T18.2** flujo-orquestador (fases + entradas HTTP). ✅
+- **T18.3** Enlaces desde docs + SPEC. ✅
+
+### Verificado por
+
+Revisión por sub-agente del PR (el diagrama debe reflejar el
+grafo real de `graph.js` y las fases reales de `orchestrator.js`).
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |

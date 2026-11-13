@@ -1,5 +1,5 @@
 /**
- * NODO 4 — GENERAR ANÁLISIS (nodo con LLM)
+ * NODO 5 — GENERAR ANÁLISIS (nodo con LLM)
  *
  * Lee del estado: productosBajos, analisisPorProducto y
  * decisionPorProducto (cantidad + monto ya calculados). Manda el

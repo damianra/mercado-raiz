@@ -188,5 +188,6 @@ harness-langgraph/
 ├── checkpoints.sqlite      → estado persistido tras cada nodo (auditoría / compat resume)
 ├── .last-thread            → thread_id de la última corrida (gitignored, SPEC-15)
 ├── data/                   → analisis-cache.json (cache de análisis, gitignored)
-└── docs/                   → arquitectura.md, flujo-datos.md, flujo-ejecucion.md, prompts.md, benchmarks/
+└── docs/                   → arquitectura.md, flujo-datos.md, flujo-ejecucion.md,
+                              prompts.md, benchmarks/, diagramas/ (Graphviz del flujo)
 ```
