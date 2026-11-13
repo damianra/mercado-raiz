@@ -77,6 +77,7 @@ confiable*. Vive en `src/harness/`:
 | `error-handler.js` | Reintentos con backoff ante fallas transitorias. |
 | `cost-tracker.js` | Cuenta tokens y tiempos de inferencia del LLM por llamada — modelo, duraciones en ms (con un modelo pago, los tokens serían la factura). |
 | `metrics.js` | Duración de corrida, llamadas al LLM, fallbacks y contadores de negocio (productos evaluados, órdenes creadas/pausadas, errores). |
+| `analisis-cache.js` | Cache incremental (SPEC-16): hash del input por producto → demanda y justificación reusadas entre corridas (`data/analisis-cache.json`). |
 
 Además el servidor es lo que mantiene vivo el proceso entre
 corridas: el grafo termina, pero `/status`, `/metrics` y `/run`
@@ -115,7 +116,7 @@ npm run agente          # desde la raíz; o cd harness-langgraph && npm run agen
     │                   │                    │               │
     │                   │               GET /api/productos ◀─│ leer-inventario
     │                   │                    │               │ ... LLM ... crear-orden
-    │                   │               POST /api/ordenes ◀──│ crea órdenes
+    │                   │               POST /api/ordenes/batch ◀──│ crea órdenes
     │                   │                    │               │
     │                   │                    │               │ ✅ TERMINA (atómica)
     │                   │                    │               │   las pendientes quedan
@@ -183,8 +184,9 @@ harness-langgraph/
 │   │   ├── edges/router.js → los "if" del recorrido
 │   │   └── prompts/        → lo que se le pide al LLM
 │   ├── integrations/       → clientes HTTP para hablar con el backend :4000
-│   └── utils/              → logger, parser de JSON del LLM
+│   └── utils/              → logger, parser de JSON del LLM, concurrencia.js (pool con límite)
 ├── checkpoints.sqlite      → estado persistido tras cada nodo (auditoría / compat resume)
-├── .last-thread            → thread_id de la última corrida
-└── docs/                   → arquitectura.md, flujo-datos.md, prompts.md
+├── .last-thread            → thread_id de la última corrida (gitignored, SPEC-15)
+├── data/                   → analisis-cache.json (cache de análisis, gitignored)
+└── docs/                   → arquitectura.md, flujo-datos.md, flujo-ejecucion.md, prompts.md, benchmarks/
 ```

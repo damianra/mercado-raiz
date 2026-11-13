@@ -43,7 +43,7 @@ Consola:
 
 ```
 ═══ MERCADO RAÍZ — Agente de reposición (LangGraph + Harness) ═══
-Backend: http://localhost:4000 | LLM: llama3.2:1b @ http://localhost:11434
+Backend: http://localhost:4000 | LLM: qwen3:8b @ http://localhost:11434
 harness escuchando en http://localhost:4110
 ═══ 🚀 CORRIDA run-1714… ═══
 ```
@@ -63,7 +63,7 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | | |
 |---|---|
 | **Lee del estado** | nada |
-| **Llama** | `GET :4000/api/productos?estado=STOCK_BAJO` y `?estado=CRITICO` |
+| **Llama** | `GET :4000/api/productos?estado=STOCK_BAJO` y `?estado=CRITICO` — paginado (`limit=100`, trae todas las páginas en paralelo, SPEC-14) |
 | **Devuelve** | `{ productosBajos: [prod1, prod2] }` |
 | **Reducer** | `listaVacia` → reemplaza `[]` por la lista |
 | **Edge** | fijo → `analizar-demanda` (siempre, haya 0 o 50 productos) |
@@ -107,7 +107,7 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | | |
 |---|---|
 | **Lee** | `productosBajos`, `analisisPorProducto`, `decisionPorProducto` |
-| **Por cada producto** | si `requiere_aprobacion` → `llm.invoke(prompt)` → prosa → `analisis_ia` (≤1900 chars; <20 → retry) · si no (auto-aprobada) → template determinista + marca `(estimación automática)` (`llm_evitadas+1`) |
+| **Por cada producto** (hasta `AGENTE_CONCURRENCIA` en vuelo, SPEC-16) | si `requiere_aprobacion` → cache por hash (`hashPorProducto` + el análisis — `cache_hits+1` si el input no cambió, SPEC-16) → si no, `llm.invoke(prompt)` → prosa → `analisis_ia` (≤1900 chars; <20 → retry) · si no (auto-aprobada) → template determinista + marca `(estimación automática)` (`llm_evitadas+1`) |
 | **Si falla ×2** | template con los mismos datos + error |
 | **Devuelve** | `{ decisionPorProducto: {…, analisis_ia}, errores }` |
 | **Edge** | fijo → `crear-orden` |

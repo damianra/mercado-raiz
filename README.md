@@ -19,7 +19,7 @@ prompt front - back Qwen 3.7
 ## Requisitos
 
 - Node.js >= 20
-- (Opcional, para el agente) Ollama con `llama3.2:1b`
+- (Opcional, para el agente) Ollama con `qwen3:8b`
 
 ## Levantar el proyecto
 

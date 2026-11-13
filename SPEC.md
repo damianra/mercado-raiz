@@ -1084,6 +1084,61 @@ benchmark real con GPU/Ollama monitorizados.
 
 ---
 
+## SPEC-17 · Higiene documental: realinear docs didácticos post SPEC-12→16
+
+- **Fecha:** 2026-11-12
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Contexto técnico
+
+El proyecto se usa como material de explicación (EXPLICACION.md +
+docs/ del harness son la capa didáctica). Auditoría post SPEC-16:
+la narrativa central siguió fiel (grafo, flujo atómico, batch,
+retry) pero quedaron derivas puntuales — docs que describen el
+estado pre-optimización y referencias al modelo viejo:
+
+- `docs/flujo-datos.md`: la tabla de llamadas al backend seguía
+  diciendo `crear-orden → POST /api/ordenes` (hoy `/batch` con
+  fallback); sin paginación de leer-inventario (SPEC-14); sin
+  `hashPorProducto` en el estado (SPEC-16).
+- Referencias al modelo `llama3.2:1b` en README raíz, README del
+  harness, `.env.example`, default de `config/env.js` y consola de
+  ejemplo de `flujo-ejecucion.md` — el modelo real y el de todos
+  los benchmarks es `qwen3:8b`.
+- `EXPLICACION.md`: mapa de `docs/` sin `flujo-ejecucion.md` ni
+  `benchmarks/`; tabla del harness sin `analisis-cache.js`;
+  `utils/` sin `concurrencia.js`.
+- `docs/flujo-ejecucion.md`: nodo 1 sin paginación; nodo 5 sin
+  cache de justificación ni concurrencia (SPEC-16).
+
+### Requisitos
+
+- **R17.1** `flujo-datos.md`: endpoint batch + fallback en la
+  tabla de llamadas y en la de errores; paginación en
+  leer-inventario; `hashPorProducto` en el estado. ✅
+- **R17.2** Alinear modelo a `qwen3:8b` donde se habla del estado
+  actual: README raíz (requisito Ollama), README del harness
+  (intro + `ollama pull`), `.env.example`, default de
+  `config/env.js` y consola de `flujo-ejecucion.md`. Las
+  referencias históricas en SPECs cerrados se conservan (son
+  registro, no estado). ✅
+- **R17.3** `EXPLICACION.md`: `docs/` completo en el mapa
+  (4 docs + benchmarks/); `analisis-cache.js` en la tabla del
+  harness; `concurrencia.js` en utils. ✅
+- **R17.4** `flujo-ejecucion.md`: nodo 1 menciona la paginación;
+  nodo 5 menciona cache por hash + `conLimite`. ✅
+
+### Tareas
+
+- **T17.1** Correcciones R17.1–R17.4 en un solo PR docs + default
+  de `env.js` (R17.2 toca código: solo el string del fallback).
+
+### Verificado por
+
+Revisión por sub-agente del PR (diff + contraste docs↔código).
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
