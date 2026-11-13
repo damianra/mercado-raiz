@@ -116,7 +116,7 @@ npm run agente          # desde la raíz; o cd harness-langgraph && npm run agen
     │                   │                    │               │
     │                   │               GET /api/productos ◀─│ leer-inventario
     │                   │                    │               │ ... LLM ... crear-orden
-    │                   │               POST /api/ordenes ◀──│ crea órdenes
+    │                   │               POST /api/ordenes/batch ◀──│ crea órdenes
     │                   │                    │               │
     │                   │                    │               │ ✅ TERMINA (atómica)
     │                   │                    │               │   las pendientes quedan
