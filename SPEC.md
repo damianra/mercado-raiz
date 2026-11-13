@@ -274,7 +274,8 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 
 ### Verificado por
 
-`server/app.test.js` (headers, 429 en POSTs, rechazo .svg),
+`server/app.test.js` (headers, 429 en POSTs, ~~rechazo .svg~~ —
+el test se retiró junto al endpoint en SPEC-20),
 `e2e/ordenes.spec.js` (link /privacidad, 404 con vuelta).
 
 ---
@@ -291,7 +292,7 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 | Suite | Casos | Qué verifica |
 |---|---|---|
 | `server/api.test.js` | ~30 | Contrato completo de la API del dominio sobre DB seedada |
-| `server/app.test.js` | 3 | Health, 404 JSON, headers, rate limit (upload .svg retirado en SPEC-20) |
+| `server/app.test.js` | 4 | Health, 404 JSON, headers, rate limit (upload .svg retirado en SPEC-20) |
 | `test/api-contract.test.js` | 7 | Cada endpoint del dominio existe y está montado (8 antes de SPEC-20) |
 | `src/__tests__/api-client.test.js` | ~11 | `mapOrden`, `ApiError`, métodos del cliente |
 | `src/__tests__/ui-kit.test.jsx` | 2 | Bloques del kit, `FormShell` disabled |
