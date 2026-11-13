@@ -64,10 +64,9 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 - **Estado (front)**: `lib/api.js` como cliente único del backend (fetch + error handling centralizado); `useState` local por componente, `useReducer` para flujos multi-paso (formularios/wizard/cart). Sin librería de estado (Redux/Zustand/MobX) — fuera del scope: rápido, funcional, fácil de conectar front↔back.
 - Si la app tiene login/usuarios del seed, documentarlos en el README (sección 'Usuarios demo' con email+password dev y el rol de cada uno).
 - Al final del README, una sección 'Prompt' con el prompt original del usuario (si el plan tiene sección BACKEND, incluirla entera).
-- No commitear `node_modules/`, `.env`, `*.sqlite`, `server/uploads/*`, `dist/`, `out/` ni `build/`.
+- No commitear `node_modules/`, `.env`, `*.sqlite`, `dist/`, `out/` ni `build/`.
 - Al escribir tests E2E con Playwright, cubrir explícitamente las reglas de UI de arriba.
 - **Backend**: cada `server/routes/<name>.js` que exporte un `Router` default se monta solo en `/api/<name>` — no tocar `server/app.js` ni `server/db.js`.
-- **Imágenes**: `POST /api/uploads` con campo `file` (image/*, máx 5MB) → `{ url: "/uploads/<file>" }`. Guardar ese path en la entidad; el frontend lo consume tal cual (el proxy de Vite redirige `/uploads` al puerto 4000).
 - **Secretos/config**: API keys y config sensible van en `.env` (gitignored), leídas via `process.env.NOMBRE` — `server/index.js` ya carga `dotenv/config`. Toda variable que la app use debe declararse en `.env.example` (commiteado, con valor placeholder o vacío) para que otro dev sepa qué configurar. Nunca hardcodear secretos ni commitear `.env`.
 - **Docker**: `Dockerfile`, `.dockerignore` (y `nginx.conf` si aplica) los provee el orquestador — no modificarlos ni crear otros. El backend ya sirve `dist/` si existe, así que el contenedor fullstack corre solo `node server/index.js`.
 - **Capa de datos**: schema en `server/schema.sql` (idempotente), seed en `server/seed-data.js` (se inserta si la tabla está vacía); queries con `q()` prepared statements de `server/db.js` (despacha por `DB_DRIVER`).

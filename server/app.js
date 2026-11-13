@@ -24,9 +24,6 @@ export async function createApp() {
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-  // Archivos subidos via POST /api/uploads (routes/uploads.js)
-  app.use('/uploads', express.static(join(here, 'uploads')));
-
   const routesDir = join(here, 'routes');
   for (const file of readdirSync(routesDir)) {
     if (!file.endsWith('.js')) continue;
@@ -56,7 +53,7 @@ export async function createApp() {
   // eslint-disable-next-line no-unused-vars -- Express reconoce el error handler por aridad
   app.use((err, req, res, next) => {
     console.error(err);
-    const status = err.name === 'MulterError' ? 400 : (err.status ?? 500);
+    const status = err.status ?? 500;
     // 500s responden genérico — err.message puede filtrar internals.
     res
       .status(status)

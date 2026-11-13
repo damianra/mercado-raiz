@@ -126,7 +126,7 @@ seedada), `server/app.test.js`, e2e (consume datos reales del seed).
 | GET | `/api/productos` | Lista paginada. Query: `estado`, `categoria`, `proveedor_id`, `search`, `page`, `limit` (≤100). `estado` recalculado al leer | 400 |
 | GET | `/api/dashboard/stats` | KPIs (ver shape abajo) | — |
 | GET | `/api/historial` | Movimientos de stock. Query: `producto_id`, `tipo` (`VENTA\|REPOSICION\|AJUSTE\|DEVOLUCION`), `desde`, `hasta`, `page`, `limit` | 400 |
-| POST | `/api/uploads` | `multipart file` (image/* ≤5MB, whitelist ext, sin SVG) → `{ url }` | 400 |
+| ~~POST~~ | ~~`/api/uploads`~~ | ~~`multipart file` (image/* ≤5MB, whitelist ext, sin SVG) → `{ url }`~~ — **retirado en SPEC-20** (sin consumidor) | ~~400~~ |
 
 ### Requisitos
 
@@ -239,7 +239,8 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 - **Origen:** AGENTS.md (reglas obligatorias) · `plan.json.compliance:
   ["privacidad","notfound"]`
 - **Implementación:** `server/security.js`, `server/log.js`,
-  `server/routes/uploads.js`, `src/pages/Privacidad.jsx`,
+  ~~`server/routes/uploads.js`~~ (retirado en SPEC-20),
+  `src/pages/Privacidad.jsx`,
   `src/pages/NotFound.jsx`, ~~`server/harness-notify.js`~~
   (eliminado en SPEC-12)
 
@@ -253,9 +254,10 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
   `Map` alcanza; multi-instance queda fuera de scope.
 - **R6.3** `express.json({ limit: '2mb' })`; `capString` en campos
   libres antes de persistir.
-- **R6.4** Uploads: whitelist por **extensión** (mimetype es
+- **R6.4** ~~Uploads: whitelist por **extensión** (mimetype es
   spoofable), SVG excluido (XSS same-origin), UUID como filename, 5MB.
-  Servidos con `nosniff` desde `/uploads`.
+  Servidos con `nosniff` desde `/uploads`.~~ — **retirado en SPEC-20**
+  (endpoint sin consumidor del dominio)
 - **R6.5** Request logger propio: una línea `MÉTODO url status ms`
   por request (los 429 también quedan registrados).
 - **R6.6** Página `/privacidad` con aviso de datos (qué se recolecta,
@@ -289,8 +291,8 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 | Suite | Casos | Qué verifica |
 |---|---|---|
 | `server/api.test.js` | ~30 | Contrato completo de la API del dominio sobre DB seedada |
-| `server/app.test.js` | 4 | Health, 404 JSON, headers, rate limit, upload .svg |
-| `test/api-contract.test.js` | 8 | Cada endpoint del dominio existe y está montado |
+| `server/app.test.js` | 3 | Health, 404 JSON, headers, rate limit (upload .svg retirado en SPEC-20) |
+| `test/api-contract.test.js` | 7 | Cada endpoint del dominio existe y está montado (8 antes de SPEC-20) |
 | `src/__tests__/api-client.test.js` | ~11 | `mapOrden`, `ApiError`, métodos del cliente |
 | `src/__tests__/ui-kit.test.jsx` | 2 | Bloques del kit, `FormShell` disabled |
 | `src/__tests__/smoke.test.jsx` | 1 | App renderiza |
@@ -382,7 +384,8 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
 - **R9.1** Scripts: `dev` (:5173), `api` (:4000), `dev:api` (--watch),
   `seed`, `test` (vitest), `test:e2e` (playwright), `build`,
   `preview`, `agente` (harness).
-- **R9.2** Vite proxifica `/api` y `/uploads` al :4000 en dev.
+- **R9.2** Vite proxifica `/api` al :4000 en dev (~~y `/uploads`~~ —
+  retirado en SPEC-20).
 - **R9.3** Docker multi-stage (node:22): `npm ci` → build `dist/` →
   slim con `server/` + `dist/`; `CMD node server/index.js` sirve API +
   estáticos en un solo contenedor (el backend sirve `dist/` si existe).
@@ -394,8 +397,8 @@ Ollama). Docs: `docs/flujo-ejecucion.md` (traza paso a paso).
   eliminada en SPEC-12); el harness tiene su propio `.env.example`
   (`BACKEND_URL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`,
   `UMBRAL_APROBACION`, `UMBRAL_CV`).
-- **R9.6** Gitignored: `node_modules/`, `.env`, `*.sqlite`,
-  `server/uploads/*`, `dist/`.
+- **R9.6** Gitignored: `node_modules/`, `.env`, `*.sqlite`, `dist/`
+  (~~`server/uploads/*`~~ — retirado en SPEC-20).
 
 ---
 
@@ -1219,6 +1222,52 @@ matchear las de negocio reales: umbral $100, lead + 7 días, piso
 
 ---
 
+## SPEC-20 · Retiro del endpoint `/api/uploads` (sin consumidor)
+
+- **Fecha:** 2026-11-12
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Contexto técnico
+
+`POST /api/uploads` vino del skeleton (Anexo B: no estaba en el
+brief) y **nada del dominio lo consume**: productos no tiene
+campo imagen, el front no sube archivos, el agente no lo llama.
+Es superficie de ataque gratuita — servía contenido arbitrario
+confiando solo en la extensión (el propio test sube un script
+disfrazado de `.png`). `server/uploads/` acumulaba 35 archivos
+residuo de la suite. Se retira completo: ruta, static, dep
+(multer), proxy, tests y convenciones.
+
+### Requisitos
+
+- **R20.1** Borrar `server/routes/uploads.js` y `server/uploads/`
+  (residuo local, gitignored — no hay datos de usuario). ✅
+- **R20.2** `server/app.js`: quitar `express.static('/uploads')`
+  y la rama `MulterError` del error handler. ✅
+- **R20.3** `npm uninstall multer` (era su único uso). ✅
+- **R20.4** `vite.config.js`: quitar el proxy `/uploads`;
+  `.gitignore`: quitar las entradas de `server/uploads`. ✅
+- **R20.5** Tests: borrar el test de whitelist `.svg`
+  (`app.test.js`) y reapuntar el de rate-limit a
+  `POST /api/ordenes` (400 por body vacío, mismo contrato 429);
+  quitar la entrada `uploads.js` del manifiesto de
+  `test/api-contract.test.js`. ✅
+- **R20.6** Docs: `README.md` (tabla API + proxy), `AGENTS.md`
+  (convención Imágenes + no-commitear), `SPEC.md` (anotaciones
+  `(retirado en SPEC-20)` en SPEC-03/06/07/09 y Anexo B — la
+  historia no se reescribe). ✅
+
+### Tareas
+
+- **T20.1** Retiro completo + tests verdes en un solo PR.
+
+### Verificado por
+
+Revisión por sub-agente del PR + `npx vitest run` verde + grep
+`upload` sin restos fuera de las anotaciones históricas.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -1245,7 +1294,7 @@ matchear las de negocio reales: umbral $100, lead + 7 días, piso
 | Brief | Implementado | Nota |
 |---|---|---|
 | Base `/api/v1` | `/api` | Convención de auto-mount del skeleton (más simple; no rompe nada interno) |
-| 7 endpoints | 9 | `GET /api/historial` y `POST /api/uploads` vienen del skeleton, no del brief |
+| 7 endpoints | 8 | `GET /api/historial` viene del skeleton, no del brief; `POST /api/uploads` también venía del skeleton — retirado en SPEC-20 |
 | `aprobado_por: "auto"` en mock | default `'sistema'` | El mock del brief usaba "auto"; el controller defaultea `'sistema'` |
 | `rechazado_por` en body de rechazo | aceptado, default `'sistema'` | Consistente con aprobar |
 | Tabla `usuarios` con roles | Sin endpoints ni login | Persistida y seedeada; solo `USUARIO_DEMO` en el cliente. Alcance demo |

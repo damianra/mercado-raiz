@@ -15,8 +15,6 @@ publish.*
 *.sqlite-shm
 *.sqlite-wal
 .env
-server/uploads/*
-!server/uploads/.gitkeep
 docker-build.*
 test-run.*
 dev-run.*
