@@ -1,5 +1,5 @@
 /**
- * NODO 10 — CIERRE
+ * NODO 8 — CIERRE
  *
  * Lee ordenesCreadas, ordenesPendientes y errores para loguear el
  * resumen de la corrida, y pide GET /api/dashboard/stats para
