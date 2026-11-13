@@ -1,0 +1,45 @@
+digraph orquestador {
+  rankdir=LR;
+  bgcolor="white";
+  pad=0.25;
+  nodesep=0.35;
+  ranksep=0.9;
+
+  node [fontname="Helvetica", fontsize=11, style="rounded,filled",
+        color="#44403c", penwidth=1.3, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#57534e",
+        arrowsize=0.8, penwidth=1.1];
+
+  /* Entradas externas — columna izquierda */
+  cli    [shape=box, fillcolor="#e7e5e4",
+          label="npm run agente (index.js)\ninicializar(): compila grafo\n+ recupera pausa vieja del\ncheckpoint si existe"];
+  http   [shape=box, fillcolor="#e7e5e4",
+          label="POST /run"];
+  resume [shape=box, fillcolor="#e7e5e4",
+          label="POST /resume\n(compat pausas viejas)"];
+  status [shape=box, fillcolor="#e7e5e4",
+          label="GET /status · /metrics\n(solo leen corrida)"];
+  { rank=same; cli; http; resume; status; }
+
+  /* Ciclo de vida de corrida.fase */
+  corriendo [shape=ellipse, fillcolor="#a7f3d0",
+             label="corriendo — ejecutar()\ngrafo.stream(input, updates)\n→ monitor imprime cada nodo"];
+  terminado [shape=box, fillcolor="#d6d3d1",
+             label="terminado — resumenFinal()\nmétricas + costos LLM\n(servidor sigue en :4110)"];
+  pausado   [shape=box, fillcolor="#fde68a", style="rounded,filled,dashed",
+             label="pausado — solo compat:\ncorridas viejas con interrupt\n(el grafo actual no pausa, SPEC-12)"];
+  error     [shape=box, fillcolor="#fecaca", label="error"];
+
+  cli  -> corriendo [label=" iniciar() — threadId → .last-thread\n metrics + costTracker reset"];
+  http -> corriendo [label=" iniciar()\n(409 si ya corre)"];
+  cli  -> pausado   [style=dashed, label=" .last-thread con\n pausa pendiente"];
+
+  corriendo -> terminado [label=" el grafo llega a END\n(sin nodos pendientes)"];
+  corriendo -> pausado   [style=dashed, label=" interrupt (legacy)"];
+  corriendo -> error     [label=" excepción"];
+
+  pausado -> corriendo [label=" reanudar()\n Command(resume)"];
+  resume  -> corriendo [label=" corre → encola (se procesa\nal volver a pausar)\npausado → Command(resume)\nsin pausa → 409"];
+
+  status -> corriendo [style=dotted, arrowhead=none, label=" corrida.fase"];
+}

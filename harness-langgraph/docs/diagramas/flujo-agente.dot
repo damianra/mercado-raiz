@@ -1,0 +1,69 @@
+digraph flujo {
+  rankdir=TB;
+  bgcolor="white";
+  pad=0.3;
+  nodesep=0.45;
+  ranksep=0.55;
+
+  node [fontname="Helvetica", fontsize=11, style="rounded,filled",
+        color="#44403c", fillcolor="#ffffff", penwidth=1.3, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#57534e",
+        arrowsize=0.8, penwidth=1.1];
+
+  subgraph cluster_agente {
+    label="AGENTE :4110 — grafo LangGraph (corrida atómica, SPEC-12)";
+    labelloc="t";
+    fontsize=13;
+    fontname="Helvetica-Bold";
+    style="rounded,filled";
+    fillcolor="#f5f5f4";
+    color="#d6d3d1";
+
+    leer    [label="1 · leer-inventario\ncódigo\nGET /api/productos ×2 estados\n(paginado, limit=100 — SPEC-14)"];
+    analizar[label="2 · analizar-demanda\nLLM condicional\ntriage CV → estable sin LLM · cache por hash\nvolátiles en lotes DEMANDA_BATCH\n(faltantes → individual · error → fallback)",
+             fillcolor="#a7f3d0"];
+    calcular[label="3 · calcular-cantidad\ncódigo\nmax(demanda×(lead+7)−stock,\n2×mínimo−stock, 1) → monto"];
+    decidir [label="4 · decidir-aprobacion\ncódigo\nmonto ≥ $100 → requiere_aprobacion"];
+    generar [label="5 · generar-analisis\nLLM condicional\nrequiere → cache/LLM prosa (≤1900 ch)\nauto-aprobada → template",
+             fillcolor="#a7f3d0"];
+    crear   [label="6 · crear-orden\ncódigo\nPOST /api/ordenes/batch ×100/req\n(falla → POST individual)"];
+    notificar[label="7 · notificar (stub)\nloguea pendientes"];
+    fin     [label="8 · fin\nGET /api/dashboard/stats\n→ resumen de corrida"];
+
+    leer -> analizar -> calcular -> decidir -> generar -> crear;
+    crear -> notificar [label=" pendientes > 0"];
+    crear -> fin       [label=" sin pendientes", style=dashed];
+    notificar -> fin;
+  }
+
+  end [shape=doublecircle, label="END", width=0.55, fontsize=10,
+       fillcolor="#d6d3d1"];
+  fin -> end;
+
+  backend [shape=box, style="rounded,filled", fillcolor="#e7e5e4",
+           label="Backend MVC :4000\nExpress + SQLite — fuente de verdad\nproductos · historial · órdenes · dashboard"];
+  ollama  [shape=box, style="rounded,filled", fillcolor="#e7e5e4",
+           label="Ollama :11434\nqwen3:8b\n(solo estima demanda\ny redacta justificación)"];
+  humano  [shape=box, style="rounded,filled", fillcolor="#e7e5e4",
+           label="Humano — dashboard :5173\naprueba / rechaza las\nPENDIENTE_APROBACION\n(cuando quiere — nada vuelve al agente)"];
+
+  leer    -> backend [style=dashed, label=" GET productos"];
+  analizar-> backend [style=dashed, label=" GET historial", constraint=false];
+  analizar-> ollama  [style=dashed, label=" demanda (lotes)"];
+  generar -> ollama  [style=dashed, label=" justificación"];
+  crear   -> backend [style=dashed, label=" POST batch"];
+  fin     -> backend [style=dashed, label=" GET stats", constraint=false];
+  humano  -> backend [style=dashed, dir=both, arrowhead=none, arrowtail=normal,
+                      label=" POST /ordenes/:id/aprobar\n→ persiste — fin del circuito"];
+
+  subgraph cluster_leyenda {
+    label=""; style="invis";
+    nodo_llm  [shape=box, fillcolor="#a7f3d0", fontsize=9,
+               label="nodo con LLM (incertidumbre)", margin="0.08,0.04"];
+    nodo_cod  [shape=box, fillcolor="#ffffff", fontsize=9,
+               label="nodo código (certidumbre)", margin="0.08,0.04"];
+    nodo_ext  [shape=box, fillcolor="#e7e5e4", fontsize=9,
+               label="externo (HTTP)", margin="0.08,0.04"];
+    nodo_llm -> nodo_cod -> nodo_ext [style=invis];
+  }
+}
