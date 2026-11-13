@@ -6,11 +6,10 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   // proxy dev → api-skeleton (Express en :4000). Config muerta si el
-  // scope no tiene backend: nada consulta /api ni /uploads.
+  // scope no tiene backend: nada consulta /api.
   server: {
     proxy: {
       '/api': 'http://localhost:4000',
-      '/uploads': 'http://localhost:4000',
     },
   },
   test: {

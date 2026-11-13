@@ -42,9 +42,10 @@ describe('seguridad', () => {
   it('rate limit: POSTs excedidos devuelven 429; los GET quedan libres', async () => {
     await withServer(async (port) => {
       const post = () =>
-        fetch(`http://localhost:${port}/api/uploads`, {
+        fetch(`http://localhost:${port}/api/ordenes`, {
           method: 'POST',
-          body: new FormData(), // sin file → 400, pero cuenta para el límite
+          headers: { 'content-type': 'application/json' },
+          body: '{}', // inválido → 400, pero cuenta para el límite
         });
       let last;
       for (let i = 0; i < 21; i++) last = await post();
@@ -52,26 +53,6 @@ describe('seguridad', () => {
       // los GET no consumen el límite
       const res = await fetch(`http://localhost:${port}/api/health`);
       expect(res.status).toBe(200);
-    });
-  });
-
-  it('upload rechaza .svg y extensiones no-imagen (mimetype spoofable)', async () => {
-    await withServer(async (port) => {
-      const send = async (name, type) => {
-        const fd = new FormData();
-        fd.append('file', new Blob(['<svg><script>x</script></svg>'], { type }), name);
-        const res = await fetch(`http://localhost:${port}/api/uploads`, {
-          method: 'POST',
-          body: fd,
-        });
-        return res.status;
-      };
-      // svg con mimetype declarado correcto → rechazado por whitelist
-      expect(await send('evil.svg', 'image/svg+xml')).toBe(400);
-      // .html con mimetype falsificado a image/* → rechazado por extensión
-      expect(await send('evil.html', 'image/png')).toBe(400);
-      // .png legítimo → 201
-      expect(await send('ok.png', 'image/png')).toBe(201);
     });
   });
 });

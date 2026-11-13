@@ -41,11 +41,6 @@ const ENDPOINTS = [
     "method": "get",
     "path": "/api/productos/",
     "file": "productos.js"
-  },
-  {
-    "method": "post",
-    "path": "/api/uploads/",
-    "file": "uploads.js"
   }
 ];
 

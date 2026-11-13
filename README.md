@@ -31,7 +31,7 @@ npm run dev            # frontend en http://localhost:5173
 npm run api            # API Express en http://localhost:4000
 ```
 
-El proxy de Vite redirige `/api` y `/uploads` al puerto 4000 en dev.
+El proxy de Vite redirige `/api` al puerto 4000 en dev.
 
 ### Agente de reposición (opcional)
 
@@ -67,7 +67,6 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
-- `POST /api/uploads` — imagen (≤5MB) → `{ url }`
 
 Contrato completo en `SPEC.md` → SPEC-03.
 
@@ -82,7 +81,7 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-03 | API REST del dominio (contrato de endpoints, errores) |
 | SPEC-04 | Integración front ↔ back (`api.js`, mapeo de estados, reglas de UI) |
 | SPEC-05 | Reglas de negocio (umbral $100, `OC-NNN`, fórmula de cantidad) |
-| SPEC-06 | Seguridad y compliance (headers, rate limit, uploads, `/privacidad`) |
+| SPEC-06 | Seguridad y compliance (headers, rate limit, ~~uploads~~ — retirado en SPEC-20, `/privacidad`) |
 | SPEC-07 | Testing (suites y cobertura) |
 | SPEC-08 | Agente LangGraph (grafo, checkpoints, human-in-the-loop) |
 | SPEC-09 | DevEx y operación (scripts, Docker, CI, `.env`) |

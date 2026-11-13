@@ -1,14 +1,13 @@
 // Seguridad base sin dependencias nuevas:
 // - securityHeaders: cabeceras mínimas anti MIME-sniffing/clickjacking.
 // - rateLimit: contador in-memory por IP para métodos que escriben
-//   (POST/PUT/DELETE) — frena spam de pedidos, comentarios y uploads.
+//   (POST/PUT/DELETE) — frena spam de pedidos y escrituras.
 //   Las apps son single-process con SQLite local: un Map alcanza; un
 //   multi-instance necesitaría store compartido (fuera de scope).
 
 export function securityHeaders(req, res, next) {
-  // nosniff: el browser no adivina el tipo real del archivo — clave
-  // para /uploads (un archivo con extensión de imagen no se ejecuta
-  // como HTML/JS aunque el contenido lo sea).
+  // nosniff: el browser no adivina el tipo real del recurso —
+  // un .js/.json servido no se reinterpreta como otra cosa.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // clickjacking: la página no puede embeberse en un iframe ajeno.
   res.setHeader('X-Frame-Options', 'DENY');
@@ -16,9 +15,8 @@ export function securityHeaders(req, res, next) {
   next();
 }
 
-// Limita solo escrituras: los GET de lectura (menú, posts) quedan
-// libres — un storefront legítimo no debería poder ahogar la API
-// mandando POSTs de pedidos/comentarios/subidas.
+// Limita solo escrituras: los GET de lectura quedan libres — un
+// cliente legítimo no debería poder ahogar la API mandando POSTs.
 export function rateLimit({ windowMs = 60_000, max = 20 } = {}) {
   const hits = new Map(); // ip → timestamps recientes
   return (req, res, next) => {
