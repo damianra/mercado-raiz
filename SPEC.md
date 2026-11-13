@@ -1181,6 +1181,44 @@ grafo real de `graph.js` y las fases reales de `orchestrator.js`).
 
 ---
 
+## SPEC-19 · Diagrama de la regla de negocio (audiencia no técnica)
+
+- **Fecha:** 2026-11-12
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Contexto técnico
+
+`flujo-agente` explica la corrida en términos de nodos/edges
+(público técnico). Faltaba la vista de negocio: qué se hace y
+por qué, en lenguaje de dominio, con lo técnico solo donde
+explica el qué (el LLM como "la IA lee patrones", el umbral como
+política de $100). Incluye el rol del orquestador como supervisor
+en términos de gobierno del proceso.
+
+### Requisitos
+
+- **R19.1** `docs/diagramas/flujo-negocio.{dot,png,svg}`: los 7
+  pasos del proceso en lenguaje de negocio (detectar faltantes →
+  estimar demanda → calcular pedido → política de aprobación →
+  justificar → emitir órdenes → avisar y cerrar) + bloque "el
+  orquestador" con sus 6 responsabilidades de gobierno + la
+  persona aprobadora resolviendo pendientes ≥ $100 por fuera de
+  la corrida. ✅
+- **R19.2** Enlazado desde `EXPLICACION.md` (es el doc de
+  audiencia general) + `diagramas/` nombrado en el mapa. ✅
+
+### Tareas
+
+- **T19.1** Diagrama + renders + enlaces + SPEC. ✅
+
+### Verificado por
+
+Revisión por sub-agente del PR (las reglas del diagrama deben
+matchear las de negocio reales: umbral $100, lead + 7 días, piso
+2× mínimo, triage, aprobación desacoplada).
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |

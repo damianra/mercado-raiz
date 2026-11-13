@@ -14,6 +14,9 @@ termina — las que superan los $100 quedan pendientes en el sistema
 y el humano las aprueba desde el dashboard, sin que el agente
 tenga que esperar despierto (SPEC-12).**
 
+La regla de negocio completa en un gráfico (audiencia general):
+`docs/diagramas/flujo-negocio.svg`.
+
 ---
 
 ## ¿Qué es LangGraph y qué hace acá?
@@ -189,5 +192,6 @@ harness-langgraph/
 ├── .last-thread            → thread_id de la última corrida (gitignored, SPEC-15)
 ├── data/                   → analisis-cache.json (cache de análisis, gitignored)
 └── docs/                   → arquitectura.md, flujo-datos.md, flujo-ejecucion.md,
-                              prompts.md, benchmarks/, diagramas/ (Graphviz del flujo)
+                              prompts.md, benchmarks/, diagramas/ (Graphviz:
+                              flujo-negocio, flujo-agente, flujo-orquestador)
 ```
