@@ -25,8 +25,14 @@ regenerar la muestra: `export_sample.sql` (mismo dir) corre con
 - **Coto** precia por sucursal y casi no tiene `last_price` nacional:
   `coto_price` es la **moda de sus 35 sucursales**
   (`store_price_current`) cuando falta el nacional. 5 artículos sin
-  dato Coto en absoluto → `coto_price` vacío.
+  dato Coto en absoluto → `coto_price`/`coto_list_price` vacíos.
+- **Coto — sanidad de precio**: ~14% de `store_price_current` upstream
+  trae `price` inflado (>3× `list_price`, p.ej. 124.124,80 vs 5.957,99).
+  Si el precio efectivo supera 3× el de lista, `coto_price` toma el
+  valor de `coto_list_price` (37 artículos corregidos).
 - Precios `0` tratados como sin dato (afectaba a 4 items de
-  Carrefour → `carrefour_price` vacío).
+  Carrefour → `carrefour_price`/`carrefour_list_price` vacíos).
+- `size`/`unit` vacíos en 18 artículos (no siempre parseables del
+  nombre en retail-radar).
 - Snapshot del último crawl, no serie histórica. Para historia:
   `price_snapshots` en la DB de retail-radar.

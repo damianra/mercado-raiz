@@ -1291,6 +1291,10 @@ Decisiones de calidad aplicadas en la exportación:
   (`store_price_current`) cuando el item no tiene `last_price`
   nacional (nulos 89 → 5).
 - Precios `0` → NULL (4 items de Carrefour listados a 0).
+- Coto upstream tiene `price` inflado en ~14% de `store_price_current`
+  (>3x `list_price`, 12k productos — p.ej. 124.124,80 vs 5.957,99):
+  si el precio efectivo supera 3x el de lista, `coto_price` = lista
+  (37 artículos corregidos en la muestra).
 - `min_price`/`max_price`/`spread_pct` recalculados sobre los precios
   efectivos (la vista gold los computa sin el fallback de Coto).
 

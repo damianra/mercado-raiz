@@ -6,6 +6,10 @@
 --  * Coto no siempre tiene precio "nacional" (chain_products.last_price);
 --    se usa la moda de sus precios por sucursal (store_price_current, 35 suc.).
 --  * Precios en 0 se tratan como sin dato (NULL) en todas las cadenas.
+--  * Coto upstream: ~14% de las filas store_price_current traen price
+--    inflado (>3x list_price — 12k productos, p.ej. 124124.80 vs 5957.99).
+--    Regla de sanidad: si el precio efectivo supera 3x el de lista, se
+--    toma el de lista como precio (plausible shelf price).
 COPY (
   WITH coto_store AS (
     SELECT chain_product_id,
@@ -19,8 +23,8 @@ COPY (
            v.dia_sku, v.coto_sku, v.carrefour_sku, v.laa_sku,
            nullif(v.dia_price, 0)       AS dia_price,
            nullif(v.dia_list_price, 0)  AS dia_list_price,
-           nullif(coalesce(v.coto_price, cs.modal_price), 0)     AS coto_price,
-           nullif(coalesce(v.coto_list_price, cs.modal_list), 0) AS coto_list_price,
+           nullif(coalesce(v.coto_price, cs.modal_price), 0)     AS coto_price_raw,
+           nullif(coalesce(v.coto_list_price, cs.modal_list), 0) AS coto_list,
            nullif(v.carrefour_price, 0)      AS carrefour_price,
            nullif(v.carrefour_list_price, 0) AS carrefour_list_price,
            nullif(v.laa_price, 0)       AS laa_price,
@@ -33,10 +37,16 @@ COPY (
              ON pm.product_id = v.product_id
       LEFT JOIN coto_store cs ON cs.chain_product_id = cp.id
      WHERE v.chains_present = 4
+  ),
+  sane AS (
+    SELECT *,
+           CASE WHEN coto_price_raw > 3*coto_list THEN coto_list
+                ELSE coto_price_raw END AS coto_price
+      FROM base
   )
   SELECT product_id, canonical_name, brand, size, unit, ean, top_category,
          dia_sku, dia_price, dia_list_price,
-         coto_sku, coto_price, coto_list_price,
+         coto_sku, coto_price, coto_list AS coto_list_price,
          carrefour_sku, carrefour_price, carrefour_list_price,
          laa_sku, laa_price, laa_list_price,
          least(dia_price, coto_price, carrefour_price, laa_price)    AS min_price,
@@ -45,6 +55,6 @@ COPY (
               - least(dia_price, coto_price, carrefour_price, laa_price))
              / nullif(least(dia_price, coto_price, carrefour_price, laa_price), 0)
              * 100, 1)                                               AS spread_pct
-    FROM base
+    FROM sane
    ORDER BY product_id
 ) TO STDOUT WITH CSV HEADER;
