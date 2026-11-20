@@ -29,10 +29,12 @@ test('el dashboard carga órdenes reales del seed y renderiza los KPIs', async (
 
   expect(Array.isArray(body.data)).toBe(true);
   expect(body.data.length).toBeGreaterThan(0);
-  // Datos del seed: OC-001 (Leche Entera 1L, auto-aprobada) existe tal cual.
+  // Datos del seed: OC-001 (auto-aprobada) existe y apunta a un
+  // artículo real del catálogo interno (SPEC-22, sku MR#####).
   const oc1 = body.data.find((o) => o.orden_id === 'OC-001');
   expect(oc1).toBeTruthy();
-  expect(oc1.producto?.nombre).toBe('Leche Entera 1L');
+  expect(oc1.producto?.sku).toMatch(/^MR\d{5}$/);
+  expect(oc1.producto?.nombre).toBeTruthy();
   expect(oc1.proveedor?.nombre).toBeTruthy();
 
   // KPIs (el grid de stats es el primero del main).

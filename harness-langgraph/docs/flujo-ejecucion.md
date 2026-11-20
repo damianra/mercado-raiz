@@ -57,7 +57,7 @@ los consume en vivo y `metrics` anota tiempos.
 
 ## Ejecución 1 — Corrida inicial, nodo por nodo
 
-Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
+Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $50.000.
 
 ### Nodo 1 · `leer-inventario` (código, sin LLM)
 
@@ -99,7 +99,7 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $100.
 | | |
 |---|---|
 | **Lee** | `decisionPorProducto[].monto_total` |
-| **Regla** | `monto >= UMBRAL_APROBACION` ($100, `.env`) → `requiere_aprobacion: true` |
+| **Regla** | `monto >= UMBRAL_APROBACION` ($50.000, `.env`) → `requiere_aprobacion: true` |
 | **Devuelve** | `{ decisionPorProducto: {…, requiere_aprobacion} }` |
 | **Edge** | fijo → `generar-analisis` |
 
@@ -133,7 +133,7 @@ state.ordenesPendientes.length > 0 ? 'notificar' : 'fin'
 ```
 
 - Si ninguna orden quedó pendiente → directo a `fin`, corrida corta.
-- En nuestro ejemplo `OC-101` ≥ $100 → va a `notificar`.
+- En nuestro ejemplo `OC-101` ≥ $50.000 → va a `notificar`.
 
 ### Nodo 7 · `notificar` (stub)
 

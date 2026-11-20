@@ -33,9 +33,9 @@ cualquier nodo     → errores: [string]  (acumulativo)
 ## Regla del umbral, duplicada a propósito
 
 - El nodo `decidir-aprobacion` marca `requiere_aprobacion` si
-  `monto_total >= UMBRAL_APROBACION` (.env, default $100).
+  `monto_total >= UMBRAL_APROBACION` (.env, default $50.000).
 - El backend tiene la MISMA regla en
-  `server/models/ordenes.model.js` (`UMBRAL_APROBACION = 100`) y la
+  `server/models/ordenes.model.js` (`UMBRAL_APROBACION = 50000`) y la
   aplica solo si el flag no viene — es la red de seguridad si otro
   cliente crea órdenes sin decidir.
 

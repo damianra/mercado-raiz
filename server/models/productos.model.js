@@ -20,6 +20,8 @@ function mapProducto(row) {
     id: row.id,
     sku: row.sku,
     nombre: row.nombre,
+    marca: row.marca,
+    ean: row.ean,
     categoria: row.categoria,
     stock_actual: row.stock_actual,
     stock_minimo: row.stock_minimo,
@@ -60,7 +62,7 @@ export function listProductos({ estado, categoria, proveedorId, search, page, li
   const { c: total } = db.prepare(`SELECT COUNT(*) AS c ${fromWhere}`).get(...params);
   const rows = db
     .prepare(
-      `SELECT p.id, p.sku, p.nombre, p.categoria, p.stock_actual, p.stock_minimo,
+      `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
               p.precio_unitario, p.ubicacion, p.fecha_actualizacion,
               pr.id AS pr_id, pr.nombre AS pr_nombre
        ${fromWhere}
