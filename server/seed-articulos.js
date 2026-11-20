@@ -109,7 +109,7 @@ function parseCsv() {
 function articuloDeCsv(row, id) {
   const cat = CATEGORIAS[row.categoria];
   if (!cat) throw new Error(`Categoría sin proveedor: "${row.categoria}" (fila CSV ${id + 1})`);
-  if (row.min_price == null || row.max_price == null) {
+  if (!Number.isFinite(row.min_price) || !Number.isFinite(row.max_price)) {
     throw new Error(`Artículo sin rango de precios: "${row.nombre}" (fila CSV ${id + 1})`);
   }
 

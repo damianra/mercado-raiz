@@ -23,7 +23,7 @@ const productos = generarArticulos();
 // Artículos bajo stock repartidos en el catálogo (determinístico — el
 // orden del CSV es fijo). Las OC demo apuntan a estos.
 const bajos = productos.filter((p) => p.estado !== 'OK');
-const paso = Math.floor(bajos.length / 11);
+const paso = Math.max(1, Math.floor(bajos.length / 11));
 const elegidos = bajos.filter((_, i) => i % paso === 0).slice(0, 11);
 
 const cantidadOrden = (p) => 2 * p.stock_minimo - p.stock_actual;
@@ -188,12 +188,14 @@ const historial_stock = [
   venta(2, elegidos[1], elegidos[1].stock_actual + 12, 'POS-4830', '2026-10-30T18:05:00'),
   venta(3, elegidos[4], elegidos[4].stock_actual + 6, 'POS-4790', '2026-10-30T16:22:00'),
   {
+    // Recepción completa de OC-009: la diferencia es la cantidad
+    // ordenada; ventas posteriores ya descontaron hasta stock_actual.
     id: 4,
     producto_id: elegidos[8].id,
     tipo_movimiento: 'REPOSICION',
-    cantidad_anterior: elegidos[8].stock_actual - 20,
-    cantidad_nueva: elegidos[8].stock_actual,
-    diferencia: 20,
+    cantidad_anterior: 0,
+    cantidad_nueva: cantidadOrden(elegidos[8]),
+    diferencia: cantidadOrden(elegidos[8]),
     referencia: 'OC-009',
     usuario: 'carlos.martinez@mercadorai.com',
     fecha: '2026-10-28T11:10:00',
