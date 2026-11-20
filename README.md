@@ -26,7 +26,7 @@ prompt front - back Qwen 3.7
 ```bash
 npm install
 cp .env.example .env   # opcional: PORT
-npm run seed           # puebla la DB con datos realistas
+npm run seed           # puebla la DB: catálogo real de 1.471 artículos + demo del flujo
 npm run dev            # frontend en http://localhost:5173
 npm run api            # API Express en http://localhost:4000
 ```
@@ -61,7 +61,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 
 - `GET /api/ordenes` — lista paginada (filtros: `estado`, `requiere_aprobacion`, `fecha_desde/hasta`, `search`, `sort`)
 - `GET /api/ordenes/:orden_id` — detalle con `producto{}` y `proveedor{}` anidados
-- `POST /api/ordenes` — crea orden (`monto_total` calculado server-side; `>= $100` → `PENDIENTE_APROBACION`)
+- `POST /api/ordenes` — crea orden (`monto_total` calculado server-side; `>= $50.000` → `PENDIENTE_APROBACION`)
 - `POST /api/ordenes/batch` — array de órdenes en una transacción (todo o nada; 400 con detalle por índice si algún item falla — SPEC-16)
 - `POST /api/ordenes/:orden_id/aprobar` · `POST /api/ordenes/:orden_id/rechazar` (requiere `motivo`)
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
@@ -79,6 +79,14 @@ Base para las comparaciones del mercado propio. Diccionario de
 columnas en `data/README.md`; se regenera con
 `data/export_sample.sql`. (SPEC-21)
 
+Es además el origen del **catálogo interno**: `server/seed-articulos.js`
+convierte cada artículo canónico en un producto propio — sku `MR#####`,
+marca, EAN, categoría, precio propio (determinístico, ~21% por encima
+del máximo de mercado para análisis de competitividad) y stock con mix
+CRITICO/STOCK_BAJO/OK. `productos` gana columnas `marca`/`ean`: bases
+existentes deben re-seedear (`npm run seed` recrea `app.sqlite`).
+(SPEC-22)
+
 ## Specs
 
 La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC declara origen → requisitos → contrato → implementación → tests:
@@ -89,11 +97,14 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-02 | Modelo de datos (schema idempotente, seed, WAL) |
 | SPEC-03 | API REST del dominio (contrato de endpoints, errores) |
 | SPEC-04 | Integración front ↔ back (`api.js`, mapeo de estados, reglas de UI) |
-| SPEC-05 | Reglas de negocio (umbral $100, `OC-NNN`, fórmula de cantidad) |
+| SPEC-05 | Reglas de negocio (umbral $50.000 — recalibrado en SPEC-22, `OC-NNN`, fórmula de cantidad) |
 | SPEC-06 | Seguridad y compliance (headers, rate limit, ~~uploads~~ — retirado en SPEC-20, `/privacidad`) |
 | SPEC-07 | Testing (suites y cobertura) |
 | SPEC-08 | Agente LangGraph (grafo, checkpoints, human-in-the-loop) |
 | SPEC-09 | DevEx y operación (scripts, Docker, CI, `.env`) |
+| … | SPEC-10→20 en `SPEC.md` (observabilidad, stress, performance del agente, higiene) |
+| SPEC-21 | Dataset externo: muestra de artículos retail-radar (`data/`) |
+| SPEC-22 | Catálogo interno de artículos (seed real desde el dataset, sku `MR#####`, marca/EAN) |
 
 ## Usuarios demo
 

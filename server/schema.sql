@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS productos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sku TEXT UNIQUE NOT NULL,
   nombre TEXT NOT NULL,
+  marca TEXT,
+  ean TEXT,
   categoria TEXT NOT NULL,
   stock_actual INTEGER NOT NULL DEFAULT 0,
   stock_minimo INTEGER NOT NULL,

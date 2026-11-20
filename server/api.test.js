@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 import { openDb } from './db.js';
 import { seedData } from './seed-data.js';
+import { UMBRAL_APROBACION } from './models/ordenes.model.js';
 
 let server;
 let base;
@@ -68,10 +69,15 @@ describe('GET /api/ordenes', () => {
     expect(body.pagination.total).toBe(esperadas);
     expect(body.data.every((o) => o.requiere_aprobacion === true)).toBe(true);
 
-    const resSearch = await get('/ordenes?search=Granja');
+    // Búsqueda por nombre de proveedor — el de OC-002 sale del seed
+    // (SPEC-22: proveedores reales por categoría, no hay 'Granja').
+    const oc2 = seedData.ordenes_compra.find((o) => o.orden_id === 'OC-002');
+    const provOc2 = seedData.proveedores.find((p) => p.id === oc2.proveedor_id).nombre;
+    const resSearch = await get(`/ordenes?search=${encodeURIComponent(provOc2)}`);
     const bodySearch = await resSearch.json();
-    expect(bodySearch.data).toHaveLength(1);
-    expect(bodySearch.data[0].orden_id).toBe('OC-002');
+    expect(bodySearch.data.length).toBeGreaterThan(0);
+    expect(bodySearch.data.every((o) => o.proveedor.nombre === provOc2)).toBe(true);
+    expect(bodySearch.data.some((o) => o.orden_id === 'OC-002')).toBe(true);
   });
 
   it('filtra por rango de fechas', async () => {
@@ -85,10 +91,11 @@ describe('GET /api/ordenes', () => {
   });
 
   it('ordena por monto_total ASC/DESC', async () => {
+    const montos = seedData.ordenes_compra.map((o) => o.monto_total);
     const desc = await (await get('/ordenes?sort=monto_total&order=DESC')).json();
-    expect(desc.data[0].orden_id).toBe('OC-007'); // $168 — el mayor
+    expect(desc.data[0].monto_total).toBe(Math.max(...montos));
     const asc = await (await get('/ordenes?sort=monto_total&order=ASC')).json();
-    expect(asc.data[0].orden_id).toBe('OC-001'); // $36 — el menor
+    expect(asc.data[0].monto_total).toBe(Math.min(...montos));
   });
 
   it('pagina con page/limit', async () => {
@@ -122,18 +129,23 @@ describe('GET /api/ordenes/:orden_id', () => {
     expect(res.status).toBe(200);
     const orden = await res.json();
     expect(orden.orden_id).toBe('OC-002');
+    // OC-002 del seed apunta a un artículo real generado (SPEC-22) —
+    // las expectativas se derivan del propio seed.
+    const oc2 = seedData.ordenes_compra.find((o) => o.orden_id === 'OC-002');
+    const prodOc2 = seedData.productos.find((p) => p.id === oc2.producto_id);
+    const provOc2 = seedData.proveedores.find((p) => p.id === oc2.proveedor_id);
     expect(orden.producto).toMatchObject({
-      sku: 'HUE003',
-      nombre: 'Huevos x12',
-      stock_actual: 8,
-      stock_minimo: 25,
-      estado: 'STOCK_BAJO',
+      sku: prodOc2.sku,
+      nombre: prodOc2.nombre,
+      stock_actual: prodOc2.stock_actual,
+      stock_minimo: prodOc2.stock_minimo,
+      estado: prodOc2.estado,
     });
     expect(orden.proveedor).toMatchObject({
-      nombre: 'Granja El Sol',
-      tiempo_entrega_dias: 2,
+      nombre: provOc2.nombre,
+      tiempo_entrega_dias: provOc2.tiempo_entrega_dias,
     });
-    expect(orden.monto_total).toBe(140);
+    expect(orden.monto_total).toBe(oc2.monto_total);
     expect(orden.analisis_ia).toBeTruthy();
   });
 
@@ -158,22 +170,35 @@ describe('GET /api/productos', () => {
   });
 
   it('filtra por estado, categoria, proveedor y búsqueda', async () => {
-    const critico = await (await get('/productos?estado=CRITICO')).json();
-    expect(critico.data).toHaveLength(1);
-    expect(critico.data[0].sku).toBe('ARR005');
+    // Catálogo real de 1.471 artículos (SPEC-22) — los conteos salen
+    // del seed, no de valores hardcodeados.
+    const esperadosCriticos = seedData.productos.filter((p) => p.stock_actual === 0).length;
+    const critico = await (await get('/productos?estado=CRITICO&limit=100')).json();
+    expect(critico.pagination.total).toBe(esperadosCriticos);
+    expect(critico.data.every((p) => p.stock_actual === 0)).toBe(true);
 
-    const bajo = await (await get('/productos?estado=STOCK_BAJO')).json();
+    const bajo = await (await get('/productos?estado=STOCK_BAJO&limit=100')).json();
+    const esperadosBajos = seedData.productos.filter(
+      (p) => p.stock_actual < p.stock_minimo && p.stock_actual > 0,
+    ).length;
+    expect(bajo.pagination.total).toBe(esperadosBajos);
     expect(bajo.data.every((p) => p.stock_actual < p.stock_minimo && p.stock_actual > 0)).toBe(true);
 
-    const aceites = await (await get('/productos?categoria=Aceites')).json();
-    expect(aceites.data).toHaveLength(2);
+    const cat = 'Almacén';
+    const almacen = await (await get(`/productos?categoria=${encodeURIComponent(cat)}`)).json();
+    expect(almacen.pagination.total).toBe(
+      seedData.productos.filter((p) => p.categoria === cat).length,
+    );
 
-    const prov = await (await get('/productos?proveedor_id=2')).json();
-    expect(prov.data).toHaveLength(3);
+    const prov = await (await get('/productos?proveedor_id=2&limit=100')).json();
+    expect(prov.pagination.total).toBe(
+      seedData.productos.filter((p) => p.proveedor_id === 2).length,
+    );
 
-    const search = await (await get('/productos?search=yerba')).json();
-    expect(search.data).toHaveLength(1);
-    expect(search.data[0].sku).toBe('YER002');
+    const search = await (await get('/productos?search=yerba&limit=100')).json();
+    const yerbas = seedData.productos.filter((p) => /yerba/i.test(p.nombre));
+    expect(search.pagination.total).toBe(yerbas.length);
+    expect(search.data.every((p) => /yerba/i.test(p.nombre))).toBe(true);
   });
 
   it('rechaza parámetros inválidos con 400', async () => {
@@ -219,36 +244,43 @@ describe('GET /api/dashboard/stats', () => {
 // --- Mutaciones: van después de las lecturas para no mover los totales ---
 
 describe('POST /api/ordenes', () => {
-  it('crea una orden bajo el umbral ($100) auto-aprobada con orden_id secuencial', async () => {
-    // producto 2: precio 1.80 → 10 uds = $18 < $100
-    const res = await post('/ordenes', { producto_id: 2, cantidad: 10 });
+  // Precios reales ARS (SPEC-22): el umbral es $50.000 — 1 unidad de
+  // cualquier artículo queda por debajo y auto-aprueba.
+  const prod1 = seedData.productos.find((p) => p.id === 1);
+  const cantidadSobreUmbral = Math.ceil(UMBRAL_APROBACION / prod1.precio_unitario);
+
+  it('crea una orden bajo el umbral ($50.000) auto-aprobada con orden_id secuencial', async () => {
+    const res = await post('/ordenes', { producto_id: 1, cantidad: 1 });
     expect(res.status).toBe(201);
     const { success, data } = await res.json();
     expect(success).toBe(true);
     expect(data.orden_id).toBe('OC-012'); // sigue al OC-011 del seed
-    expect(data.monto_total).toBeCloseTo(18, 2);
+    expect(data.monto_total).toBeCloseTo(prod1.precio_unitario, 2);
     expect(data.estado).toBe('APROBADA');
     expect(data.requiere_aprobacion).toBe(false);
     expect(data.aprobado_por).toBe('auto');
-    expect(data.proveedor.id).toBe(2); // proveedor tomado del producto
+    expect(data.proveedor.id).toBe(prod1.proveedor_id); // proveedor tomado del producto
   });
 
   it('crea una orden sobre el umbral que queda PENDIENTE_APROBACION', async () => {
-    // producto 3: precio 3.50 → 40 uds = $140 ≥ $100
-    const res = await post('/ordenes', { producto_id: 3, cantidad: 40, analisis_ia: 'test' });
+    const res = await post('/ordenes', {
+      producto_id: 1,
+      cantidad: cantidadSobreUmbral,
+      analisis_ia: 'test',
+    });
     expect(res.status).toBe(201);
     const { data } = await res.json();
     expect(data.orden_id).toBe('OC-013');
-    expect(data.monto_total).toBeCloseTo(140, 2);
+    expect(data.monto_total).toBeGreaterThanOrEqual(UMBRAL_APROBACION);
     expect(data.estado).toBe('PENDIENTE_APROBACION');
     expect(data.requiere_aprobacion).toBe(true);
     expect(data.aprobado_por).toBeNull();
   });
 
   it('respeta el override explícito de requiere_aprobacion', async () => {
-    const res = await post('/ordenes', { producto_id: 2, cantidad: 5, requiere_aprobacion: true });
+    const res = await post('/ordenes', { producto_id: 1, cantidad: 1, requiere_aprobacion: true });
     const { data } = await res.json();
-    expect(data.monto_total).toBeCloseTo(9, 2);
+    expect(data.monto_total).toBeCloseTo(prod1.precio_unitario, 2);
     expect(data.estado).toBe('PENDIENTE_APROBACION');
   });
 
@@ -263,13 +295,18 @@ describe('POST /api/ordenes', () => {
     ]) {
       expect((await post('/ordenes', body)).status).toBe(400);
     }
-    expect((await post('/ordenes', { producto_id: 999, cantidad: 5 })).status).toBe(404);
+    expect((await post('/ordenes', { producto_id: 999999, cantidad: 5 })).status).toBe(404);
   });
 });
 
 describe('POST /api/ordenes/:orden_id/aprobar y /rechazar', () => {
   const crearPendiente = async () => {
-    const res = await post('/ordenes', { producto_id: 3, cantidad: 40 });
+    // requiere_aprobacion explícito: no depende del monto ni del umbral
+    const res = await post('/ordenes', {
+      producto_id: 3,
+      cantidad: 40,
+      requiere_aprobacion: true,
+    });
     const { data } = await res.json();
     return data.orden_id;
   };
@@ -325,10 +362,12 @@ describe('POST /api/ordenes/:orden_id/aprobar y /rechazar', () => {
 
 describe('estado de producto recalculado al leer', () => {
   it('un UPDATE de stock se refleja sin tocar la columna estado', async () => {
-    // PAN005 quedó persistida como 'OK' pero le vaciamos el stock —
-    // la API debe reportar CRITICO recalculando, no el valor viejo.
-    db.prepare("UPDATE productos SET stock_actual = 0 WHERE sku = 'PAN005'").run();
-    const res = await get('/productos?search=PAN005');
+    // El artículo queda persistido como 'OK' pero le vaciamos el
+    // stock — la API debe reportar CRITICO recalculando, no el valor
+    // viejo de la columna.
+    const prod = seedData.productos.find((p) => p.estado === 'OK');
+    db.prepare('UPDATE productos SET stock_actual = 0 WHERE sku = ?').run(prod.sku);
+    const res = await get(`/productos?search=${prod.sku}`);
     const body = await res.json();
     expect(body.data[0].estado).toBe('CRITICO');
   });

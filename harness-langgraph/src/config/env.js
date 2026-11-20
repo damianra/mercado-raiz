@@ -32,7 +32,7 @@ export const config = {
    * (server/models/ordenes.model.js) — el backend lo re-deriva si
    * el flag no viene; mantener ambos valores iguales.
    */
-  umbralAprobacion: Number(required('UMBRAL_APROBACION', '100')),
+  umbralAprobacion: Number(required('UMBRAL_APROBACION', '50000')),
 
   /**
    * Triage heurístico (SPEC-12): si el coeficiente de variación de

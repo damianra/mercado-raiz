@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { calcularCantidad } from '../../src/langgraph/nodes/calcular-cantidad.js';
 import { decidirAprobacion } from '../../src/langgraph/nodes/decidir-aprobacion.js';
+import { config } from '../../src/config/env.js';
 
 const producto = (id, stock, minimo, precio, lead = 1) => ({
   id,
@@ -43,11 +44,12 @@ describe('calcular-cantidad', () => {
 });
 
 describe('decidir-aprobacion', () => {
+  const u = config.umbralAprobacion;
   const state = {
     productosBajos: [producto(1, 0, 1, 1), producto(2, 0, 1, 1)],
     decisionPorProducto: {
-      1: { cantidad: 10, monto_total: 99.99 },
-      2: { cantidad: 10, monto_total: 100 },
+      1: { cantidad: 10, monto_total: u - 0.01 },
+      2: { cantidad: 10, monto_total: u },
     },
   };
 

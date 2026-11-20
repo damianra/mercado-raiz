@@ -210,10 +210,11 @@ del seed, búsqueda/filtro, modal + aprobar, skeleton, vacío, error).
 - **R5.2** `monto_total = round(cantidad × precio_unitario, 2)` —
   calculado server-side al crear, nunca confiado al body.
 - **R5.3** Umbral de aprobación: `UMBRAL_APROBACION = 100`
-  (`ordenes.model.js:13`). `monto_total >= $100` →
-  `requiere_aprobacion=1` + `PENDIENTE_APROBACION`; `< $100` →
-  `APROBADA` automática. El body puede forzar `requiere_aprobacion=true`
-  (override explícito).
+  (`ordenes.model.js:13`) — **recalibrado a $50.000 en SPEC-22** (el
+  catálogo real en ARS hacía que toda orden superara $100).
+  `monto_total >= umbral` → `requiere_aprobacion=1` +
+  `PENDIENTE_APROBACION`; `< umbral` → `APROBADA` automática. El body
+  puede forzar `requiere_aprobacion=true` (override explícito).
 - **R5.4** `orden_id` secuencial `OC-NNN`: `MAX(CAST(SUBSTR(orden_id,4)
   AS INT)) + 1`, generado **dentro de la transacción de insert** por
   concurrencia.
@@ -1320,6 +1321,102 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 
 ---
 
+## SPEC-22 · Catálogo interno de artículos (seed real desde retail-radar)
+
+- **Fecha:** 2026-11-20
+- **Origen:** pedido del usuario — armar la base de artículos interna
+  de Mercado Raíz (con código de artículo propio) sobre la muestra de
+  SPEC-21; es el universo que evalúan las pruebas y el agente.
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Decisiones (confirmadas con el usuario)
+
+- **Reemplaza** el seed demo (11 productos, 8 proveedores, OC-001..011,
+  historial): `productos` pasa a ser el catálogo real de 1.471
+  artículos. Las órdenes e historial se regeneran sobre artículos
+  reales.
+- **Sin vínculo a retail-radar** en la DB: no se persiste
+  `product_id` ni sku/precio por cadena — el CSV queda como asset de
+  referencia. Los campos internos son sku propio, nombre, marca, EAN,
+  categoría, precio propio, stock.
+- **Precio propio determinístico pero variable**: no es el mínimo del
+  mercado — cada artículo toma un factor pseudoaleatorio (hash del
+  EAN, fijo) sobre el rango `[min_price, max_price]` observado entre
+  cadenas, extendido a `[0.88·base, 1.18·base)` con
+  `base = (min+max)/2`. Resultado medido: ~8% por debajo del mínimo,
+  ~71% dentro del rango, ~21% por encima del máximo — habilita
+  análisis de competitividad futuro.
+- **Stock determinístico** (hash del EAN): ~10% `CRITICO`
+  (stock 0), ~20% `STOCK_BAJO` (`< min`), resto `OK`
+  (`min`–`4·min`). `stock_minimo` ∈ [5,20]. Da trabajo real al agente
+  de reposición en cada corrida.
+- **Umbral recalibrado a escala ARS**: con precios reales,
+  `UMBRAL_APROBACION = 100` dejaba muerto el camino auto-aprobado
+  (toda orden supera $100). Se sube a $50.000 en backend y harness.
+- **Breaking para DBs existentes**: `productos` gana columnas
+  `marca`/`ean` — requiere `npm run seed` (recrea `app.sqlite`).
+
+### Requisitos
+
+- **R22.1** `server/seed-articulos.js`: parsea
+  `data/articles_sample.csv` (22 columnas por fila; falla ruidoso si
+  no) y genera las 1.471 filas de `productos` — `id` = orden del CSV
+  (1..1471), `sku` = `MR` + id paddeado a 5 (`MR00001`),
+  `nombre` = `canonical_name`, `marca` = `brand`, `ean`,
+  `categoria` = `top_category` normalizado
+  (`Desayuno y merienda` → `Desayuno y Merienda`), `precio_unitario`,
+  `stock_*`, `estado` coherente (regla R5.1), `proveedor_id` por
+  categoría, `ubicacion` = pasillo por categoría. Sin
+  `fecha_actualizacion` (default `datetime('now')`). ✅
+- **R22.2** Determinismo: mismo CSV → mismas filas (PRNG por hash
+  FNV-1a del EAN, sin `Math.random` ni fechas). ✅
+- **R22.3** `server/schema.sql`: `productos` gana `marca TEXT`,
+  `ean TEXT`; `productos.model.js` los expone en `mapProducto`. ✅
+- **R22.4** `proveedores` — 7 nuevos alineados a categoría:
+  Mayorista Central (Almacén + Desayuno y Merienda, 3d), Bebidas del
+  Litoral (Bebidas, 2d), Perfumería Integral (Perfumería, 4d),
+  Limpieza y Hogar (Limpieza, 3d), Frescos del Sur (Frescos, 1d),
+  Congelados Patagónicos (Congelados, 5d), Huerta Don Mario (Frutas y
+  Verduras, 1d). ✅
+- **R22.5** `ordenes_compra` — OC-001..011 regeneradas sobre
+  artículos reales en `CRITICO`/`STOCK_BAJO`: `precio_unitario` =
+  precio propio del artículo, `cantidad` = `2·min − actual` (fórmula
+  R5.5), `monto_total` recalculado; mismo mix de estados que antes
+  (4 pendientes, 4 aprobadas, 1 rechazada, 1 enviada, 1 recibida) y
+  mismas fechas (tests de filtros por fecha). ✅
+- **R22.6** `historial_stock` — movimientos regenerados sobre los
+  mismos artículos (VENTA/AJUSTE/REPOSICION/DEVOLUCION coherentes con
+  el stock sembrado). ✅
+- **R22.7** Tests acoplados al seed demo actualizados:
+  `api.test.js` (búsqueda por proveedor, sku, montos extremos),
+  `e2e/ordenes.spec.js` (nombre de OC-001); nuevo
+  `seed-articulos.test.js` (1.471 filas, formato sku, determinismo,
+  coherencia estado, banda de precio, categorías). ✅
+- **R22.8** Docs: README (catálogo real + regla "re-seed tras cambio
+  de schema"), `data/README.md` referenciado como origen. ✅
+- **R22.9** `UMBRAL_APROBACION` (R5.3): `100` → `50000` en
+  `ordenes.model.js`, `harness-langgraph/src/config/env.js` (default)
+  y `.env.example`. Las órdenes seed mantienen el patrón original de
+  estados (incluye auto-aprobadas históricas). ✅
+
+### Observaciones
+
+- El seed fija `requiere_aprobacion`/`estado` por fila (es data
+  histórica, no evalúa la regla): las auto-aprobadas del demo
+  representan el flujo aunque hoy su monto superaría el umbral.
+
+### Tareas
+
+- **T22.1** Generador + schema + seed + tests + docs en un solo PR.
+
+### Verificado por
+
+`npx vitest run` verde (incluye `seed-articulos.test.js`),
+`npm run seed` reporta `productos: 1471 filas`, smoke de
+`GET /api/productos` con datos reales.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -1340,6 +1437,7 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 | (post-gen) | SPEC-14 ✅ | `integrations/productos.client.js` | `paginacion-productos.test.js` (5) |
 | (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
 | (post-gen) | SPEC-16 ✅ | `harness/analisis-cache.js`, `utils/{concurrencia,llm-json}.js`, `langgraph/nodes/*`, `server/models|controllers|routes/ordenes*` | `analisis-cache`, `concurrencia`, `crear-orden`, `ordenes-batch` (22 tests) + benchmark |
+| (post-gen) | SPEC-22 ✅ | `server/seed-articulos.js`, `server/seed-data.js`, `server/schema.sql`, `server/models/{productos,ordenes}.model.js` | `seed-articulos.test.js` (8) + `api.test.js`, `ordenes-batch.test.js`, e2e actualizados |
 
 ## Anexo B — Divergencias brief ↔ implementación
 

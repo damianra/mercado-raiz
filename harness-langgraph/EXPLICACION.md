@@ -10,7 +10,7 @@ dos piezas con nombres parecidos pero roles distintos:
 En una frase: **el agente detecta productos con stock bajo, pide al
 LLM que estime la demanda (saltándolo cuando las ventas son
 estables), calcula cuánto comprar, crea las órdenes de compra y
-termina — las que superan los $100 quedan pendientes en el sistema
+termina — las que superan los $50.000 quedan pendientes en el sistema
 y el humano las aprueba desde el dashboard, sin que el agente
 tenga que esperar despierto (SPEC-12).**
 
@@ -142,7 +142,7 @@ En criollo, la conversación es:
 2. **El agente trabaja solo**: lee productos del backend por HTTP,
    consulta al LLM local, crea órdenes en el backend.
 3. **El agente cierra**: las órdenes que requieren aprobación
-   (≥ $100) quedan `PENDIENTE_APROBACION` en la base — la corrida
+   (≥ $50.000) quedan `PENDIENTE_APROBACION` en la base — la corrida
    termina sin esperar a nadie (SPEC-12).
 4. **El humano actúa cuando quiere**: aprueba/rechaza desde el
    dashboard (:5173). **Nunca habla con el agente** — la decisión

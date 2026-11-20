@@ -10,7 +10,7 @@ Mercado Raíz con un **LLM local** (Ollama + qwen3:8b).
 Detecta productos con stock bajo → analiza su demanda con el LLM
 (triage heurístico: las ventas estables se estiman sin LLM, SPEC-12)
 → calcula cuánto reponer → crea las órdenes de compra en el backend
-→ **termina**. Las que superan $100 quedan `PENDIENTE_APROBACION`:
+→ **termina**. Las que superan $50.000 quedan `PENDIENTE_APROBACION`:
 el humano las aprueba/rechaza desde el dashboard por REST del
 backend — el grafo ya no espera (aprobación desacoplada, SPEC-12).
 

@@ -10,7 +10,7 @@ export const ESTADOS_ORDEN = [
 ];
 
 // Monto a partir del cual una orden exige aprobación humana.
-export const UMBRAL_APROBACION = 100;
+export const UMBRAL_APROBACION = 50000; // ARS — recalibrado en SPEC-22 (era 100, escala demo)
 
 export const SORT_COLUMNS = {
   fecha_creacion: 'o.fecha_creacion',

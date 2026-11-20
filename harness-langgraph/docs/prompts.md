@@ -74,7 +74,7 @@ orden — lo que lee el humano en el modal del dashboard.
 
 - **Calcular la cantidad a ordenar**: es aritmética con una regla
   de negocio (cobertura, mínimos). Código — exacto y explicable.
-- **Decidir la aprobación**: es una política ($100). Código.
+- **Decidir la aprobación**: es una política ($50.000). Código.
 - **Crear la orden**: es escritura en sistema real. HTTP.
 
 Regla práctica para contar en la demo: *el LLM maneja incertidumbre

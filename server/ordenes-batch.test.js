@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 import { openDb } from './db.js';
 import { seedData } from './seed-data.js';
+import { UMBRAL_APROBACION } from './models/ordenes.model.js';
 
 let server;
 let base;
@@ -51,7 +52,9 @@ describe('POST /api/ordenes/batch', () => {
     expect(body.data[1].estado).toBe('PENDIENTE_APROBACION');
     // sin flag, el monto decide (>= UMBRAL_APROBACION → pendiente)
     const monto3 = body.data[2].monto_total;
-    expect(body.data[2].estado).toBe(monto3 >= 100 ? 'PENDIENTE_APROBACION' : 'APROBADA');
+    expect(body.data[2].estado).toBe(
+      monto3 >= UMBRAL_APROBACION ? 'PENDIENTE_APROBACION' : 'APROBADA',
+    );
     expect(totalOrdenes()).toBe(antes + 3);
   });
 
