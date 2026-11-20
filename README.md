@@ -70,6 +70,15 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 
 Contrato completo en `SPEC.md` → SPEC-03.
 
+## Datos externos
+
+`data/articles_sample.csv` — muestra de 1.471 artículos canónicos
+presentes y activos en las 4 cadenas scrapeadas por retail-radar
+(Día, Coto, Carrefour, La Anónima), con SKU y precio por cadena.
+Base para las comparaciones del mercado propio. Diccionario de
+columnas en `data/README.md`; se regenera con
+`data/export_sample.sql`. (SPEC-21)
+
 ## Specs
 
 La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC declara origen → requisitos → contrato → implementación → tests:
