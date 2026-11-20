@@ -1269,6 +1269,53 @@ Revisión por sub-agente del PR + `npx vitest run` verde + grep
 
 ---
 
+## SPEC-21 · Dataset externo: muestra de artículos retail-radar
+
+- **Fecha:** 2026-11-20
+- **Estado global:** ✅ implementada — ver "Verificado por"
+
+### Contexto técnico
+
+Los precios de competencia los recolecta el pipeline aparte
+(retail-radar → PostgreSQL, vistas gold). Para habilitar las
+comparaciones del mercado propio se incorpora una muestra congelada
+como asset del repo: los 1.471 artículos canónicos (`products`)
+activos y matcheados en las 4 cadenas scrapeadas (Día, Coto,
+Carrefour, La Anónima). Vive bajo `data/` para que cualquier
+consumidor (esta app, seeds futuros, herramientas externas) lo
+descargue directo del repo.
+
+Decisiones de calidad aplicadas en la exportación:
+
+- Coto precia por sucursal: `coto_price` = moda de sus 35 sucursales
+  (`store_price_current`) cuando el item no tiene `last_price`
+  nacional (nulos 89 → 5).
+- Precios `0` → NULL (4 items de Carrefour listados a 0).
+- `min_price`/`max_price`/`spread_pct` recalculados sobre los precios
+  efectivos (la vista gold los computa sin el fallback de Coto).
+
+### Requisitos
+
+- **R21.1** `data/articles_sample.csv` — 1.471 filas + header:
+  `product_id` canónico, identidad (nombre/marca/tamaño/unidad/EAN/
+  `top_category`), sku/price/list_price por cadena, min/max/spread. ✅
+- **R21.2** `data/export_sample.sql` — query exacta para regenerar
+  la muestra contra la DB de retail-radar. ✅
+- **R21.3** `data/README.md` — diccionario de columnas y notas de
+  calidad del dato. ✅
+- **R21.4** README raíz: sección "Datos externos". ✅
+
+### Tareas
+
+- **T21.1** Alta del dataset + docs en un solo PR.
+
+### Verificado por
+
+Revisión por sub-agente del PR + integridad del CSV (1.471 filas;
+nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
