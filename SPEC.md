@@ -123,10 +123,17 @@ seedada), `server/app.test.js`, e2e (consume datos reales del seed).
 | POST | `/api/ordenes` | Crea orden (`producto_id`, `cantidad`, `requiere_aprobacion?`, `analisis_ia?`) → 201 | 400 body, 404 producto |
 | POST | `/api/ordenes/:orden_id/aprobar` | Marca `APROBADA` + `aprobado_por` + `fecha_aprobacion` | 404, 409 no-pendiente |
 | POST | `/api/ordenes/:orden_id/rechazar` | Marca `RECHAZADA` + `motivo` (obligatorio) | 400, 404, 409 |
+
 | GET | `/api/productos` | Lista paginada. Query: `estado`, `categoria`, `proveedor_id`, `search`, `page`, `limit` (≤100). `estado` recalculado al leer | 400 |
 | GET | `/api/dashboard/stats` | KPIs (ver shape abajo) | — |
 | GET | `/api/historial` | Movimientos de stock. Query: `producto_id`, `tipo` (`VENTA\|REPOSICION\|AJUSTE\|DEVOLUCION`), `desde`, `hasta`, `page`, `limit` | 400 |
 | ~~POST~~ | ~~`/api/uploads`~~ | ~~`multipart file` (image/* ≤5MB, whitelist ext, sin SVG) → `{ url }`~~ — **retirado en SPEC-20** (sin consumidor) | ~~400~~ |
+
+*Nota (SPEC-23/24): desde SPEC-23 toda la tabla exige `Authorization:
+Bearer` salvo `/api/auth/*` y `/api/health`; `aprobado_por` sale del
+token, no del body. Se agregan las rutas `/api/auth/*` (login,
+refresh, logout, me, cambiar-password) y `/api/usuarios/*` (CRUD
+solo ADMIN) — contrato completo en esos SPECs.*
 
 ### Requisitos
 
@@ -224,7 +231,9 @@ del seed, búsqueda/filtro, modal + aprobar, skeleton, vacío, error).
   cantidad exacta la calcula código determinista.
 - **R5.6** Resolver orden ya resuelta → 409 (la UI además oculta
   acciones en no-pendientes).
-- **R5.7** `aprobado_por`/`rechazado_por` default `'sistema'`;
+- **R5.7** ~~`aprobado_por`/`rechazado_por` default `'sistema'`~~ —
+  **reemplazado por SPEC-23**: salen del JWT del usuario autenticado,
+  el body ya no los setea;
   strings de entrada recortados por `capString` (200/500 chars).
 
 ### Verificado por
@@ -268,8 +277,9 @@ update), `harness-langgraph/tests/nodes/calculo-y-decision.test.js`
 - **R6.8** ~~`harness-notify.js`: tras aprobar/rechazar, el backend
   dispara `POST $HARNESS_URL/resume`~~ — **reemplazado por SPEC-12**:
   la aprobación es REST puro, el backend ya no notifica al agente.
-- **R6.9** Sin auth: la tabla `usuarios` existe pero no hay login —
-  `USUARIO_DEMO` hardcodeado en el cliente. Alcance demo.
+- **R6.9** ~~Sin auth: la tabla `usuarios` existe pero no hay login —
+  `USUARIO_DEMO` hardcodeado en el cliente. Alcance demo.~~ —
+  **superseded por SPEC-23**: login JWT + refresh rotativo + roles.
 - **R6.10** Secretos solo por `.env` (gitignored) + `.env.example`;
   nada de secretos en bundle ni logs.
 
@@ -1417,6 +1427,196 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 
 ---
 
+## SPEC-23 · Autenticación JWT (login, refresh, middleware)
+
+- **Fecha:** 2026-11-21
+- **Origen:** pedido del usuario — login profesional seguro según
+  normativas (OWASP ASVS + Ley 25.326). Reemplaza `USUARIO_DEMO`
+  hardcodeado por sesiones reales con roles.
+- **Estado global:** 📋 especificada — pendiente de implementación
+
+### Decisiones
+
+- **JWT corto en memoria + refresh opaco rotativo en cookie
+  httpOnly.** No localStorage (exfiltrable por XSS); no sesiones
+  opacas para el access (un solo backend, lookup innecesario). El
+  refresh sí persiste hasheado porque la revocación importa.
+- **Hashing argon2id** (`argon2`, m=64MB, t=3, p=4); fallback
+  documentado: `crypto.scrypt` nativo (N=2¹⁴, r=8, p=1) +
+  `timingSafeEqual` si el nativo no compila.
+- **Sin oráculo de usuarios**: `401` genérica idéntica para email
+  inexistente y password malo; comparación timing-safe.
+- **`token_version` se verifica contra DB por request**: lookup
+  indexado barato que compra revocación instantánea de JWTs —
+  tradeoff aceptado a cambio de no mantener sesiones opacas.
+- **El agente `harness-langgraph` es consumidor de primera clase**:
+  se autentica con **cuenta de servicio** (rol nuevo `SERVICIO` —
+  lectura + crear órdenes, sin aprobar/rechazar) vía
+  `AGENTE_EMAIL`/`AGENTE_PASSWORD` en su `.env`; `backend-client.js`
+  hace login al boot y re-login en 401/expiración.
+- **Breaking schema**: `usuarios` gana 5 columnas + tabla
+  `refresh_tokens` + rol `SERVICIO` en el CHECK → requiere
+  `npm run seed`.
+
+### Requisitos
+
+- **R23.1** `schema.sql`: `usuarios` += `password_hash NOT NULL`,
+  `intentos_fallidos DEFAULT 0`, `bloqueado_hasta`, `ultimo_login`,
+  `token_version DEFAULT 0`; `rol` CHECK gana `'SERVICIO'`. Nueva
+  tabla `refresh_tokens` (`usuario_id`, `token_hash` SHA-256,
+  `familia`, `expira_en`, `revocado`, `user_agent`, `ip`,
+  `creado_en`).
+- **R23.2** Rutas `server/routes/auth.js` (auto-mount `/api/auth`):
+  - `POST /login` `{email, password}` → `200 {access_token, usuario{}}`
+    + `Set-Cookie` refresh; `401` genérica; `429` por rate limit.
+  - `POST /refresh` (cookie) → rota el refresh + nuevo access.
+  - `POST /logout` → revoca el refresh actual.
+  - `GET /me` → `200` usuario actual / `401` sin token válido.
+  - `POST /cambiar-password` `{actual, nueva}` (autenticado) →
+    `token_version++` + revoca **todos** sus refresh incluido el de
+    la sesión actual → el cliente vuelve a `/login`.
+- **R23.3** Password ≥12 chars (NIST 800-63 — sin reglas de
+  composición forzadas).
+- **R23.4** JWT HS256 vía `jose`, payload mínimo
+  `{sub, rol, token_version}`, `exp=15min`. `JWT_SECRET` en `.env`
+  y placeholder en `.env.example`; nunca en logs ni en el bundle.
+- **R23.5** Refresh: 256-bit `crypto.randomBytes`; solo se persiste
+  su SHA-256; cookie `HttpOnly; Secure(prod); SameSite=Strict;
+  Path=/api/auth`; exp 7 días; rotación por uso; **reuse detection** —
+  un refresh ya usado revoca la familia completa.
+- **R23.6** Middleware `requireAuth` (Bearer válido +
+  `token_version` vs DB) y `requireRole(...roles)`. Se aplica a todas
+  las rutas del dominio salvo `/api/auth/login`, `/api/auth/refresh`
+  y `/api/health`. `aprobado_por`/`rechazado_por` salen del token —
+  el body ya no los setea.
+- **R23.7** Seguridad del login: lockout por cuenta (5 fallos →
+  `bloqueado_hasta = +15min`; contador resetea en éxito); rate limit
+  propio `POST /login` vía `AUTH_RATE_LIMIT` (default 10/min/IP,
+  configurable — CI/e2e comparten IP; **declarada en `.env.example`**
+  junto a `JWT_SECRET`); CSRF double-submit (`X-CSRF-Token` header
+  con valor devuelto por `POST /login`) en endpoints que consumen la
+  cookie.
+- **R23.8** Front: ruta `/login` (email + password + checkbox
+  **no pre-tildado** "Acepto la política de privacidad" — regla del
+  proyecto; submit `disabled` hasta válido); `src/lib/auth.js` con
+  token en memoria + `me()` al boot (silent refresh vía cookie);
+  `api.js` adjunta `Authorization: Bearer`, en 401 → un refresh →
+  retry una vez; guard de rutas (sin sesión → `/login`); logout
+  limpia memoria + POST `/logout`. `USUARIO_DEMO` se elimina y el
+  `aprobado_por` sale de la sesión.
+- **R23.9** Seed: `password_hash` para los 3 usuarios demo; README
+  "Usuarios demo" documenta email + password dev + flujo login.
+- **R23.10** Compliance: `/privacidad` suma datos de cuenta
+  (credenciales hasheadas, refresh tokens retenidos 7 días,
+  `ultimo_login`) — minimización Ley 25.326 (JWT solo `sub`+`rol`).
+- **R23.11** Agente (harness): usuario servicio
+  `agente@mercadorai.com` rol `SERVICIO` en el seed; credenciales
+  `AGENTE_EMAIL`/`AGENTE_PASSWORD` en `harness-langgraph/.env` +
+  `.env.example`; `integrations/backend-client.js` hace login al
+  primer request, guarda el access token en memoria y re-login en
+  401/expiración. Los scripts (`stress-llm.mjs`,
+  `smoke-rate-limit.mjs`) pasan por el mismo cliente — siguen
+  funcionando.
+- **R23.12** Deps nuevas: `jose` (JWT) + `argon2` (hashing) vía
+  `npm add` — versiones con ≥7 días de publicación.
+- **R23.13** Tests existentes: `api.test.js`, `ordenes-batch.test.js`
+  y e2e pasan a requerir sesión — helper `loginComo(rol)` que hace
+  login una vez por suite y adjunta el Bearer; `api-client.test.js`
+  adapta el flujo a `auth.js`.
+
+### Tareas
+
+- **T23.1** Núcleo auth backend: schema + endpoints `/api/auth/*` +
+  middleware aplicado a rutas existentes + cuenta servicio agente +
+  seed passwords + tests.
+- **T23.2** Front login + integración (`auth.js`, guards, quita
+  `USUARIO_DEMO`, e2e login→aprobar→logout).
+
+### Verificado por
+
+Vitest: login 200/401/429/lockout, refresh rota + reuse revoca
+familia, logout revoca, `me` 401, `requireRole` 403, `token_version`
+invalida JWTs tras cambio de password. E2E login → aprobar con
+usuario real → logout → redirect. Review por sub-agente del PR.
+
+---
+
+## SPEC-24 · Gestión de usuarios y roles (admin)
+
+- **Fecha:** 2026-11-21
+- **Origen:** pedido del usuario — endpoints para agregar, editar y
+  eliminar usuarios con manejo de roles. Depende de SPEC-23 (auth +
+  matriz de roles base).
+- **Estado global:** 📋 especificada — pendiente de implementación
+
+### Decisiones
+
+- **Soft delete**: `activo=0` + revocación de tokens — preserva la
+  auditoría (`historial_stock.usuario`, `ordenes.aprobado_por`
+  referencian emails históricos). `email` sigue UNIQUE: re-crear un
+  email borrado → `409` con sugerencia de reactivar vía `PATCH`.
+- **Solo ADMIN** gestiona usuarios; un admin no puede borrarse,
+  desactivarse ni quitarse el rol a sí mismo, ni dejar al sistema
+  sin el último ADMIN activo (`409`) — el guard aplica tanto a
+  `DELETE` como a `PATCH` (`rol`/`activo`).
+- **Crear órdenes** no exige rol elevado: cualquier usuario
+  autenticado (incluido `SERVICIO`) puede `POST /api/ordenes` y
+  `/batch`.
+
+### Matriz de roles
+
+| Rol | Alcance |
+|---|---|
+| `ADMIN` | Todo + gestión de usuarios (`/api/usuarios/*`) |
+| `GERENTE` | Aprobar/rechazar órdenes + lectura del dominio |
+| `APROBADOR` | Aprobar/rechazar órdenes + lectura del dominio |
+| `SERVICIO` | Cuenta del agente (R23.11): lectura + crear órdenes — no aprueba/rechaza ni gestiona usuarios |
+
+### Requisitos
+
+- **R24.1** `GET /api/usuarios` (ADMIN): paginado `page/limit`
+  (mismo contrato que `/api/productos`), filtros `rol`, `activo`,
+  `search` (email/nombre). La respuesta nunca incluye
+  `password_hash` ni campos de seguridad (whitelist explícita).
+- **R24.2** `POST /api/usuarios` (ADMIN): `{email, nombre, rol,
+  password}` → `201` usuario; `409` email duplicado; `400` con
+  detalle si rol ∉ ENUM o password <12 chars. Hash argon2id igual
+  que login.
+- **R24.3** `PATCH /api/usuarios/:id` (ADMIN): edita `nombre`,
+  `email`, `rol`, `activo`. Cambio de `rol` o `activo=0` →
+  `token_version++` + revoca sus refresh tokens (cierra sesiones).
+  Los guards de self y último ADMIN aplican igual que en R24.4.
+- **R24.4** `DELETE /api/usuarios/:id` (ADMIN): soft delete
+  (`activo=0`) + `token_version++` + revoca tokens; `409` si el
+  target es self o el último ADMIN activo.
+- **R24.5** `requireRole` aplicado por endpoint según la matriz:
+  `/api/usuarios/*` solo ADMIN; aprobar/rechazar exige APROBADOR+;
+  lecturas y creación de órdenes cualquier autenticado.
+- **R24.6** Front (solo ADMIN — regla UI n°2: sin acceso, la sección
+  no se renderiza): pantalla "Usuarios" con tabla paginada, alta
+  (`FormShell`, password ≥12, submit `disabled` hasta válido),
+  edición con gate de cambios reales, activar/desactivar,
+  `EmptyState`/`ErrorState` ante vacío/falla.
+- **R24.7** Contrato de errores consistente con el dominio:
+  `400` validación, `401` sin sesión, `403` rol insuficiente,
+  `404` usuario inexistente, `409` conflictos (email, self, último
+  admin).
+
+### Tareas
+
+- **T24.1** Backend CRUD `/api/usuarios` + matriz de roles +
+  revocación + tests.
+- **T24.2** Front pantalla admin de usuarios + e2e.
+
+### Verificado por
+
+Vitest: CRUD completo, 403 no-admin, email duplicado, self-delete,
+último admin, revocación tras cambio de rol/desactivación, whitelist
+sin `password_hash`. E2E: admin crea/edita/desactiva usuario; usuario
+sin rol no ve la sección. Review por sub-agente del PR.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -1447,7 +1647,7 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 | 7 endpoints | 8 | `GET /api/historial` viene del skeleton, no del brief; `POST /api/uploads` también venía del skeleton — retirado en SPEC-20 |
 | `aprobado_por: "auto"` en mock | default `'sistema'` | El mock del brief usaba "auto"; el controller defaultea `'sistema'` |
 | `rechazado_por` en body de rechazo | aceptado, default `'sistema'` | Consistente con aprobar |
-| Tabla `usuarios` con roles | Sin endpoints ni login | Persistida y seedeada; solo `USUARIO_DEMO` en el cliente. Alcance demo |
+| Tabla `usuarios` con roles | ~~Sin endpoints ni login~~ → login JWT + CRUD usuarios | ~~Persistida y seedeada; solo `USUARIO_DEMO` en el cliente. Alcance demo~~ — superseded por SPEC-23/24 |
 | Sidebar con 5 secciones | 2 ítems (Dashboard, Órdenes) | Regla UI n°2: nav sin destino real no se renderiza |
 | `src/data/orders.js` mock | Residual | El mock se reemplazó; queda `ESTADOS` (badges) + `formatMoney` |
 | Fórmula `2×min − actual` | Igual + cobertura de demanda del agente | El agente añade `demanda × (lead + 7)` por encima del brief original |
