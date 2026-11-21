@@ -1417,6 +1417,162 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 
 ---
 
+## SPEC-23 · Autenticación JWT (login, refresh, middleware)
+
+- **Fecha:** 2026-11-21
+- **Origen:** pedido del usuario — login profesional seguro según
+  normativas (OWASP ASVS + Ley 25.326). Reemplaza `USUARIO_DEMO`
+  hardcodeado por sesiones reales con roles.
+- **Estado global:** 📋 especificada — pendiente de implementación
+
+### Decisiones
+
+- **JWT corto en memoria + refresh opaco rotativo en cookie
+  httpOnly.** No localStorage (exfiltrable por XSS); no sesiones
+  opacas para el access (un solo backend, lookup innecesario). El
+  refresh sí persiste hasheado porque la revocación importa.
+- **Hashing argon2id** (`argon2`, m=64MB, t=3, p=4); fallback
+  documentado: `crypto.scrypt` nativo (N=2¹⁴, r=8, p=1) +
+  `timingSafeEqual` si el nativo no compila.
+- **Sin oráculo de usuarios**: `401` genérica idéntica para email
+  inexistente y password malo; comparación timing-safe.
+- **Breaking schema**: `usuarios` gana 5 columnas + tabla
+  `refresh_tokens` → requiere `npm run seed`.
+
+### Requisitos
+
+- **R23.1** `schema.sql`: `usuarios` += `password_hash NOT NULL`,
+  `intentos_fallidos DEFAULT 0`, `bloqueado_hasta`, `ultimo_login`,
+  `token_version DEFAULT 0`. Nueva tabla `refresh_tokens`
+  (`usuario_id`, `token_hash` SHA-256, `familia`, `expira_en`,
+  `revocado`, `user_agent`, `ip`, `creado_en`).
+- **R23.2** Rutas `server/routes/auth.js` (auto-mount `/api/auth`):
+  - `POST /login` `{email, password}` → `200 {access_token, usuario{}}`
+    + `Set-Cookie` refresh; `401` genérica; `429` por rate limit.
+  - `POST /refresh` (cookie) → rota el refresh + nuevo access.
+  - `POST /logout` → revoca el refresh actual.
+  - `GET /me` → `200` usuario actual / `401` sin token válido.
+  - `POST /cambiar-password` `{actual, nueva}` (autenticado) →
+    `token_version++` + revoca todos sus refresh.
+- **R23.3** Password ≥12 chars (NIST 800-63 — sin reglas de
+  composición forzadas).
+- **R23.4** JWT HS256 vía `jose`, payload mínimo
+  `{sub, rol, token_version}`, `exp=15min`. `JWT_SECRET` en `.env`
+  y placeholder en `.env.example`; nunca en logs ni en el bundle.
+- **R23.5** Refresh: 256-bit `crypto.randomBytes`; solo se persiste
+  su SHA-256; cookie `HttpOnly; Secure(prod); SameSite=Strict;
+  Path=/api/auth`; exp 7 días; rotación por uso; **reuse detection** —
+  un refresh ya usado revoca la familia completa.
+- **R23.6** Middleware `requireAuth` (Bearer válido +
+  `token_version` vs DB) y `requireRole(...roles)`. Se aplica a todas
+  las rutas del dominio salvo `/api/auth/login`, `/api/auth/refresh`
+  y `/api/health`. `aprobado_por`/`rechazado_por` salen del token —
+  el body ya no los setea.
+- **R23.7** Seguridad del login: lockout por cuenta (5 fallos →
+  `bloqueado_hasta = +15min`; contador resetea en éxito); rate limit
+  propio `POST /login` vía `AUTH_RATE_LIMIT` (default 10/min/IP,
+  configurable — CI/e2e comparten IP); CSRF double-submit
+  (`X-CSRF-Token` header) en endpoints que consumen la cookie.
+- **R23.8** Front: ruta `/login` (email + password + checkbox
+  **no pre-tildado** "Acepto la política de privacidad" — regla del
+  proyecto; submit `disabled` hasta válido); `src/lib/auth.js` con
+  token en memoria + `me()` al boot (silent refresh vía cookie);
+  `api.js` adjunta `Authorization: Bearer`, en 401 → un refresh →
+  retry una vez; guard de rutas (sin sesión → `/login`); logout
+  limpia memoria + POST `/logout`. `USUARIO_DEMO` se elimina y el
+  `aprobado_por` sale de la sesión.
+- **R23.9** Seed: `password_hash` para los 3 usuarios demo; README
+  "Usuarios demo" documenta email + password dev + flujo login.
+- **R23.10** Compliance: `/privacidad` suma datos de cuenta
+  (credenciales hasheadas, refresh tokens retenidos 7 días,
+  `ultimo_login`) — minimización Ley 25.326 (JWT solo `sub`+`rol`).
+
+### Tareas
+
+- **T23.1** Núcleo auth backend: schema + endpoints `/api/auth/*` +
+  middleware aplicado a rutas existentes + seed passwords + tests.
+- **T23.2** Front login + integración (`auth.js`, guards, quita
+  `USUARIO_DEMO`, e2e login→aprobar→logout).
+
+### Verificado por
+
+Vitest: login 200/401/429/lockout, refresh rota + reuse revoca
+familia, logout revoca, `me` 401, `requireRole` 403, `token_version`
+invalida JWTs tras cambio de password. E2E login → aprobar con
+usuario real → logout → redirect. Review por sub-agente del PR.
+
+---
+
+## SPEC-24 · Gestión de usuarios y roles (admin)
+
+- **Fecha:** 2026-11-21
+- **Origen:** pedido del usuario — endpoints para agregar, editar y
+  eliminar usuarios con manejo de roles. Depende de SPEC-23 (auth +
+  matriz de roles base).
+- **Estado global:** 📋 especificada — pendiente de implementación
+
+### Decisiones
+
+- **Soft delete**: `activo=0` + revocación de tokens — preserva la
+  auditoría (`historial_stock.usuario`, `ordenes.aprobado_por`
+  referencian emails históricos). `email` sigue UNIQUE: re-crear un
+  email borrado → `409` con sugerencia de reactivar vía `PATCH`.
+- **Solo ADMIN** gestiona usuarios; un admin no puede borrarse ni
+  quitarse el rol a sí mismo, ni desactivar/eliminar al último
+  ADMIN activo (`409`).
+
+### Matriz de roles
+
+| Rol | Alcance |
+|---|---|
+| `ADMIN` | Todo + gestión de usuarios (`/api/usuarios/*`) |
+| `GERENTE` | Aprobar/rechazar órdenes + lectura del dominio |
+| `APROBADOR` | Aprobar/rechazar órdenes + lectura del dominio |
+
+### Requisitos
+
+- **R24.1** `GET /api/usuarios` (ADMIN): paginado `page/limit`
+  (mismo contrato que `/api/productos`), filtros `rol`, `activo`,
+  `search` (email/nombre). La respuesta nunca incluye
+  `password_hash` ni campos de seguridad (whitelist explícita).
+- **R24.2** `POST /api/usuarios` (ADMIN): `{email, nombre, rol,
+  password}` → `201` usuario; `409` email duplicado; `400` con
+  detalle si rol ∉ ENUM o password <12 chars. Hash argon2id igual
+  que login.
+- **R24.3** `PATCH /api/usuarios/:id` (ADMIN): edita `nombre`,
+  `email`, `rol`, `activo`. Cambio de `rol` o `activo=0` →
+  `token_version++` + revoca sus refresh tokens (cierra sesiones).
+- **R24.4** `DELETE /api/usuarios/:id` (ADMIN): soft delete
+  (`activo=0`) + `token_version++` + revoca tokens; `409` si el
+  target es self o el último ADMIN activo.
+- **R24.5** `requireRole` aplicado por endpoint según la matriz:
+  `/api/usuarios/*` solo ADMIN; aprobar/rechazar exige APROBADOR+;
+  lecturas cualquier autenticado.
+- **R24.6** Front (solo ADMIN — regla UI n°2: sin acceso, la sección
+  no se renderiza): pantalla "Usuarios" con tabla paginada, alta
+  (`FormShell`, password ≥12, submit `disabled` hasta válido),
+  edición con gate de cambios reales, activar/desactivar,
+  `EmptyState`/`ErrorState` ante vacío/falla.
+- **R24.7** Contrato de errores consistente con el dominio:
+  `400` validación, `401` sin sesión, `403` rol insuficiente,
+  `404` usuario inexistente, `409` conflictos (email, self, último
+  admin).
+
+### Tareas
+
+- **T24.1** Backend CRUD `/api/usuarios` + matriz de roles +
+  revocación + tests.
+- **T24.2** Front pantalla admin de usuarios + e2e.
+
+### Verificado por
+
+Vitest: CRUD completo, 403 no-admin, email duplicado, self-delete,
+último admin, revocación tras cambio de rol/desactivación, whitelist
+sin `password_hash`. E2E: admin crea/edita/desactiva usuario; usuario
+sin rol no ve la sección. Review por sub-agente del PR.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
