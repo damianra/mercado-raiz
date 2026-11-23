@@ -1936,7 +1936,7 @@ manual de la migración (counts y muestras coinciden con
   (UTC; `null` cuando no hay movimientos — nunca inventado). Los días
   en quiebre se excluyen de los denominadores. Ventana anclada a
   `CURRENT_DATE` de la DB, no al host. 11 tests.
-- **T26.6** Harness: `ventas.client`, `analizar-demanda` y
+- **T26.6** Harness: `estadisticas.client`, `analizar-demanda` y
   `calcular-cantidad` sobre la nueva fuente + stock de seguridad
   (R26.8) + tests de nodos. ✅
   `estadisticas.client.js` (reemplaza `historial.client.js`):

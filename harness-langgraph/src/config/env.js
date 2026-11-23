@@ -81,7 +81,7 @@ export const config = {
    * Ventana de días para las estadísticas de demanda (SPEC-26):
    * el parámetro `dias` de /api/estadisticas/demanda.
    */
-  demandaDias: Math.max(7, Number(required('DEMANDA_DIAS', '90')) || 90),
+  demandaDias: Math.min(365, Math.max(7, Number(required('DEMANDA_DIAS', '90')) || 90)),
 
   /**
    * Factor z del stock de seguridad (SPEC-26, R26.8):

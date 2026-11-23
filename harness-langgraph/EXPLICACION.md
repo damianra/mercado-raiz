@@ -52,9 +52,10 @@ leer-inventario → analizar-demanda → calcular-cantidad
 
 Optimizaciones SPEC-12 dentro de este recorrido:
 
-- `analizar-demanda`: si el CV de las ventas < `UMBRAL_CV` la
-  demanda se estima por promedio histórico — el LLM solo ve los
-  patrones volátiles.
+- `analizar-demanda`: sin ventas en la ventana → demanda 0; con
+  ≥3 días de venta y CV < `UMBRAL_CV` se usa la demanda ponderada
+  del backend (`/api/estadisticas/demanda`, SPEC-26) — el LLM solo
+  ve los patrones volátiles.
 - `decidir-aprobacion` corre **antes** de `generar-analisis`: la
   justificación en prosa solo se genera para las órdenes que el
   humano va a revisar; las auto-aprobadas llevan un template.

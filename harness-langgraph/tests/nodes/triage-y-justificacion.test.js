@@ -70,6 +70,11 @@ const stats = ({ demanda = 5, cv = 0.1, diasConVenta = 30, desvio = 1.5 } = {}) 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // mockClear no resetea implementaciones — restaurar los defaults
+  // del módulo para que un mockResolvedValue no contamine el test
+  // siguiente.
+  cacheFns.buscarDemanda.mockResolvedValue(null);
+  cacheFns.buscarJustificacion.mockResolvedValue(null);
   metrics.iniciarCorrida();
 });
 
@@ -90,6 +95,20 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
     expect(metrics.resumen().conteo_fallbacks).toBe(0);
     // el triage no toca el cache — el input no pasó por el LLM
     expect(cacheFns.guardarDemanda).not.toHaveBeenCalled();
+  });
+
+  it('cache hit: reuso del análisis con σ fresco del stats actual', async () => {
+    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6, desvio: 3.3 }));
+    cacheFns.buscarDemanda.mockResolvedValue({
+      demanda_diaria: 7, tendencia: 'bajando', observacion: 'cacheada',
+    });
+    const { analisisPorProducto } = await analizarDemanda({ productosBajos: [producto(1)] });
+
+    expect(invokeJson).not.toHaveBeenCalled();
+    expect(invokeBatch).not.toHaveBeenCalled();
+    expect(analisisPorProducto[1].demanda_diaria).toBe(7);
+    expect(analisisPorProducto[1].desvio_demanda).toBe(3.3); // σ del stats actual, no del cache
+    expect(metrics.resumen().cache_hits).toBe(1);
   });
 
   it('sin ventas en la ventana: demanda 0 determinística, sin LLM ni cache', async () => {
@@ -218,7 +237,8 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
 describe('generar-analisis — justificación condicional (SPEC-12)', () => {
   const stateBase = (requiere) => ({
     productosBajos: [producto(1)],
-    analisisPorProducto: { 1: { demanda_diaria: 5, tendencia: 'estable', observacion: 'ok' } },
+    analisisPorProducto: { 1: { demanda_diaria: 5, tendencia: 'estable', observacion: 'ok', desvio_demanda: 1.5 } },
+    hashPorProducto: { 1: 'hash-fake' },
     decisionPorProducto: { 1: { cantidad: 30, monto_total: requiere ? 300 : 30, requiere_aprobacion: requiere } },
   });
 
@@ -233,6 +253,20 @@ describe('generar-analisis — justificación condicional (SPEC-12)', () => {
     expect(invokeTexto).toHaveBeenCalledTimes(1);
     expect(decisionPorProducto[1].analisis_ia).toContain('demanda');
     expect(metrics.resumen().llm_evitadas).toBe(0);
+  });
+
+  it('σ se excluye del cache de justificación — el cache guarda solo output LLM', async () => {
+    // El análisis en estado lleva desvio_demanda (dato del backend) —
+    // si se pasara tal cual al cache, mismoAnalisis nunca matchearía
+    // contra la demanda cacheada (sin σ) y ambos caches quedarían
+    // ciegos. El strip es la regresión cubierta acá.
+    cacheFns.buscarJustificacion.mockResolvedValue('Justificación cacheada.');
+    const { decisionPorProducto } = await generarAnalisis(stateBase(true));
+
+    expect(decisionPorProducto[1].analisis_ia).toBe('Justificación cacheada.');
+    const [, , analisisConsultado] = cacheFns.buscarJustificacion.mock.calls[0];
+    expect(analisisConsultado).not.toHaveProperty('desvio_demanda');
+    expect(analisisConsultado).toMatchObject({ demanda_diaria: 5, tendencia: 'estable' });
   });
 
   it('orden auto-aprobada: template marcado, sin llamar al LLM', async () => {

@@ -78,7 +78,28 @@ function fallbackDesdeStats(stats) {
  * `pendiente` con el contexto para la fase de LLM.
  */
 async function prepararUno(p) {
-  const stats = await estadisticaDemanda(p.id);
+  let stats;
+  try {
+    stats = await estadisticaDemanda(p.id);
+  } catch (err) {
+    // Un producto borrado o un endpoint caído no debe tumbar la
+    // corrida: demanda 0 + error visible, el pedido mínimo lo
+    // decide calcular-cantidad. hash null → generar-analisis
+    // saltea el cache (no hay input que comparar).
+    metrics.fallback();
+    log(`  ${p.sku}: sin estadísticas (${err.message}) — demanda 0`);
+    return {
+      id: p.id,
+      hash: null,
+      analisis: {
+        demanda_diaria: 0,
+        tendencia: 'estable',
+        observacion: 'Estadísticas de demanda no disponibles',
+        desvio_demanda: 0,
+      },
+      error: `analizar-demanda(${p.sku}): ${err.message} — se usó demanda 0`,
+    };
+  }
   // SPEC-16: el hash cubre stats + producto + config — generar-
   // analisis lo reusa para cachear la justificación (mismo input).
   const hash = hashAnalisis(p, stats);

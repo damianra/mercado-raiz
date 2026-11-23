@@ -20,10 +20,10 @@ digraph flujo {
     color="#d6d3d1";
 
     leer    [label="1 · leer-inventario\ncódigo\nGET /api/productos ×2 estados\n(paginado, limit=100 — SPEC-14)"];
-    analizar[label="2 · analizar-demanda\nLLM condicional\ntriage CV → estable sin LLM · cache por hash\nvolátiles en lotes DEMANDA_BATCH\n(faltantes → individual · error → fallback)",
+    analizar[label="2 · analizar-demanda\nLLM condicional\nsin ventas → 0 · CV<umbral → stats sin LLM\nvolátiles en lotes DEMANDA_BATCH\n(faltantes → individual · error → fallback)",
              fillcolor="#a7f3d0"];
-    calcular[label="3 · calcular-cantidad\ncódigo\nmax(demanda×(lead+7)−stock,\n2×mínimo−stock, 1) → monto"];
-    decidir [label="4 · decidir-aprobacion\ncódigo\nmonto ≥ $100 → requiere_aprobacion"];
+    calcular[label="3 · calcular-cantidad\ncódigo\nmax(demanda×(lead_esp+7)+z·σ·√lead_esp−stock,\n2×mínimo−stock, 1) → monto"];
+    decidir [label="4 · decidir-aprobacion\ncódigo\nmonto ≥ UMBRAL_APROBACION\n→ requiere_aprobacion"];
     generar [label="5 · generar-analisis\nLLM condicional\nrequiere → cache/LLM prosa (≤1900 ch)\nauto-aprobada → template",
              fillcolor="#a7f3d0"];
     crear   [label="6 · crear-orden\ncódigo\nPOST /api/ordenes/batch ×100/req\n(falla → POST individual)"];
@@ -48,7 +48,7 @@ digraph flujo {
            label="Humano — dashboard :5173\naprueba / rechaza las\nPENDIENTE_APROBACION\n(cuando quiere — nada vuelve al agente)"];
 
   leer    -> backend [style=dashed, label=" GET productos"];
-  analizar-> backend [style=dashed, label=" GET historial", constraint=false];
+  analizar-> backend [style=dashed, label=" GET /estadisticas/demanda", constraint=false];
   analizar-> ollama  [style=dashed, label=" demanda (lotes)"];
   generar -> ollama  [style=dashed, label=" justificación"];
   crear   -> backend [style=dashed, label=" POST batch"];

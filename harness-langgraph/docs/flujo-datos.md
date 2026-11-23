@@ -7,11 +7,11 @@ Cada nodo devuelve campos que se funden en el estado:
 ```
 leer-inventario    → productosBajos: [ {id, sku, nombre, stock_actual,
                                         stock_minimo, precio_unitario,
-                                        proveedor:{id,nombre,tiempo_entrega_dias}, estado} ]
+                                        proveedor:{id,nombre,tiempo_entrega_dias,lead_dias_esperado}, estado} ]
                       (SPEC-14: pagina todas las páginas del backend, limit=100)
-analizar-demanda   → analisisPorProducto: { [id]: {demanda_diaria, tendencia, observacion} }
+analizar-demanda   → analisisPorProducto: { [id]: {demanda_diaria, tendencia, observacion, desvio_demanda} }
                       hashPorProducto: { [id]: hash del input }  (SPEC-16: cache)
-                      (triage SPEC-12: CV < UMBRAL_CV → promedio sin LLM;
+                      (triage SPEC-12: sin ventas → 0 · ≥3d y CV < UMBRAL_CV → stats del backend sin LLM;
                        SPEC-16: volátiles en lotes de DEMANDA_BATCH)
 calcular-cantidad  → decisionPorProducto: { [id]: {cantidad, monto_total} }
 decidir-aprobacion → decisionPorProducto: { [id]: {…, requiere_aprobacion} }

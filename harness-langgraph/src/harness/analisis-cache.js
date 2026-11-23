@@ -14,10 +14,12 @@
  * descartable, no fuente de verdad: si se trunca solo hay más
  * llamadas LLM la próxima corrida.
  *
- * El hash cubre TODO lo que entra a los prompts: ventas de la
- * ventana, campos del producto (sku, nombre, stock, precio, lead
- * time — un movimiento AJUSTE cambia stock sin tocar ventas) y la
- * config que afecta el resultado (modelo, umbrales).
+ * El hash cubre TODO lo que entra a los prompts: las estadísticas
+ * de demanda del backend (SPEC-26 — cualquier cambio en la ventana
+ * de ventas las mueve), campos del producto (sku, nombre, stock,
+ * precio, lead — un movimiento AJUSTE cambia stock sin tocar
+ * ventas) y la config que afecta el resultado (modelo, umbrales,
+ * demanda_dias).
  *
  * `analisis_llm` marca que `analisis` la produjo el LLM (no el
  * fallback heurístico): buscarDemanda lo exige, así si ayer el
@@ -78,7 +80,7 @@ const mismoAnalisis = (a, b) => canonico(a) === canonico(b);
 
 /**
  * Hash del input completo del LLM para un producto. Cualquier
- * diferencia en ventas, campos del producto o config → otra clave →
+ * diferencia en stats, campos del producto o config → otra clave →
  * cache miss (invalidación implícita, no hay TTL que mantener).
  * Función pura — sync a propósito.
  */
