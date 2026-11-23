@@ -36,6 +36,7 @@ function esAprobada(estado) {
 
 export default function OrdersTable({
   ordenes,
+  demanda,
   procesando,
   onVer,
   onAprobar,
@@ -158,6 +159,8 @@ export default function OrdersTable({
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3">Proveedor</th>
+                  <th className="px-4 py-3 text-right" title="Demanda diaria estimada (90d)">Demanda/día</th>
+                  <th className="px-4 py-3 text-right" title="Días de stock al ritmo de demanda">Cobertura</th>
                   <th className="px-4 py-3 text-right">Cant.</th>
                   <th className="px-4 py-3 text-right">Monto</th>
                   <th className="px-4 py-3">Estado</th>
@@ -169,6 +172,7 @@ export default function OrdersTable({
                   <Fila
                     key={o.id}
                     orden={o}
+                    stats={demanda?.get(o.productoId)}
                     procesando={procesando === o.id}
                     onVer={onVer}
                     onAprobar={onAprobar}
@@ -188,6 +192,9 @@ export default function OrdersTable({
                     <p className="font-mono text-xs text-info">{o.id}</p>
                     <p className="mt-0.5 font-semibold text-grafito">{o.producto}</p>
                     <p className="text-xs text-warmgray">{o.proveedor}</p>
+                    <p className="mt-1 text-xs text-warmgray">
+                      {txtDemandaCobertura(demanda?.get(o.productoId), o.stockActual)}
+                    </p>
                   </div>
                   <Badge estado={o.estado} />
                 </div>
@@ -215,7 +222,7 @@ export default function OrdersTable({
   );
 }
 
-function Fila({ orden: o, procesando, onVer, onAprobar, onRechazar }) {
+function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar }) {
   return (
     <tr
       className={`group h-16 border-b border-root/5 transition-colors duration-150 hover:bg-cream ${
@@ -228,6 +235,12 @@ function Fila({ orden: o, procesando, onVer, onAprobar, onRechazar }) {
         <p className="font-mono text-xs text-warmgray">{o.sku}</p>
       </td>
       <td className="px-4 py-3 text-sm text-grafito">{o.proveedor}</td>
+      <td className="tabular px-4 py-3 text-right text-sm text-grafito">
+        {stats ? fmtDemanda(stats.demanda_diaria) : '—'}
+      </td>
+      <td className="tabular px-4 py-3 text-right text-sm text-grafito">
+        {stats ? fmtCobertura(stats.demanda_diaria, o.stockActual) : '—'}
+      </td>
       <td className="tabular px-4 py-3 text-right text-sm text-grafito">
         {o.cantidad}
       </td>
@@ -292,4 +305,22 @@ function Acciones({ orden: o, procesando, onVer, onAprobar, onRechazar }) {
       )}
     </div>
   );
+}
+
+
+// R26.9: demanda diaria estimada (media ponderada 90d del backend)
+// y cobertura = stock_actual / demanda — los mismos números que ve
+// el agente (GET /api/estadisticas/demanda bulk).
+const fmtDemanda = (d) => `${d % 1 === 0 ? d : d.toFixed(1)} u`;
+
+// Sin demanda la cobertura no tiene sentido numérico — el stock
+// no se agota ('∞' sería pretencioso para una celda de tabla).
+function fmtCobertura(demandaDiaria, stockActual) {
+  if (!demandaDiaria) return '—';
+  return `${Math.floor(stockActual / demandaDiaria)}d`;
+}
+
+function txtDemandaCobertura(stats, stockActual) {
+  if (!stats) return 'Demanda: —';
+  return `Demanda: ${fmtDemanda(stats.demanda_diaria)} · Cobertura: ${fmtCobertura(stats.demanda_diaria, stockActual)}`;
 }

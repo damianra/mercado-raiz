@@ -60,6 +60,7 @@ export function mapOrden(o) {
   const stockActual = o.producto?.stock_actual ?? 0;
   return {
     id: o.orden_id,
+    productoId: o.producto?.id ?? null,
     producto: o.producto?.nombre ?? '—',
     sku: o.producto?.sku ?? '',
     proveedor: o.proveedor?.nombre ?? '—',
@@ -82,6 +83,12 @@ export const getOrdenes = () =>
 export const getProductos = () => apiFetch('/productos?limit=100');
 
 export const getDashboardStats = () => apiFetch('/dashboard/stats');
+
+// R26.9/T26.7: stats de demanda de TODOS los productos (sin
+// producto_id → bulk) — el dashboard las cruza por producto_id
+// para las columnas demanda/día y días de cobertura.
+export const getDemandaStats = (dias = 90) =>
+  apiFetch(`/estadisticas/demanda?dias=${dias}`);
 
 export const crearOrden = ({ productoId, cantidad, requiereAprobacion }) =>
   apiFetch('/ordenes', {

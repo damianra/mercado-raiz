@@ -12,6 +12,7 @@ import { Link } from './lib/router.jsx';
 import {
   aprobarOrden,
   getDashboardStats,
+  getDemandaStats,
   getOrdenes,
   mapOrden,
   rechazarOrden,
@@ -27,6 +28,7 @@ export default function App({ usuario }) {
   const [error, setError] = useState(null);
   const [ordenes, setOrdenes] = useState([]);
   const [statsApi, setStatsApi] = useState(null);
+  const [demanda, setDemanda] = useState(() => new Map());
   const [detalle, setDetalle] = useState(null);
   const [procesando, setProcesando] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -37,9 +39,10 @@ export default function App({ usuario }) {
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
-    const [ordRes, statsRes] = await Promise.allSettled([
+    const [ordRes, statsRes, demandaRes] = await Promise.allSettled([
       getOrdenes(),
       getDashboardStats(),
+      getDemandaStats(),
     ]);
     if (ordRes.status === 'rejected') {
       // Las órdenes son el contenido principal — si fallan, ErrorState.
@@ -48,6 +51,12 @@ export default function App({ usuario }) {
       setOrdenes(ordRes.value.data.map(mapOrden));
       // Stats es secundario: si falla se calcula local (fallback abajo).
       setStatsApi(statsRes.status === 'fulfilled' ? statsRes.value : null);
+      // Demanda también es secundaria: si falla, la tabla muestra '—'.
+      setDemanda(
+        demandaRes.status === 'fulfilled' && Array.isArray(demandaRes.value?.data)
+          ? new Map(demandaRes.value.data.map((d) => [d.producto_id, d]))
+          : new Map(),
+      );
     }
     setCargando(false);
   }, []);
@@ -167,6 +176,7 @@ export default function App({ usuario }) {
               </section>
               <OrdersTable
                 ordenes={ordenes}
+                demanda={demanda}
                 procesando={procesando}
                 onVer={setDetalle}
                 onAprobar={(o) => resolver(o, true)}

@@ -80,6 +80,34 @@ describe('GET /api/estadisticas/demanda — acceso y validación', () => {
   });
 });
 
+describe('GET /api/estadisticas/demanda — bulk (sin producto_id, R26.9)', () => {
+  it('cubre todos los productos y coincide con la ruta individual', async () => {
+    const p = prodSinMovs();
+    const dormido = prodSinMovs();
+    await insertarVentas(p.id, [[0, 8], [1, 8], [2, 8], [10, 20]]);
+    const res = await get('/estadisticas/demanda?dias=30');
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    const porId = new Map(data.map((d) => [d.producto_id, d]));
+
+    const ids = (await db.all('SELECT id FROM productos ORDER BY id')).map((r) => r.id);
+    expect(data.map((d) => d.producto_id)).toEqual(ids);
+
+    // mismo cálculo que la ruta individual — una sola fuente
+    const ind = await (await get(`/estadisticas/demanda?producto_id=${p.id}&dias=30`)).json();
+    expect(porId.get(p.id)).toEqual(ind);
+    // producto sin ventas → ceros y nulls honestos en el bulk también
+    expect(porId.get(dormido.id)).toMatchObject({
+      demanda_diaria: 0, cv: null, ultima_venta: null, dias_con_venta: 0,
+    });
+  });
+
+  it('bulk también valida dias', async () => {
+    const res = await get('/estadisticas/demanda?dias=3');
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('GET /api/estadisticas/demanda — cálculo', () => {
   it('producto sin ventas: demanda 0, cv null, quiebre null sin movimientos', async () => {
     const p = prodSinMovs();

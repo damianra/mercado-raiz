@@ -1948,7 +1948,16 @@ manual de la migración (counts y muestras coinciden con
   SPEC-16. El análisis lleva `desvio_demanda` (nuevo campo del
   endpoint) y `calcular-cantidad` usa `lead_dias_esperado` +
   `z·σ·√lead` con `Z_SEGURIDAD`/`DEMANDA_DIAS` en config.
-- **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e.
+- **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e. ✅
+  `GET /api/estadisticas/demanda` sin `producto_id` devuelve las
+  mismas stats de TODOS los productos en una pasada (4 queries
+  totales — ventas/movimientos agrupados en SQL + mismo
+  `calcularStats` en JS, cero divergencia con la ruta individual).
+  Front: `mapOrden` expone `productoId`, `App` trae el bulk en
+  paralelo y `OrdersTable` suma columnas "Demanda/día" y
+  "Cobertura" (stock_actual ÷ demanda — '—' sin stats ni demanda)
+  + línea equivalente en la card mobile. 13 tests del endpoint +
+  e2e que aserta las columnas con datos reales.
 
 ### Verificado por
 
