@@ -2047,6 +2047,65 @@ del scorecard + tabla de proveedores. Misma estética que `/quiebres`.
 
 ---
 
+## SPEC-29 · Alertas operativas + rol BUYER (dashboard exclusivo)
+
+El sistema muestra quiebres y métricas pero nadie "se entera" — las
+alertas operativas son la pieza que convierte métricas en acción.
+Y entra el primer usuario con vista acotada: el comprador (BUYER)
+solo ve alertas, nada más.
+
+**R29.1** Rol `BUYER` — dashboard exclusivo `/alertas`:
+
+- `usuarios.rol` CHECK gana `BUYER` (ALTER idempotente drop/add
+  constraint) + `ROLES` lo incluye.
+- Seed: `buyer@mercadorai.com` / `demo-buyer-2026` (README "Usuarios
+  demo").
+- Lockdown backend: middleware `bloquearBuyer` → 403 en TODAS las
+  rutas de dominio (ordenes, productos, proveedores, usuarios,
+  ventas, historial, estadisticas, dashboard); solo `/api/auth` y
+  `/api/alertas` responden para BUYER.
+- Front: login de BUYER aterriza en `/alertas`; el sidebar solo le
+  muestra "Alertas"; cualquier otra ruta → NotFound. Para el resto
+  de los roles `/alertas` → NotFound (el dashboard lo ve solo
+  BUYER; la API además permite ADMIN para auditoría).
+
+**R29.2** Tabla `alertas(id, tipo, producto_id?, orden_id?,
+severidad, mensaje, leida, fecha_creacion)` — tipos `QUIEBRE`,
+`RIESGO_LEAD`, `DEAD_STOCK`, `ORDEN_PENDIENTE`; severidades
+`ALTA|MEDIA|BAJA`. Tabla `alertas_meta(clave, valor)` para el
+throttle del evaluador.
+
+**R29.3** Motor de reglas determinísticas (sin LLM) sobre
+`estadisticasDemandaBulk` + productos + órdenes:
+
+- `QUIEBRE` (ALTA): stock=0 y demanda>0 — "se pierde ~$X/día de
+  margen".
+- `RIESGO_LEAD` (ALTA si cobertura < lead/2, MEDIA si < lead):
+  cobertura < lead esperado del proveedor — se vacía antes de que
+  llegue el pedido.
+- `DEAD_STOCK` (BAJA): stock>0 sin venta en la ventana.
+- `ORDEN_PENDIENTE` (MEDIA): PENDIENTE_APROBACION con >48h.
+- Dedup: no recrear si ya hay alerta NO LEÍDA del mismo
+  tipo+entidad, ni una creada en las últimas 24h.
+- Trigger: `GET /api/alertas` auto-evalúa si la última evaluación
+  tiene >60min (lazy, sin cron); `POST /api/alertas/evaluar` fuerza.
+
+**R29.4** API (BUYER+ADMIN): `GET /api/alertas?leida=&tipo=` →
+`{data, resumen:{total,no_leidas,por_severidad}}`;
+`PATCH /api/alertas/:id/leida`; `PATCH /api/alertas/leer-todas`;
+`POST /api/alertas/evaluar`.
+
+**R29.5** Vista `/alertas` (solo BUYER): lista por severidad con
+filtro por tipo, marcar leída / todas, skeleton/Empty/Error.
+Topbar parametrizable (título/subtítulo por props — hoy está
+hardcodeado "Órdenes Pendientes").
+
+- **T29.1** Backend: schema + rol BUYER + seed + lockdown + modelo
+  de reglas + endpoints + tests.
+- **T29.2** Frontend: vista `/alertas` + guards por rol + e2e.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
