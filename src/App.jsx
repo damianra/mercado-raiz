@@ -53,7 +53,7 @@ export default function App({ usuario }) {
       setStatsApi(statsRes.status === 'fulfilled' ? statsRes.value : null);
       // Demanda también es secundaria: si falla, la tabla muestra '—'.
       setDemanda(
-        demandaRes.status === 'fulfilled'
+        demandaRes.status === 'fulfilled' && Array.isArray(demandaRes.value?.data)
           ? new Map(demandaRes.value.data.map((d) => [d.producto_id, d]))
           : new Map(),
       );
