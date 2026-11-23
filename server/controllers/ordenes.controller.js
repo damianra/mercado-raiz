@@ -70,7 +70,7 @@ export async function detail(req, res) {
 
 // Valida un item de orden y lo normaliza al shape del model.
 // Devuelve el item listo o un string con el error de validación.
-function validarItemOrden({ producto_id, cantidad, requiere_aprobacion, analisis_ia } = {}) {
+function validarItemOrden({ producto_id, cantidad, requiere_aprobacion, analisis_ia, proveedor_id } = {}) {
   if (!Number.isInteger(producto_id)) {
     return 'producto_id es requerido y debe ser entero';
   }
@@ -80,8 +80,12 @@ function validarItemOrden({ producto_id, cantidad, requiere_aprobacion, analisis
   if (requiere_aprobacion !== undefined && typeof requiere_aprobacion !== 'boolean') {
     return 'requiere_aprobacion debe ser boolean';
   }
+  if (proveedor_id !== undefined && (!Number.isInteger(proveedor_id) || proveedor_id < 1)) {
+    return 'proveedor_id debe ser un entero positivo';
+  }
   return {
     productoId: producto_id,
+    proveedorId: proveedor_id,
     cantidad,
     requiereAprobacion: requiere_aprobacion,
     analisisIa: analisis_ia ? capString(analisis_ia, 2000) : null,
@@ -94,6 +98,9 @@ export async function create(req, res) {
 
   const orden = await createOrden(item);
   if (!orden) return res.status(404).json({ error: 'producto no encontrado' });
+  if (orden.sinPrecio) {
+    return res.status(400).json({ error: orden.sinPrecio });
+  }
 
   res.status(201).json({
     success: true,
@@ -135,6 +142,12 @@ export async function createBatch(req, res) {
     return res.status(400).json({
       error: 'productos inexistentes en el lote — no se creó ninguna orden',
       detalle: resultado.faltantes.map((f) => ({ ...f, error: 'producto no encontrado' })),
+    });
+  }
+  if (resultado.sinPrecio) {
+    return res.status(400).json({
+      error: 'proveedores sin precio para el producto — no se creó ninguna orden',
+      detalle: resultado.sinPrecio,
     });
   }
 

@@ -48,6 +48,7 @@ function mapProducto(row) {
       tiempo_entrega_max_dias: row.pr_max,
       lead_dias_esperado: leadEsperado(row),
     },
+    precios: row.precios ?? [],
     ubicacion: row.ubicacion,
     estado: estadoProducto(row.stock_actual, row.stock_minimo),
     fecha_actualizacion: row.fecha_actualizacion,
@@ -90,6 +91,16 @@ export async function listProductos({ estado, categoria, proveedorId, search, pa
     `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
             p.precio_venta, p.ubicacion, p.fecha_actualizacion,
             pp.costo_unitario AS pp_costo,
+            (SELECT json_agg(json_build_object(
+               'proveedor_id', pp2.proveedor_id, 'proveedor', pr2.nombre,
+               'costo_unitario', pp2.costo_unitario,
+               'lead_efectivo', COALESCE(pp2.lead_dias,
+                 (pr2.tiempo_entrega_min_dias + pr2.tiempo_entrega_max_dias) / 2.0,
+                 pr2.tiempo_entrega_dias)::double precision,
+               'es_principal', pp2.es_principal) ORDER BY pp2.costo_unitario)
+             FROM producto_proveedor pp2
+             JOIN proveedores pr2 ON pr2.id = pp2.proveedor_id
+             WHERE pp2.producto_id = p.id AND pp2.activo = 1 AND pr2.activo = 1) AS precios,
             pr.id AS pr_id, pr.nombre AS pr_nombre,
             pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
             pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max
@@ -117,6 +128,16 @@ export async function getProducto(id) {
     `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
             p.precio_venta, p.ubicacion, p.fecha_actualizacion,
             pp.costo_unitario AS pp_costo,
+            (SELECT json_agg(json_build_object(
+               'proveedor_id', pp2.proveedor_id, 'proveedor', pr2.nombre,
+               'costo_unitario', pp2.costo_unitario,
+               'lead_efectivo', COALESCE(pp2.lead_dias,
+                 (pr2.tiempo_entrega_min_dias + pr2.tiempo_entrega_max_dias) / 2.0,
+                 pr2.tiempo_entrega_dias)::double precision,
+               'es_principal', pp2.es_principal) ORDER BY pp2.costo_unitario)
+             FROM producto_proveedor pp2
+             JOIN proveedores pr2 ON pr2.id = pp2.proveedor_id
+             WHERE pp2.producto_id = p.id AND pp2.activo = 1 AND pr2.activo = 1) AS precios,
             pr.id AS pr_id, pr.nombre AS pr_nombre,
             pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
             pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max

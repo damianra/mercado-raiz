@@ -104,6 +104,9 @@ export function hashAnalisis(producto, stats) {
       producto.stock_actual,
       producto.stock_minimo,
       producto.costo_unitario ?? producto.precio_venta,
+      // T27.3: los alternativos también entran en la decisión de
+      // proveedor/cantidad → un cambio en ellos invalida el cache.
+      producto.precios ?? null,
       producto.categoria,
       producto.proveedor?.nombre,
       producto.proveedor?.lead_dias_esperado ?? producto.proveedor?.tiempo_entrega_dias,
