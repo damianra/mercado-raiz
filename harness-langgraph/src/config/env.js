@@ -15,7 +15,7 @@ function required(name, fallback) {
 }
 
 export const config = {
-  /** URL base del backend MVC (Express + SQLite). */
+  /** URL base del backend MVC (Express + Postgres). */
   backendUrl: required('BACKEND_URL', 'http://localhost:4000'),
 
   /**
@@ -26,6 +26,14 @@ export const config = {
    */
   agenteEmail: required('AGENTE_EMAIL', 'agente@mercadorai.com'),
   agentePassword: required('AGENTE_PASSWORD', 'demo-agente-2026'),
+
+  /**
+   * Postgres del harness (SPEC-25): checkpoints de LangGraph +
+   * cache de análisis. Default = el compose dev (misma
+   * `mercadoraiz-db` del backend). En tests gana
+   * DATABASE_URL_TEST — ver src/harness/pg.js.
+   */
+  databaseUrl: required('DATABASE_URL', 'postgres://mercadoraiz:dev-local-2026@localhost:5432/mercadoraiz-db'),
 
   /** Servidor Ollama local. */
   ollamaBaseUrl: required('OLLAMA_BASE_URL', 'http://localhost:11434'),

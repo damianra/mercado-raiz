@@ -1,7 +1,8 @@
 /**
  * Construye el StateGraph: registra los nodos (funciones de
  * nodes/), los edges fijos y los condicionales (edges/router.js),
- * y lo compila con SqliteSaver → checkpoints.sqlite. Ese archivo es
+ * y lo compila con PostgresSaver → tablas checkpoint_* en la misma
+ * `mercadoraiz-db` del backend (SPEC-25). Esa persistencia es
  * donde queda persistido el estado en cada paso — y del que se
  * restaura cuando POST /resume reanuda la corrida, incluso tras un
  * reinicio del proceso.
@@ -16,9 +17,8 @@
  * en el backend REST; la corrida es atómica).
  */
 import { END, START, StateGraph } from '@langchain/langgraph';
-import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import { connectionString } from '../harness/pg.js';
 import { EstadoGrafo } from './state.js';
 import { leerInventario } from './nodes/leer-inventario.js';
 import { analizarDemanda } from './nodes/analizar-demanda.js';
@@ -30,13 +30,13 @@ import { notificar } from './nodes/notificar.js';
 import { fin } from './nodes/fin.js';
 import { despuesDeCrearOrdenes } from './edges/router.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-
 export async function construirGrafo() {
-  // Un archivo SQLite junto al proyecto: los checkpoints sobreviven
-  // al proceso. Si se reinicia el harness, un POST /resume sigue
-  // funcionando con el mismo thread_id.
-  const checkpointer = SqliteSaver.fromConnString(join(here, '../../checkpoints.sqlite'));
+  // Checkpoints en el mismo Postgres que el backend (SPEC-25): las
+  // tablas checkpoint_* las crea setup() una sola vez. Si se
+  // reinicia el harness, un POST /resume sigue funcionando con el
+  // mismo thread_id.
+  const checkpointer = PostgresSaver.fromConnString(connectionString());
+  await checkpointer.setup();
 
   const grafo = new StateGraph(EstadoGrafo)
     .addNode('leer-inventario', leerInventario)

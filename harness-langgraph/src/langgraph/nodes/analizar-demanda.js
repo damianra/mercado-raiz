@@ -106,7 +106,8 @@ async function prepararUno(p) {
   }
   // SPEC-16: input idéntico al de una corrida anterior → la
   // respuesta también; reusarla ahorra la llamada.
-  const cacheada = buscarDemanda(p.id, hash);
+  // Cache fail-soft: un read caído es un miss, no aborta la corrida.
+  const cacheada = await buscarDemanda(p.id, hash).catch(() => null);
   if (cacheada) {
     metrics.cacheHit();
     log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
@@ -127,7 +128,10 @@ async function analisisIndividual({ p, ventas, hash }) {
       },
       { intentos: 2, etiqueta: `análisis de ${p.sku}` },
     );
-    guardarDemanda(p.id, hash, respuesta);
+    // El write al cache va fuera del try del LLM: una falla de
+    // Postgres no debe descartar la respuesta del modelo.
+    await guardarDemanda(p.id, hash, respuesta).catch((e) =>
+      log(`  ${p.sku}: cache write falló (${e.message}) — sigo sin cache`));
     log(`  ${p.sku}: ~${respuesta.demanda_diaria} u/día, ${respuesta.tendencia} — ${respuesta.observacion}`);
     return { id: p.id, hash, analisis: respuesta };
   } catch (err) {
@@ -181,7 +185,8 @@ async function analizarLote(lote) {
       tendencia: item.tendencia,
       observacion: item.observacion,
     };
-    guardarDemanda(e.id, e.hash, analisis);
+    await guardarDemanda(e.id, e.hash, analisis).catch((err) =>
+      log(`  ${e.p.sku}: cache write falló (${err.message}) — sigo sin cache`));
     log(`  ${e.p.sku}: ~${analisis.demanda_diaria} u/día, ${analisis.tendencia} — ${analisis.observacion} (lote)`);
     resueltos.push({ id: e.id, hash: e.hash, analisis });
   }

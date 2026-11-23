@@ -9,7 +9,7 @@ Convención del grafo: **un nodo no decide qué sigue — solo devuelve
 una actualización parcial del estado**. El rumbo lo deciden los
 edges de `graph.js` (fijos) y los routers de `edges/router.js`
 (condicionales). Después de cada nodo, LangGraph aplica el reducer
-del campo y persiste un **checkpoint en `checkpoints.sqlite`**.
+del campo y persiste un **checkpoint en Postgres**.
 
 ---
 
@@ -20,7 +20,7 @@ Todavía no corre el grafo: esto es setup.
 ```
 index.js
   ├─ orchestrator.inicializar()
-  │    ├─ construirGrafo()          → compila StateGraph + SqliteSaver(checkpoints.sqlite)
+  │    ├─ construirGrafo()          → compila StateGraph + PostgresSaver(mercadoraiz-db)
   │    └─ lee .last-thread          → ¿hay un thread_id de una corrida anterior?
   │          └─ estaPausado(threadId) → grafo.getState() → ¿tiene nodos pendientes?
   │                sí → corrida = { fase: 'pausado' }   (recupera una pausa de otra vida)
@@ -184,7 +184,7 @@ iniciar() → nodos 1→8 → END → resumen   (atómica, sin pausas)
 ```
 
 El `thread_id` sigue siendo la identidad de la corrida y el
-checkpointer sigue escribiendo `checkpoints.sqlite` tras cada nodo
+checkpointer sigue persistiendo tras cada nodo
 — la infraestructura de pause/resume queda disponible pero el grafo
 ya no la usa.
 
@@ -196,5 +196,5 @@ ya no la usa.
 | Terminado | `GET :4110/status` | `{fase:'terminado'}` — las pendientes se ven en el dashboard por REST |
 | Siempre | `GET :4110/metrics` | `estado_corrida` + contadores de negocio + rendimiento LLM (tokens, tiempos ms) + errores |
 | Consola | stream del grafo | `▶ nodo "x" terminó (Nms) → estado: campos` |
-| Disco | `checkpoints.sqlite` | estado completo tras cada nodo |
+| Postgres | tablas `checkpoint_*` | estado completo tras cada nodo |
 | Disco | `.last-thread` | thread_id para reanudar tras reinicio |
