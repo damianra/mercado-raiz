@@ -8,6 +8,9 @@ import { seedVentas } from './seed-ventas.js';
 // RESTART IDENTITY reinicia las secuencias; CASCADE resuelve las FKs.
 const db = await openDb();
 const tablas = [
+  'alertas', // derivadas del dominio — el CASCADE ya las vacía,
+  'alertas_meta', // pero la meta no tiene FKs: sin esto la lazy-eval
+  // ve ultima_eval reciente y nunca regenera alertas tras el re-seed
   'ventas',
   'refresh_tokens',
   'historial_stock',

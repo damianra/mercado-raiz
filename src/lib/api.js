@@ -118,6 +118,22 @@ export const getDemandaStats = (dias = 90) =>
 export const getMetricas = (dias = 90) =>
   apiFetch(`/estadisticas/metricas?dias=${dias}`);
 
+// SPEC-29 (R29.4): alertas operativas — dashboard exclusivo del
+// BUYER. El GET dispara la evaluación lazy si toca (>60min).
+export const getAlertas = ({ leida, tipo } = {}) => {
+  const q = new URLSearchParams();
+  if (leida !== undefined) q.set('leida', leida);
+  if (tipo) q.set('tipo', tipo);
+  const s = q.toString();
+  return apiFetch(`/alertas${s ? `?${s}` : ''}`);
+};
+
+export const marcarAlertaLeida = (id) =>
+  apiFetch(`/alertas/${encodeURIComponent(id)}/leida`, { method: 'PATCH', body: '{}' });
+
+export const leerTodasAlertas = () =>
+  apiFetch('/alertas/leer-todas', { method: 'PATCH', body: '{}' });
+
 export const crearOrden = ({ productoId, cantidad, requiereAprobacion }) =>
   apiFetch('/ordenes', {
     method: 'POST',

@@ -2103,7 +2103,7 @@ hardcodeado "Órdenes Pendientes").
 
 - **T29.1** Backend: schema + rol BUYER + seed + lockdown + modelo
   de reglas + endpoints + tests. ✅
-- **T29.2** Frontend: vista `/alertas` + guards por rol + e2e.
+- **T29.2** Frontend: vista `/alertas` + guards por rol + e2e. ✅
 
 ---
 

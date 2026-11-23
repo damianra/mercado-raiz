@@ -1,4 +1,5 @@
 import {
+  Bell,
   ChartColumn,
   TriangleAlert,
   LayoutDashboard,
@@ -12,14 +13,19 @@ import { Link } from '../lib/router.jsx';
 
 // Solo entradas con destino real en la página — un ítem sin sección
 // detrás es un control muerto (regla UI n°2) y no debe renderizarse.
+// `roles` = whitelist; `excluye` = blacklist (el BUYER de SPEC-29
+// solo ve su dashboard de alertas, nada más).
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, excluye: ['BUYER'] },
+  { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck, excluye: ['BUYER'] },
   // SPEC-27 T27.4: quiebres y margen en riesgo — operativo, todos los roles.
-  { id: 'quiebres', label: 'Quiebres', icon: TriangleAlert, to: '/quiebres' },
+  { id: 'quiebres', label: 'Quiebres', icon: TriangleAlert, to: '/quiebres', excluye: ['BUYER'] },
   // SPEC-28 T28.2: scorecard de métricas retail — operativo, todos
   // los roles (fill rate, riesgo, inventario, proveedores).
-  { id: 'metricas', label: 'Métricas', icon: ChartColumn, to: '/metricas' },
+  { id: 'metricas', label: 'Métricas', icon: ChartColumn, to: '/metricas', excluye: ['BUYER'] },
+  // SPEC-29: el dashboard de alertas es EXCLUSIVO del BUYER — el
+  // resto de los roles ni siquiera lo ve en el menú.
+  { id: 'alertas', label: 'Alertas', icon: Bell, to: '/alertas', roles: ['BUYER'] },
   // SPEC-24: gestión de usuarios — solo visible para ADMIN; `to`
   // navega a otra página, los demás son anchors de la home.
   { id: 'usuarios', label: 'Usuarios', icon: Users, to: '/usuarios', roles: ['ADMIN'] },
@@ -29,7 +35,11 @@ const NAV = [
 ];
 
 export default function Sidebar({ urgentes = 0, open, onClose, usuario, activeId = 'ordenes', base = '' }) {
-  const items = NAV.filter((item) => !item.roles || item.roles.includes(usuario?.rol));
+  const items = NAV.filter(
+    (item) =>
+      (!item.roles || item.roles.includes(usuario?.rol)) &&
+      !item.excluye?.includes(usuario?.rol),
+  );
   return (
     <>
       {/* Overlay mobile */}
