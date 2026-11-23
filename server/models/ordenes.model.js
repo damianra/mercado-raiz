@@ -1,5 +1,5 @@
 import { openDb } from '../db.js';
-import { estadoProducto } from './productos.model.js';
+import { estadoProducto, leadEsperado } from './productos.model.js';
 
 export const ESTADOS_ORDEN = [
   'PENDIENTE_APROBACION',
@@ -38,12 +38,6 @@ const SELECT_ORDEN = `SELECT o.id, o.orden_id, o.cantidad, o.precio_unitario, o.
     pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
     pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max
   ${FROM_ORDEN}`;
-
-function leadEsperado(row) {
-  return row.pr_min != null && row.pr_max != null
-    ? (row.pr_min + row.pr_max) / 2
-    : row.pr_tiempo_entrega_dias;
-}
 
 function mapOrdenResumen(row) {
   return {

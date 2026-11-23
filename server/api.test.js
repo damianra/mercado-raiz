@@ -205,6 +205,31 @@ describe('GET /api/productos', () => {
     }
   });
 
+  it('el lead esperado cae a tiempo_entrega_dias cuando no hay rango', async () => {
+    // Proveedor sin rango (min/max NULL) → lead_dias_esperado es el
+    // lead nominal — la convención de R26.4.
+    const prov = await db.get(
+      `INSERT INTO proveedores (nombre, tiempo_entrega_dias)
+       VALUES ('Proveedor Sin Rango', 9) RETURNING id`,
+    );
+    await db.run(
+      `INSERT INTO productos (sku, nombre, categoria, stock_actual, stock_minimo, precio_unitario, proveedor_id)
+       VALUES ('MR-TEST-LEAD', 'Producto test lead', 'Almacén', 5, 10, 100, ?)`,
+      [prov.id],
+    );
+    try {
+      const res = await get('/productos?search=MR-TEST-LEAD');
+      const body = await res.json();
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].proveedor.lead_dias_esperado).toBe(9);
+    } finally {
+      // La DB del schema es compartida — no dejar el fixture (los
+      // conteos de los tests siguientes derivan del seed).
+      await db.run("DELETE FROM productos WHERE sku = 'MR-TEST-LEAD'");
+      await db.run('DELETE FROM proveedores WHERE id = ?', [prov.id]);
+    }
+  });
+
   it('filtra por estado, categoria, proveedor y búsqueda', async () => {
     // Catálogo real de 1.471 artículos (SPEC-22) — los conteos salen
     // del seed, no de valores hardcodeados.

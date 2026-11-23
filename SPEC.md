@@ -1856,7 +1856,7 @@ manual de la migración (counts y muestras coinciden con
   Inserta en `tx()` por lotes.
 - **R26.4** Proveedores: columnas nuevas `tiempo_entrega_min_dias`,
   `tiempo_entrega_max_dias`, `confiabilidad_pct`, `pedido_minimo_monto`,
-  `costo_envio`, `categorias_cubiertas` (texto/JSONB). El lead de
+  `costo_envio`, `categorias_cubiertas` (TEXT[]). El lead de
   cálculo pasa a usar el valor esperado (`min`+`max`)/2 o
   `tiempo_entrega_dias` si no hay rango — documentado.
 - **R26.5** CRUD `GET/POST/PATCH/DELETE /api/proveedores` solo

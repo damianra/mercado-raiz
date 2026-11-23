@@ -15,6 +15,15 @@ export function estadoProducto(stockActual, stockMinimo) {
 
 export const ESTADOS_PRODUCTO = ['OK', 'STOCK_BAJO', 'CRITICO'];
 
+// R26.4: lead esperado = (min+max)/2 cuando hay rango, si no el lead
+// nominal. Compartido por los mappers de productos y ordenes — es la
+// convención que consumirá el agente en T26.6.
+export function leadEsperado(row) {
+  return row.pr_min != null && row.pr_max != null
+    ? (row.pr_min + row.pr_max) / 2
+    : row.pr_tiempo_entrega_dias;
+}
+
 function mapProducto(row) {
   return {
     id: row.id,
@@ -32,10 +41,7 @@ function mapProducto(row) {
       tiempo_entrega_dias: row.pr_tiempo_entrega_dias,
       tiempo_entrega_min_dias: row.pr_min,
       tiempo_entrega_max_dias: row.pr_max,
-      lead_dias_esperado:
-        row.pr_min != null && row.pr_max != null
-          ? (row.pr_min + row.pr_max) / 2
-          : row.pr_tiempo_entrega_dias,
+      lead_dias_esperado: leadEsperado(row),
     },
     ubicacion: row.ubicacion,
     estado: estadoProducto(row.stock_actual, row.stock_minimo),
