@@ -4,7 +4,7 @@ Este proyecto fue generado por MetaBuilder. Stack esperado:
 
 - **Frontend**: React + Vite + Tailwind CSS (si aplica)
 - **Backend**: Node.js + Express (si aplica)
-- **Base de datos**: SQLite (archivo local, sin servidores externos) (si aplica)
+- **Base de datos**: PostgreSQL (`mercadoraiz-db`, `pg` async via `server/db.js`; ver `docker-compose.yml` para el local)
 - **Testing**: Vitest (unit/integración), Playwright + Chromium (E2E, si hay frontend)
 
 ## Reglas de UI obligatorias (React + Tailwind)
@@ -73,7 +73,7 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 
 ## Arquitectura backend
 
-**Arquitectura MVC**: `server/routes/*.js` solo mapean HTTP → `server/controllers/`; los controllers orquestan request/response y delegan a `server/models/` (fat models con toda la lógica de negocio y las queries SQLite via `server/db.js`). Al agregar endpoints: route fino + método en controller + lógica en model.
+**Arquitectura MVC**: `server/routes/*.js` solo mapean HTTP → `server/controllers/`; los controllers orquestan request/response y delegan a `server/models/` (fat models con toda la lógica de negocio y las queries async via `server/db.js` (`get`/`all`/`run`/`prepare`/`tx`, placeholders `?` traducidos a `$n`)). Al agregar endpoints: route fino + método en controller + lógica en model.
 
 ## Workflow de cambios (obligatorio)
 
