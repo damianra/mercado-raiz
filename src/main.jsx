@@ -5,6 +5,7 @@ import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
 import NotFound from './pages/NotFound.jsx';
+import Usuarios from './pages/Usuarios.jsx';
 import { usePath } from './lib/router.jsx';
 import { getSession, onSesion, refrescarSesion } from './lib/auth.js';
 import './index.css';
@@ -41,6 +42,17 @@ function Root() {
   // Guard de rutas (SPEC-23 R23.10): sin sesión → login, cualquiera
   // sea el path protegido pedido.
   if (!sesion) return <Login />;
+
+  if (segmento === 'usuarios') {
+    // SPEC-24: la sección solo existe para ADMIN — al resto se le
+    // niega con 404 (no se renderiza un "sin permiso" que delata la
+    // ruta; la política real la impone el backend con 403).
+    return sesion.usuario.rol === 'ADMIN' ? (
+      <Usuarios usuario={sesion.usuario} />
+    ) : (
+      <NotFound />
+    );
+  }
 
   if (segmento === '' || segmento === 'index.html' || segmento === 'login') {
     return <App usuario={sesion.usuario} />;

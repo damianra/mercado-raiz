@@ -1567,8 +1567,7 @@ usuario real → logout → redirect. Review por sub-agente del PR.
 - **Origen:** pedido del usuario — endpoints para agregar, editar y
   eliminar usuarios con manejo de roles. Depende de SPEC-23 (auth +
   matriz de roles base).
-- **Estado global:** 🚧 parcial — T24.1 implementada (backend CRUD);
-  T24.2 (pantalla admin) pendiente
+- **Estado global:** ✅ implementada — ver "Verificado por"
 
 ### Decisiones
 
@@ -1633,7 +1632,14 @@ usuario real → logout → redirect. Review por sub-agente del PR.
   bloqueo); alta con `409` email dup + `400` rol/password<12; PATCH y
   DELETE aplican guards self/último-ADMIN (`409`) y revocan sesiones
   (`token_version++` + refreshes) ante cambio de rol o `activo=0`.
-- **T24.2** Front pantalla admin de usuarios + e2e.
+- **T24.2** Front pantalla admin de usuarios + e2e. ✅ implementada —
+  ruta `/usuarios` solo para `ADMIN` (`src/pages/Usuarios.jsx`; al
+  resto se niega con 404 sin delatar la ruta), tabla paginada con
+  búsqueda/filtro de rol, modal alta/edición con submit gateado
+  (válido + checkbox privacidad + cambios reales en edición), toggle
+  activar/desactivar con self bloqueado, badge "vos" en la fila
+  propia, `EmptyState`/`ErrorState`. Item "Usuarios" en `Sidebar`
+  filtrado por rol.
 
 ### Verificado por
 

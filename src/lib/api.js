@@ -108,3 +108,29 @@ export const rechazarOrden = (ordenId, motivo) =>
     method: 'POST',
     body: JSON.stringify({ motivo }),
   });
+
+// SPEC-24: gestión de usuarios — todos estos endpoints exigen rol
+// ADMIN en el backend; el front además oculta la sección a otros
+// roles (regla UI n°2).
+export const getUsuarios = ({ page = 1, search = '', rol = '', activo = '' } = {}) => {
+  const qs = new URLSearchParams({ page: String(page), limit: '20' });
+  if (search) qs.set('search', search);
+  if (rol) qs.set('rol', rol);
+  if (activo !== '') qs.set('activo', activo);
+  return apiFetch(`/usuarios?${qs}`);
+};
+
+export const crearUsuario = ({ email, nombre, rol, password }) =>
+  apiFetch('/usuarios', {
+    method: 'POST',
+    body: JSON.stringify({ email, nombre, rol, password }),
+  });
+
+export const editarUsuario = (id, cambios) =>
+  apiFetch(`/usuarios/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(cambios),
+  });
+
+export const borrarUsuario = (id) =>
+  apiFetch(`/usuarios/${id}`, { method: 'DELETE' });
