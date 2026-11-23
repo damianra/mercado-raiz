@@ -1,5 +1,5 @@
 import { capString } from '../security.js';
-import { ESTADOS_PRODUCTO, listProductos } from '../models/productos.model.js';
+import { ESTADOS_PRODUCTO, getProducto, listProductos } from '../models/productos.model.js';
 
 export async function list(req, res) {
   const { estado, categoria, proveedor_id, search, page = '1', limit = '20' } = req.query;
@@ -30,4 +30,14 @@ export async function list(req, res) {
       limit: l,
     }),
   );
+}
+
+export async function get(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'id debe ser un entero positivo' });
+  }
+  const producto = await getProducto(id);
+  if (!producto) return res.status(404).json({ error: 'producto no encontrado' });
+  res.json(producto);
 }

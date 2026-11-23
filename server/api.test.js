@@ -304,6 +304,28 @@ describe('GET /api/dashboard/stats', () => {
 
 // --- Mutaciones: van después de las lecturas para no mover los totales ---
 
+describe('GET /api/productos/:id — precios por proveedor (SPEC-27)', () => {
+  it('devuelve el producto con todos sus precios (principal primero)', async () => {
+    const res = await get('/productos/1');
+    expect(res.status).toBe(200);
+    const p = await res.json();
+    expect(p.id).toBe(1);
+    expect(p.precio_venta).toBeGreaterThan(0);
+    expect(Array.isArray(p.precios)).toBe(true);
+    expect(p.precios.length).toBeGreaterThanOrEqual(1);
+    expect(p.precios[0].es_principal).toBe(1);
+    expect(p.precios[0].costo_unitario).toBeLessThan(p.precio_venta);
+    // el alternativo del mayorista general si existe
+    const alt = p.precios.find((x) => x.es_principal === 0);
+    if (alt) expect(alt.proveedor_id).toBe(8);
+  });
+
+  it('404 si no existe / 400 si el id no es entero', async () => {
+    expect((await get('/productos/99999')).status).toBe(404);
+    expect((await get('/productos/abc')).status).toBe(400);
+  });
+});
+
 describe('GET /api/productos — margen (SPEC-27)', () => {
   it('expone precio_venta, costo_unitario y margen_pct del proveedor principal', async () => {
     const res = await get('/productos?limit=1');

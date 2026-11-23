@@ -1974,7 +1974,7 @@ pagado). El agente puede elegir proveedor por costo/lead.
 - **T27.1** Schema + seed + modelos (producto/orden exponen
   precio_venta, costo y margen_pct) + tests. ✅
 - **T27.2** Endpoints/stats: precios por proveedor en el detalle del
-  producto + margen perdido en quiebres.
+  producto + margen perdido en quiebres. ✅
 - **T27.3** Agente: elige proveedor (costo vs lead) y lo envía en la
   orden; `calcular-cantidad` usa ese costo.
 - **T27.4** Dashboard: margen en quiebres/listado.

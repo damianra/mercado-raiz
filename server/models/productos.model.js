@@ -104,3 +104,41 @@ export async function listProductos({ estado, categoria, proveedorId, search, pa
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }
+
+/**
+ * SPEC-27 (T27.2): detalle de un producto con TODOS sus precios por
+ * proveedor (producto_proveedor + datos del proveedor). `lead_dias`
+ * es el override por par; null → usa el del proveedor.
+ * Devuelve null si el producto no existe.
+ */
+export async function getProducto(id) {
+  const db = await openDb();
+  const row = await db.get(
+    `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
+            p.precio_venta, p.ubicacion, p.fecha_actualizacion,
+            pp.costo_unitario AS pp_costo,
+            pr.id AS pr_id, pr.nombre AS pr_nombre,
+            pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
+            pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max
+     FROM productos p
+     JOIN proveedores pr ON pr.id = p.proveedor_id
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+     WHERE p.id = ?`,
+    [id],
+  );
+  if (!row) return null;
+  const precios = await db.all(
+    `SELECT pp.proveedor_id, pr.nombre AS proveedor, pp.costo_unitario,
+            pp.lead_dias,
+            COALESCE(pp.lead_dias, (pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
+                     pr.tiempo_entrega_dias) AS lead_efectivo,
+            pp.es_principal, pp.activo
+     FROM producto_proveedor pp
+     JOIN proveedores pr ON pr.id = pp.proveedor_id
+     WHERE pp.producto_id = ?
+     ORDER BY pp.es_principal DESC, pp.costo_unitario ASC`,
+    [id],
+  );
+  return { ...mapProducto(row), precios };
+}

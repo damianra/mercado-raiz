@@ -178,3 +178,39 @@ describe('GET /api/estadisticas/demanda — cálculo', () => {
     expect(body.demanda_diaria).toBeGreaterThan(4); // ~10 u/día reciente
   });
 });
+
+describe('margen (SPEC-27 T27.2)', () => {
+  it('expone costo_unitario, margen_unitario y margen_perdido por quiebre', async () => {
+    const p = prodSinMovs();
+    await insertarMovimiento(p.id, 'VENTA', 4, 0, 5, 'T-E-MARGEN');
+    await insertarMovimiento(p.id, 'REPOSICION', 0, 20, 2, 'T-E-REPO-M');
+    await insertarVentas(p.id, Array.from({ length: 3 }, (_, i) => [i + 1, 5]));
+
+    const r = await get(`/estadisticas/demanda?producto_id=${p.id}&dias=30`);
+    const body = await r.json();
+    const pp = seedData.producto_proveedor.find(
+      (x) => x.producto_id === p.id && x.proveedor_id === p.proveedor_id,
+    );
+    const esperado = p.precio_venta - pp.costo_unitario;
+    expect(body.costo_unitario).toBeCloseTo(pp.costo_unitario, 5);
+    expect(body.margen_unitario).toBeCloseTo(esperado, 5);
+    // margen_perdido = margen × demanda × días en quiebre (δ por redondeo)
+    expect(
+      Math.abs(
+        body.margen_perdido -
+          body.margen_unitario * body.demanda_diaria * body.dias_en_quiebre,
+      ),
+    ).toBeLessThan(0.5);
+  });
+
+  it('margen_perdido es null si dias_en_quiebre no es confiable (nunca inventado)', async () => {
+    const p = prodSinMovs();
+    await insertarVentas(p.id, [[1, 3]]);
+    const body = await (
+      await get(`/estadisticas/demanda?producto_id=${p.id}&dias=30`)
+    ).json();
+    expect(body.dias_en_quiebre).toBeNull();
+    expect(body.margen_perdido).toBeNull();
+    expect(body.margen_unitario).toBeGreaterThan(0); // costo sí existe
+  });
+});

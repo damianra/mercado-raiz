@@ -55,7 +55,7 @@ function quiebreDesde(movs, fechas) {
 // El cálculo puro, compartido por la ruta individual y la bulk:
 // misma serie + mismos quiebres → mismas stats (una fuente de
 // verdad para agente y dashboard, R26.9).
-function calcularStats({ productoId, dias, fechas, serie, movs, ultima }) {
+function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia }) {
   const quiebre = quiebreDesde(movs, fechas);
 
   // Días elegibles para los denominadores: todo menos quiebres.
@@ -114,13 +114,34 @@ function calcularStats({ productoId, dias, fechas, serie, movs, ultima }) {
     // MAX global (no acotado a la ventana): distingue venta
     // reciente de producto dormido.
     ultima_venta: ultima,
+    // SPEC-27 (T27.2): economía del producto — margen unitario y
+    // margen perdido por quiebres en la ventana (unidades que no se
+    // vendieron × margen). null honesto si no hay precio de costo
+    // o si dias_en_quiebre no es confiable — nunca inventado.
+    costo_unitario: economia?.costo ?? null,
+    margen_unitario:
+      economia?.costo != null && economia?.venta != null
+        ? Number((economia.venta - economia.costo).toFixed(2))
+        : null,
+    margen_perdido:
+      economia?.costo != null && economia?.venta != null && quiebre.dias != null
+        ? Number(
+            ((economia.venta - economia.costo) * demanda_diaria * quiebre.dias).toFixed(2),
+          )
+        : null,
   };
 }
 
 export async function estadisticaDemanda(productoId, dias) {
   const db = await openDb();
 
-  const prod = await db.get('SELECT id FROM productos WHERE id = ?', [productoId]);
+  const prod = await db.get(
+    `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+     WHERE p.id = ?`,
+    [productoId],
+  );
   if (!prod) return { status: 404, error: 'producto no encontrado' };
 
   const { hoy } = await db.get('SELECT CURRENT_DATE::text AS hoy');
@@ -144,7 +165,8 @@ export async function estadisticaDemanda(productoId, dias) {
     'SELECT MAX(fecha)::text AS ultima FROM ventas WHERE producto_id = ?',
     [productoId],
   );
-  return calcularStats({ productoId, dias, fechas, serie, movs, ultima });
+  return calcularStats({ productoId, dias, fechas, serie, movs, ultima,
+    economia: { venta: prod.precio_venta, costo: prod.costo } });
 }
 
 // R26.9/T26.7 — las mismas estadísticas para TODOS los productos
@@ -155,7 +177,12 @@ export async function estadisticaDemanda(productoId, dias) {
 export async function estadisticasDemandaBulk(dias) {
   const db = await openDb();
   const { hoy } = await db.get('SELECT CURRENT_DATE::text AS hoy');
-  const productos = await db.all('SELECT id FROM productos ORDER BY id');
+  const productos = await db.all(
+    `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+     ORDER BY p.id`,
+  );
 
   const ventas = await db.all(
     `SELECT producto_id, fecha::text AS fecha, SUM(unidades)::int AS unidades
@@ -198,6 +225,7 @@ export async function estadisticasDemandaBulk(dias) {
       serie,
       movs: movsPor.get(p.id) ?? [],
       ultima: ultimas.get(p.id) ?? null,
+      economia: { venta: p.precio_venta, costo: p.costo },
     });
   });
 }
