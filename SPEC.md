@@ -1916,7 +1916,15 @@ manual de la migración (counts y muestras coinciden con
   corre para `PATCH activo=0`. Validaciones: nombre requerido y único
   (ILIKE → 409), min ≤ max sobre valores fusionados, confiabilidad
   0–100, montos ≥ 0, `categorias_cubiertas` array. 22 tests.
-- **T26.4** Pantalla `/proveedores` front + e2e.
+- **T26.4** Pantalla `/proveedores` front + e2e. ✅ `src/pages/Proveedores.jsx`
+  (mismas reglas UI que `/usuarios`): tabla con categorías, rango de
+  entrega + nominal, confiabilidad, pedido mínimo/envío; búsqueda
+  debounced + filtro activo; modal alta/edición con FormShell gateado
+  (checkbox privacidad — los datos de contacto son personales —,
+  submit disabled hasta válido + cambios reales); desactivar vía
+  DELETE (soft delete — el 409 con órdenes vivas llega al toast);
+  reactivar vía PATCH. Sidebar + guard ADMIN en `main.jsx` (404 al
+  resto). 7 tests e2e.
 - **T26.5** `/api/estadisticas/demanda` (R26.7) + tests.
 - **T26.6** Harness: `ventas.client`, `analizar-demanda` y
   `calcular-cantidad` sobre la nueva fuente + stock de seguridad

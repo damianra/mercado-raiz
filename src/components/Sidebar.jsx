@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   ClipboardCheck,
   Leaf,
+  Truck,
   Users,
   X,
 } from 'lucide-react';
@@ -15,6 +16,9 @@ const NAV = [
   // SPEC-24: gestión de usuarios — solo visible para ADMIN; `to`
   // navega a otra página, los demás son anchors de la home.
   { id: 'usuarios', label: 'Usuarios', icon: Users, to: '/usuarios', roles: ['ADMIN'] },
+  // SPEC-26 T26.4: gestión de proveedores — solo ADMIN (mismo guard
+  // que Usuarios; el backend devuelve 403 al resto).
+  { id: 'proveedores', label: 'Proveedores', icon: Truck, to: '/proveedores', roles: ['ADMIN'] },
 ];
 
 export default function Sidebar({ urgentes = 0, open, onClose, usuario, activeId = 'ordenes', base = '' }) {
