@@ -4,6 +4,7 @@ import { Leaf } from 'lucide-react';
 import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
+import Metricas from './pages/Metricas.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Proveedores from './pages/Proveedores.jsx';
 import Quiebres from './pages/Quiebres.jsx';
@@ -59,6 +60,11 @@ function Root() {
   if (segmento === 'quiebres') {
     // SPEC-27 T27.4: vista operativa de quiebres — todos los roles.
     return <Quiebres usuario={sesion.usuario} />;
+  }
+
+  if (segmento === 'metricas') {
+    // SPEC-28 T28.2: scorecard de métricas — todos los roles.
+    return <Metricas usuario={sesion.usuario} />;
   }
 
   if (segmento === 'proveedores') {

@@ -112,6 +112,12 @@ export const getDashboardStats = () => apiFetch('/dashboard/stats');
 export const getDemandaStats = (dias = 90) =>
   apiFetch(`/estadisticas/demanda?dias=${dias}`);
 
+// SPEC-28 (R28.1/R28.2): scorecard agregado de métricas retail —
+// quiebres, riesgo vs lead, inventario a costo, fill rate,
+// órdenes pendientes y scorecard de proveedores.
+export const getMetricas = (dias = 90) =>
+  apiFetch(`/estadisticas/metricas?dias=${dias}`);
+
 export const crearOrden = ({ productoId, cantidad, requiereAprobacion }) =>
   apiFetch('/ordenes', {
     method: 'POST',

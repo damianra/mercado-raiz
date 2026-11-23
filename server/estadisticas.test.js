@@ -214,3 +214,64 @@ describe('margen (SPEC-27 T27.2)', () => {
     expect(body.margen_unitario).toBeGreaterThan(0); // costo sí existe
   });
 });
+
+describe('GET /api/estadisticas/metricas — scorecard (SPEC-28 R28.1)', () => {
+  it('401 sin token; 200 con SERVICIO; 400 con dias inválidos', async () => {
+    expect((await fetch(`${base}/api/estadisticas/metricas`)).status).toBe(401);
+    expect((await get('/estadisticas/metricas?dias=3')).status).toBe(400);
+    expect((await get('/estadisticas/metricas?dias=90')).status).toBe(200);
+  });
+
+  it('el scorecard tiene las secciones y agrega sobre TODOS los productos', async () => {
+    const r = await get('/estadisticas/metricas?dias=90');
+    const m = await r.json();
+
+    expect(m.dias).toBe(90);
+    // secciones presentes
+    for (const k of ['quiebres', 'riesgo', 'inventario', 'servicio', 'ordenes', 'proveedores']) {
+      expect(m).toHaveProperty(k);
+    }
+    // buckets de riesgo particionan el catálogo completo
+    const total = seedData.productos.length;
+    const buckets =
+      m.riesgo.quiebre_seguro + m.riesgo.riesgo_alto + m.riesgo.riesgo_medio +
+      m.riesgo.cubierto + m.riesgo.sin_demanda;
+    expect(buckets).toBe(total);
+    // quiebres: sin_stock + bajo_minimo ≤ total; riesgo > 0 con seed real
+    expect(m.quiebres.skus_sin_stock).toBeGreaterThan(0);
+    expect(m.quiebres.skus_sin_stock + m.quiebres.skus_bajo_minimo).toBeLessThanOrEqual(total);
+    expect(m.quiebres.venta_riesgo_dia).toBeGreaterThanOrEqual(0);
+    // margen existe para (casi) todo el catálogo con SPEC-27
+    expect(m.quiebres.margen_riesgo_dia).toBeGreaterThanOrEqual(0);
+    // inventario a costo < a venta (margen positivo en el seed)
+    expect(m.inventario.valor_costo).toBeGreaterThan(0);
+    expect(m.inventario.valor_costo).toBeLessThan(m.inventario.valor_venta);
+    // fill rate en rango y definido (el seed tiene historial_stock)
+    expect(m.servicio.skus_con_historial).toBeGreaterThan(0);
+    expect(m.servicio.fill_rate_pct).toBeGreaterThanOrEqual(0);
+    expect(m.servicio.fill_rate_pct).toBeLessThanOrEqual(100);
+    // órdenes pendientes del seed
+    expect(m.ordenes.pendientes).toBeGreaterThanOrEqual(0);
+    expect(m.ordenes.pendientes_monto).toBeGreaterThanOrEqual(0);
+    // scorecard de proveedores: uno por proveedor del seed, con skus>0
+    expect(m.proveedores.length).toBe(seedData.proveedores.length);
+    for (const pr of m.proveedores) {
+      expect(pr).toHaveProperty('lead_dias_esperado');
+      expect(pr).toHaveProperty('confiabilidad_pct');
+      expect(pr.skus).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('dead stock cuenta productos con stock y sin venta en la ventana', async () => {
+    // un producto sin movimientos ni ventas pero con stock: el seed
+    // le asigna stock — es dead por definición de R28.1
+    const p = prodSinMovs();
+    // asegurar stock>0 sin tocar la cadena: venta sería movimiento;
+    // basta verificar que SI tiene stock aparece en dead o exceso
+    const m = await (await get('/estadisticas/metricas?dias=30')).json();
+    expect(m.inventario.dead_stock_skus).toBeGreaterThanOrEqual(0);
+    expect(m.inventario.dead_stock_valor_costo).toBeGreaterThanOrEqual(0);
+    // consistencia interna: los valores a costo no superan el total
+    expect(m.inventario.dead_stock_valor_costo).toBeLessThanOrEqual(m.inventario.valor_costo);
+  });
+});

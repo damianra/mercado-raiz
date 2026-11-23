@@ -229,3 +229,158 @@ export async function estadisticasDemandaBulk(dias) {
     });
   });
 }
+
+// SPEC-28 (R28.1): scorecard agregado — las preguntas operativas del
+// dueño respondidas en una pasada. Reutiliza `estadisticasDemandaBulk`
+// como única fuente de stats por producto (misma math que agente y
+// dashboard); el resto es agregación sobre stock/costo/lead y
+// agregados SQL de órdenes/proveedores. null honesto donde falta
+// el dato — nunca inventado.
+const EXCESO_COBERTURA_DIAS = 60;
+const r2 = (n) => (n == null ? null : Number(n.toFixed(2)));
+
+export async function metricasScorecard(dias) {
+  const db = await openDb();
+  const [{ hoy }, stats] = await Promise.all([
+    db.get('SELECT CURRENT_DATE::text AS hoy'),
+    estadisticasDemandaBulk(dias),
+  ]);
+  const statsPor = new Map(stats.map((s) => [s.producto_id, s]));
+  // Corte de "sin venta en la ventana" para dead stock: ISO date
+  // compara lexicográfico igual que cronológico.
+  const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - dias * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
+  const productos = await db.all(
+    `SELECT p.id, p.stock_actual, p.stock_minimo, p.precio_venta,
+            pp.costo_unitario AS costo,
+            COALESCE((pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
+                     pr.tiempo_entrega_dias)::double precision AS lead_esperado
+     FROM productos p
+     JOIN proveedores pr ON pr.id = p.proveedor_id
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1`,
+  );
+
+  const q = { skus_sin_stock: 0, skus_bajo_minimo: 0, venta: 0, margen: 0, hayMargen: false, perdido: 0, hayPerdido: false };
+  const riesgo = { quiebre_seguro: 0, riesgo_alto: 0, riesgo_medio: 0, cubierto: 0, sin_demanda: 0 };
+  const inv = { valorCosto: 0, hayCosto: false, valorVenta: 0, deadSkus: 0, deadValor: 0, excesoSkus: 0, excesoValor: 0 };
+  let quiebreDias = 0;
+  let skusHistorial = 0;
+
+  for (const p of productos) {
+    const s = statsPor.get(p.id) ?? {};
+    const demanda = s.demanda_diaria ?? 0;
+    const margen = s.margen_unitario;
+
+    // Quiebres: venta y margen que se dejan de facturar por día.
+    if (p.stock_actual === 0) {
+      q.skus_sin_stock++;
+      q.venta += demanda * p.precio_venta;
+      if (margen != null) {
+        q.margen += demanda * margen;
+        q.hayMargen = true;
+      }
+    } else if (p.stock_actual < p.stock_minimo) {
+      q.skus_bajo_minimo++;
+    }
+    if (s.margen_perdido != null) {
+      q.perdido += s.margen_perdido;
+      q.hayPerdido = true;
+    }
+
+    // Riesgo: cobertura vs lead esperado del proveedor principal.
+    // stock 0 + demanda → quiebre seguro (ya está en la góndola vacía).
+    if (demanda <= 0) {
+      riesgo.sin_demanda++;
+    } else {
+      const cob = p.stock_actual / demanda;
+      const lead = p.lead_esperado ?? 0;
+      if (p.stock_actual === 0 || cob < lead) riesgo.quiebre_seguro++;
+      else if (cob < lead * 1.5) riesgo.riesgo_alto++;
+      else if (cob < lead * 2) riesgo.riesgo_medio++;
+      else riesgo.cubierto++;
+      if (cob > EXCESO_COBERTURA_DIAS) {
+        inv.excesoSkus++;
+        if (p.costo != null) inv.excesoValor += p.stock_actual * p.costo;
+      }
+    }
+
+    // Inventario a costo (con null-tracking: si algún producto no
+    // tiene costo, el total sería subestimado — se reporta igual
+    // pero el front puede matizar).
+    inv.valorVenta += p.stock_actual * p.precio_venta;
+    if (p.costo != null) {
+      inv.valorCosto += p.stock_actual * p.costo;
+      inv.hayCosto = true;
+    }
+
+    // Dead stock: hay unidades y no vendió en toda la ventana.
+    if (p.stock_actual > 0 && (s.ultima_venta == null || s.ultima_venta <= corte)) {
+      inv.deadSkus++;
+      if (p.costo != null) inv.deadValor += p.stock_actual * p.costo;
+    }
+
+    // Fill rate: % de SKU-días con stock sobre los confiables.
+    if (s.dias_en_quiebre != null) {
+      skusHistorial++;
+      quiebreDias += s.dias_en_quiebre;
+    }
+  }
+
+  const { c: pendientes, m: pendientesMonto } = await db.get(
+    `SELECT COUNT(*)::int AS c, COALESCE(SUM(monto_total), 0) AS m
+     FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION'`,
+  );
+
+  const proveedores = await db.all(
+    `SELECT pr.id, pr.nombre, pr.activo,
+            COALESCE((pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
+                     pr.tiempo_entrega_dias)::double precision AS lead_dias_esperado,
+            pr.confiabilidad_pct,
+            (SELECT COUNT(*)::int FROM productos p WHERE p.proveedor_id = pr.id) AS skus,
+            (SELECT COUNT(*)::int FROM ordenes_compra o WHERE o.proveedor_id = pr.id) AS ordenes,
+            (SELECT COALESCE(SUM(o.monto_total), 0) FROM ordenes_compra o
+              WHERE o.proveedor_id = pr.id) AS monto,
+            (SELECT COUNT(*)::int FROM ordenes_compra o
+              WHERE o.proveedor_id = pr.id AND o.estado = 'PENDIENTE_APROBACION') AS pendientes,
+            (SELECT COALESCE(SUM(o.monto_total), 0) FROM ordenes_compra o
+              WHERE o.proveedor_id = pr.id AND o.estado = 'PENDIENTE_APROBACION') AS monto_pendiente
+     FROM proveedores pr ORDER BY monto DESC, pr.id`,
+  );
+  for (const pr of proveedores) {
+    pr.monto = r2(pr.monto);
+    pr.monto_pendiente = r2(pr.monto_pendiente);
+  }
+
+  return {
+    dias,
+    quiebres: {
+      skus_sin_stock: q.skus_sin_stock,
+      skus_bajo_minimo: q.skus_bajo_minimo,
+      venta_riesgo_dia: r2(q.venta),
+      margen_riesgo_dia: q.hayMargen ? r2(q.margen) : null,
+      margen_perdido_ventana: q.hayPerdido ? r2(q.perdido) : null,
+    },
+    riesgo,
+    inventario: {
+      valor_costo: inv.hayCosto ? r2(inv.valorCosto) : null,
+      valor_venta: r2(inv.valorVenta),
+      dead_stock_skus: inv.deadSkus,
+      dead_stock_valor_costo: r2(inv.deadValor),
+      exceso_skus: inv.excesoSkus,
+      exceso_valor_costo: r2(inv.excesoValor),
+      exceso_cobertura_dias: EXCESO_COBERTURA_DIAS,
+    },
+    servicio: {
+      fill_rate_pct:
+        skusHistorial > 0
+          ? Number((100 * (1 - quiebreDias / (skusHistorial * dias))).toFixed(1))
+          : null,
+      skus_con_historial: skusHistorial,
+    },
+    ordenes: { pendientes, pendientes_monto: r2(pendientesMonto) },
+    proveedores,
+  };
+}
