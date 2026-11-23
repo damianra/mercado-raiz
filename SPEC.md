@@ -1856,7 +1856,7 @@ manual de la migración (counts y muestras coinciden con
   Inserta en `tx()` por lotes.
 - **R26.4** Proveedores: columnas nuevas `tiempo_entrega_min_dias`,
   `tiempo_entrega_max_dias`, `confiabilidad_pct`, `pedido_minimo_monto`,
-  `costo_envio`, `categorias_cubiertas` (texto/JSONB). El lead de
+  `costo_envio`, `categorias_cubiertas` (TEXT[]). El lead de
   cálculo pasa a usar el valor esperado (`min`+`max`)/2 o
   `tiempo_entrega_dias` si no hay rango — documentado.
 - **R26.5** CRUD `GET/POST/PATCH/DELETE /api/proveedores` solo
@@ -1901,7 +1901,13 @@ manual de la migración (counts y muestras coinciden con
   ~13% SKUs sin ventas → 114.822 filas/1.281 SKUs en seed real;
   inserta por lotes de 400 en tx; opt-out en schemas de test.
   10 tests nuevos (endpoint + determinismo del generador).
-- **T26.2** Enriquecer `proveedores` (R26.4) + seed actualizado.
+- **T26.2** Enriquecer `proveedores` (R26.4) + seed actualizado. ✅
+  Columnas `tiempo_entrega_min/max_dias`, `confiabilidad_pct`,
+  `pedido_minimo_monto`, `costo_envio`, `categorias_cubiertas` (TEXT[])
+  — en CREATE + `ALTER ... IF NOT EXISTS` para bases ya creadas; los 7
+  proveedores del seed con valores coherentes con sus categorías
+  reales; `lead_dias_esperado` = `(min+max)/2` o `tiempo_entrega_dias`
+  expuesto en `proveedor` de `/api/ordenes` y `/api/productos`.
 - **T26.3** CRUD `/api/proveedores` admin + tests.
 - **T26.4** Pantalla `/proveedores` front + e2e.
 - **T26.5** `/api/estadisticas/demanda` (R26.7) + tests.
