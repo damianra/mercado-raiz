@@ -137,6 +137,23 @@ describe('PATCH /api/usuarios/:id — edición', () => {
     expect(r.status).toBe(409);
   });
 
+  it('PATCH solo-nombre NO revoca sesiones del usuario', async () => {
+    const email = 'nombre-only@test.com';
+    await crear({ email, password: 'su-password-123' });
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'su-password-123' }),
+    });
+    const { access_token } = await login.json();
+    const target = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+    await req(`/usuarios/${target.id}`, 'PATCH', { nombre: 'Solo Nombre Nuevo' });
+    const sigue = await fetch(`${base}/api/ordenes`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    expect(sigue.status).toBe(200);
+  });
+
   it('cambio de rol invalida JWT y refresh del usuario', async () => {
     const email = 'rol-change@test.com';
     await crear({ email, rol: 'APROBADOR', password: 'su-password-123' });
@@ -197,6 +214,14 @@ describe('DELETE /api/usuarios/:id — soft delete y guards', () => {
       .prepare('SELECT COUNT(*) AS c FROM refresh_tokens WHERE usuario_id = ? AND revocado = 0')
       .get(u.id);
     expect(tokens).toBe(0);
+  });
+
+  it('DELETE sobre usuario ya inactivo es idempotente (200)', async () => {
+    const { body: u } = await crear();
+    await req(`/usuarios/${u.id}`, 'DELETE');
+    const r = await req(`/usuarios/${u.id}`, 'DELETE');
+    expect(r.status).toBe(200);
+    expect((await r.json()).activo).toBe(0);
   });
 
   it('409 self-delete y self-degrade (único ADMIN activo = último)', async () => {

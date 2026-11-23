@@ -1601,8 +1601,8 @@ usuario real → logout → redirect. Review por sub-agente del PR.
   `password_hash` ni campos de seguridad (whitelist explícita).
 - **R24.2** `POST /api/usuarios` (ADMIN): `{email, nombre, rol,
   password}` → `201` usuario; `409` email duplicado; `400` con
-  detalle si rol ∉ ENUM o password <12 chars. Hash argon2id igual
-  que login.
+  detalle si rol ∉ ENUM o password <12 chars. Mismo hash que login
+  (scrypt nativo — ver decisión en SPEC-23).
 - **R24.3** `PATCH /api/usuarios/:id` (ADMIN): edita `nombre`,
   `email`, `rol`, `activo`. Cambio de `rol` o `activo=0` →
   `token_version++` + revoca sus refresh tokens (cierra sesiones).

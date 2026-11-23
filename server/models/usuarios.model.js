@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { capString } from '../security.js';
 import { hashPassword, MIN_PASSWORD_LENGTH, revocarRefreshesDe } from './auth.model.js';
 
 // SPEC-24: CRUD admin de usuarios. `publico` de auth.model no basta
@@ -45,12 +46,14 @@ export function listUsuarios({ rol, activo, search, page, limit }) {
 
 export function crearUsuario({ email, nombre, rol, password }) {
   const db = openDb();
-  const emailNorm = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const emailNorm =
+    typeof email === 'string' ? capString(email.trim().toLowerCase(), 254) : '';
 
   if (!EMAIL_RE.test(emailNorm)) return { status: 400, error: 'email inválido' };
   if (typeof nombre !== 'string' || !nombre.trim()) {
     return { status: 400, error: 'nombre requerido' };
   }
+  const nombreNorm = capString(nombre.trim(), 200);
   if (!ROLES.includes(rol)) {
     return { status: 400, error: `rol inválido — válidos: ${ROLES.join(', ')}` };
   }
@@ -67,11 +70,21 @@ export function crearUsuario({ email, nombre, rol, password }) {
     };
   }
 
-  const { lastInsertRowid } = db
-    .prepare(
-      'INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?, ?, ?, ?)',
-    )
-    .run(emailNorm, nombre.trim(), rol, hashPassword(password));
+  let lastInsertRowid;
+  try {
+    ({ lastInsertRowid } = db
+      .prepare(
+        'INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?, ?, ?, ?)',
+      )
+      .run(emailNorm, nombreNorm, rol, hashPassword(password)));
+  } catch (e) {
+    // UNIQUE constraint: el check anterior ya cubre el caso normal;
+    // esto blinda una carrera si el storage dejara de ser sync.
+    if (String(e.code ?? '').startsWith('SQLITE_CONSTRAINT')) {
+      return { status: 409, error: 'email ya registrado — si fue eliminado, reactivá el usuario existente' };
+    }
+    throw e;
+  }
   return {
     status: 201,
     data: db.prepare(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`).get(lastInsertRowid),
@@ -125,10 +138,11 @@ export function patchearUsuario(id, { nombre, email, rol, activo }, actorId) {
       return { status: 400, error: 'nombre debe ser un string no vacío' };
     }
     sets.push('nombre = ?');
-    params.push(nombre.trim());
+    params.push(capString(nombre.trim(), 200));
   }
   if (email !== undefined) {
-    const emailNorm = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const emailNorm =
+      typeof email === 'string' ? capString(email.trim().toLowerCase(), 254) : '';
     if (!EMAIL_RE.test(emailNorm)) return { status: 400, error: 'email inválido' };
     const dup = db
       .prepare('SELECT id FROM usuarios WHERE email = ? AND id != ?')
