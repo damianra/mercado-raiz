@@ -141,7 +141,7 @@ test('la búsqueda y el filtro por estado funcionan', async ({ page }) => {
   expect(pendientes).toBeGreaterThan(0);
   expect(pendientes).toBeLessThan(total);
   for (let i = 0; i < pendientes; i++) {
-    await expect(filas.nth(i).locator('td').nth(5)).toHaveText('Pendiente');
+    await expect(filas.nth(i).locator('td').nth(7)).toHaveText('Pendiente');
   }
 });
 
@@ -184,7 +184,7 @@ test('modal de detalle muestra producto/proveedor/análisis IA y aprobar llama a
   );
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(
-    filas.filter({ hasText: ordenId }).locator('td').nth(5),
+    filas.filter({ hasText: ordenId }).locator('td').nth(7),
   ).toHaveText('Aprobada');
 });
 
@@ -261,4 +261,19 @@ test('una ruta inexistente muestra 404 con vuelta al inicio', async ({
   await expect(
     page.getByRole('heading', { name: 'Órdenes Pendientes de Aprobación' }),
   ).toBeVisible();
+});
+
+test('la tabla muestra demanda/día y cobertura desde /api/estadisticas (T26.7)', async ({
+  page,
+}) => {
+  await cargarDashboard(page);
+  const tabla = page.locator('section[aria-label="Tabla de órdenes de compra"]');
+  // Columnas nuevas del bulk de demanda (R26.9).
+  await expect(tabla.getByRole('columnheader', { name: 'Demanda/día' })).toBeVisible();
+  await expect(tabla.getByRole('columnheader', { name: 'Cobertura' })).toBeVisible();
+  // Cada fila resuelve un valor real ('\d u' / '\d d') o '—' si el
+  // bulk falló — jamás la celda vacía (regla UI: fallback visible).
+  const primera = page.locator(FILAS).first();
+  await expect(primera.locator('td').nth(3)).toHaveText(/u$|—/);
+  await expect(primera.locator('td').nth(4)).toHaveText(/\dd$|—/);
 });

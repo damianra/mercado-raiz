@@ -83,7 +83,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
-- `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, días con venta/en quiebre, última venta)
+- `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, σ, días con venta/en quiebre, última venta); sin `producto_id` devuelve `{data:[...]}` con las mismas stats de todos los productos (R26.9 — las columnas demanda/cobertura del dashboard)
 - `GET|POST /api/usuarios` · `PATCH|DELETE /api/usuarios/:id` — CRUD de usuarios, solo rol `ADMIN` (SPEC-24; soft delete, revoca sesiones del afectado)
 - `GET|POST /api/proveedores` · `GET|PATCH|DELETE /api/proveedores/:id` — CRUD de proveedores, solo rol `ADMIN` (SPEC-26; soft delete `activo=0`, 409 si hay órdenes `PENDIENTE_APROBACION`/`ENVIADA` vivas)
 
