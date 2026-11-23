@@ -5,6 +5,7 @@ import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
 import NotFound from './pages/NotFound.jsx';
+import Proveedores from './pages/Proveedores.jsx';
 import Usuarios from './pages/Usuarios.jsx';
 import { usePath } from './lib/router.jsx';
 import { getSession, onSesion, refrescarSesion } from './lib/auth.js';
@@ -49,6 +50,15 @@ function Root() {
     // ruta; la política real la impone el backend con 403).
     return sesion.usuario.rol === 'ADMIN' ? (
       <Usuarios usuario={sesion.usuario} />
+    ) : (
+      <NotFound />
+    );
+  }
+
+  if (segmento === 'proveedores') {
+    // SPEC-26 T26.4: mismo guard que /usuarios — ADMIN only.
+    return sesion.usuario.rol === 'ADMIN' ? (
+      <Proveedores usuario={sesion.usuario} />
     ) : (
       <NotFound />
     );

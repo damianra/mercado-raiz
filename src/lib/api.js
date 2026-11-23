@@ -131,3 +131,29 @@ export const editarUsuario = (id, cambios) =>
     method: 'PATCH',
     body: JSON.stringify(cambios),
   });
+
+// SPEC-26 T26.4: gestión de proveedores — CRUD solo ADMIN en el
+// backend (T26.3); el front oculta la sección a otros roles.
+export const getProveedores = ({ page = 1, search = '', activo = '' } = {}) => {
+  const qs = new URLSearchParams({ page: String(page), limit: '20' });
+  if (search) qs.set('search', search);
+  if (activo !== '') qs.set('activo', activo);
+  return apiFetch(`/proveedores?${qs}`);
+};
+
+export const crearProveedor = (campos) =>
+  apiFetch('/proveedores', {
+    method: 'POST',
+    body: JSON.stringify(campos),
+  });
+
+export const editarProveedor = (id, cambios) =>
+  apiFetch(`/proveedores/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(cambios),
+  });
+
+// Soft delete (activo=0); 409 si tiene órdenes vivas — el error
+// llega en e.message para mostrarlo en toast.
+export const borrarProveedor = (id) =>
+  apiFetch(`/proveedores/${id}`, { method: 'DELETE' });
