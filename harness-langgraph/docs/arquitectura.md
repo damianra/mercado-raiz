@@ -24,7 +24,7 @@ pasó. La arquitectura separa tres preocupaciones:
                    │ llama por HTTP
 ┌──────────────────┴─────────────────────────────────┐
 │ BACKEND MVC (server/ del proyecto)                 │
-│ El sistema real: Express + Postgres. Productos,       │
+│ El sistema real: Express + Postgres. Productos,      │
 │ órdenes, historial de ventas, dashboard. El agente │
 │ es un cliente más — no toca la base directamente.  │
 └────────────────────────────────────────────────────┘
