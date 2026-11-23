@@ -14,10 +14,12 @@
  * descartable, no fuente de verdad: si se trunca solo hay más
  * llamadas LLM la próxima corrida.
  *
- * El hash cubre TODO lo que entra a los prompts: ventas de la
- * ventana, campos del producto (sku, nombre, stock, precio, lead
- * time — un movimiento AJUSTE cambia stock sin tocar ventas) y la
- * config que afecta el resultado (modelo, umbrales).
+ * El hash cubre TODO lo que entra a los prompts: las estadísticas
+ * de demanda del backend (SPEC-26 — cualquier cambio en la ventana
+ * de ventas las mueve), campos del producto (sku, nombre, stock,
+ * precio, lead — un movimiento AJUSTE cambia stock sin tocar
+ * ventas) y la config que afecta el resultado (modelo, umbrales,
+ * demanda_dias).
  *
  * `analisis_llm` marca que `analisis` la produjo el LLM (no el
  * fallback heurístico): buscarDemanda lo exige, así si ayer el
@@ -78,13 +80,24 @@ const mismoAnalisis = (a, b) => canonico(a) === canonico(b);
 
 /**
  * Hash del input completo del LLM para un producto. Cualquier
- * diferencia en ventas, campos del producto o config → otra clave →
+ * diferencia en stats, campos del producto o config → otra clave →
  * cache miss (invalidación implícita, no hay TTL que mantener).
  * Función pura — sync a propósito.
  */
-export function hashAnalisis(producto, ventas) {
+export function hashAnalisis(producto, stats) {
   const input = {
-    ventas: ventas.map((v) => [diaUtc(v.fecha), Math.abs(v.diferencia)]),
+    // SPEC-26: el input del LLM son las estadísticas de demanda del
+    // backend (no las filas crudas del historial) — cualquier cambio
+    // en la ventana de ventas mueve estos campos y desconfigura el hash.
+    stats: [
+      stats.demanda_diaria,
+      stats.tendencia,
+      stats.cv,
+      stats.desvio_demanda,
+      stats.dias_con_venta,
+      stats.dias_en_quiebre,
+      stats.ultima_venta,
+    ],
     producto: [
       producto.sku,
       producto.nombre,
@@ -93,11 +106,12 @@ export function hashAnalisis(producto, ventas) {
       producto.precio_unitario,
       producto.categoria,
       producto.proveedor?.nombre,
-      producto.proveedor?.tiempo_entrega_dias,
+      producto.proveedor?.lead_dias_esperado ?? producto.proveedor?.tiempo_entrega_dias,
     ],
     modelo: config.ollamaModel,
     umbral_aprobacion: config.umbralAprobacion,
     umbral_cv: config.umbralCv,
+    demanda_dias: config.demandaDias,
   };
   return createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 16);
 }

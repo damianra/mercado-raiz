@@ -43,8 +43,13 @@ async function justificarUno(state, p) {
   // demanda → misma cantidad/monto) → la justificación también es
   // la misma; reusarla ahorra la llamada más cara del grafo.
   const hash = state.hashPorProducto?.[p.id];
+  // σ es dato del backend adjuntado al estado (SPEC-26), no output
+  // del LLM — el cache solo persiste {demanda_diaria,tendencia,
+  // observacion}: sin strip, mismoAnalisis nunca matchea y los dos
+  // caches quedan ciegos para los productos volátiles.
+  const { desvio_demanda: _sigma, ...analisisBase } = analisis;
   // Cache fail-soft: un read caído es un miss, no aborta la corrida.
-  const cacheada = hash ? await buscarJustificacion(p.id, hash, analisis).catch(() => null) : null;
+  const cacheada = hash ? await buscarJustificacion(p.id, hash, analisisBase).catch(() => null) : null;
   if (cacheada) {
     metrics.cacheHit();
     log(`  ${p.sku}: justificación reusada del cache (input sin cambios)`);
@@ -65,7 +70,7 @@ async function justificarUno(state, p) {
     // El write al cache va fuera del try del LLM: una falla de
     // Postgres no debe descartar la justificación ya generada.
     if (hash) {
-      await guardarJustificacion(p.id, hash, analisis, respuesta).catch((e) =>
+      await guardarJustificacion(p.id, hash, analisisBase, respuesta).catch((e) =>
         log(`  ${p.sku}: cache write falló (${e.message}) — sigo sin cache`));
     }
     return { id: p.id, decision: { ...state.decisionPorProducto[p.id], analisis_ia: respuesta } };

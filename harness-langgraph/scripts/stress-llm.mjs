@@ -68,7 +68,7 @@ function articulo() {
   const [nombre, categoria] = PLANTILLAS[seq % PLANTILLAS.length];
   seq++;
   const base = 2 + (seq % 18); // demandas variadas
-  return {
+  const a = {
     id: 10000 + seq,
     sku: `ST-${String(seq).padStart(4, '0')}`,
     nombre: `${nombre} (${seq})`,
@@ -81,6 +81,28 @@ function articulo() {
       fecha: `2026-11-${String(1 + ((seq + i) % 9)).padStart(2, '0')}`,
       diferencia: -(base + ((seq + i) % 4)),
     })),
+  };
+  // Stats con el shape real del endpoint (SPEC-26) — se derivan de
+  // las ventas sintéticas, como hace el backend con la tabla ventas.
+  a.stats = statsDesdeVentas(a.ventas);
+  return a;
+}
+
+/** Stats sintéticas con el shape real del endpoint (SPEC-26). */
+function statsDesdeVentas(ventas) {
+  const uds = ventas.map((v) => Math.abs(v.diferencia));
+  const n = uds.length || 1;
+  const media = uds.reduce((a, b) => a + b, 0) / n;
+  const desvio = Math.sqrt(uds.reduce((s, v) => s + (v - media) ** 2, 0) / n);
+  return {
+    dias: 90,
+    demanda_diaria: Math.round(media * 100) / 100,
+    tendencia: 0,
+    cv: media > 0 ? Math.round((desvio / media) * 100) / 100 : null,
+    desvio_demanda: Math.round(desvio * 100) / 100,
+    dias_con_venta: ventas.length,
+    dias_en_quiebre: 0,
+    ultima_venta: ventas.at(-1)?.fecha ?? null,
   };
 }
 
@@ -129,16 +151,14 @@ async function llamada(tipo, instancia, prompt) {
 }
 
 function fallbackDemanda(p) {
-  const dias = new Set(p.ventas.map((v) => v.fecha)).size || 1;
-  const unidades = p.ventas.reduce((a, v) => a + Math.abs(v.diferencia), 0);
-  return { demanda_diaria: Math.max(0.5, Math.round((unidades / dias) * 10) / 10), tendencia: 'estable', observacion: 'fallback' };
+  return { demanda_diaria: p.stats.demanda_diaria, tendencia: 'estable', observacion: 'fallback' };
 }
 
 async function procesarArticulo(p) {
   const salida = { sku: p.sku, nombre: p.nombre, ts: new Date().toISOString(), llamadas: [], analisis: null, justificacion: null, ok: true };
   let analisis;
   try {
-    const { r, reg } = await llamada('demanda', llmJson, promptAnalisisDemanda(p, p.ventas));
+    const { r, reg } = await llamada('demanda', llmJson, promptAnalisisDemanda(p, p.stats));
     salida.llamadas.push(reg);
     analisis = parseJsonResponse(r.content, schemaAnalisis);
   } catch (e) {
@@ -150,8 +170,11 @@ async function procesarArticulo(p) {
   salida.analisis = analisis;
 
   if (!SOLO_DEMANDA) {
-    // Misma aritmética que el nodo calcular-cantidad (demanda × (lead+7) − stock)
-    const objetivo = Math.ceil(analisis.demanda_diaria * (p.proveedor.tiempo_entrega_dias + 7));
+    // Misma aritmética que el nodo calcular-cantidad:
+    // ceil(demanda × (lead+7) + z·σ·√lead) − stock (SPEC-26).
+    const lead = p.proveedor.lead_dias_esperado ?? p.proveedor.tiempo_entrega_dias;
+    const ss = config.zSeguridad * (p.stats.desvio_demanda ?? 0) * Math.sqrt(lead);
+    const objetivo = Math.ceil(analisis.demanda_diaria * (lead + 7) + ss);
     const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
     const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
     try {

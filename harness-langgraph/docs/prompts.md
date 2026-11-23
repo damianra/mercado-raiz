@@ -9,8 +9,9 @@ un solo trabajo por llamada, y NUNCA aritmética libre.
 
 `src/langgraph/prompts/analisis-demanda.js`
 
-**Entrada**: nombre, SKU, categoría, stock actual/mínimo, lista de
-ventas recientes (`fecha: N unidades`).
+**Entrada**: nombre, SKU, categoría, stock actual/mínimo y las
+estadísticas de demanda del backend (SPEC-26): media ponderada,
+desvío σ, CV, pendiente, días con venta/quiebre y última venta.
 
 **Salida esperada** (validada con zod):
 
@@ -23,10 +24,12 @@ ventas recientes (`fecha: N unidades`).
   a veces agrega prosa alrededor.
 - El schema fija `tendencia` a tres valores — sin enum, inventa
   palabras ("alta", "creciente") que rompen la lógica.
-- Le pasamos las ventas crudas y pedimos una ESTIMACIÓN — el
-  promedio exacto lo puede hacer el fallback; el valor del LLM es
-  leer patrones (fines de semana, rachas).
-- Fallback si falla: promedio simple de unidades/días del historial.
+- Le pasamos las estadísticas ya calculadas y pedimos un AJUSTE —
+  la media ponderada la calcula el backend; el valor del LLM es
+  ponderar contexto que el promedio no ve (quiebres, tendencia,
+  volatilidad). Los días en quiebre se explicitan como censurados
+  para que el modelo no los lea como demanda cero.
+- Fallback si falla: la `demanda_diaria` del backend tal cual.
 
 ## Prompt 1b — análisis de demanda EN LOTE (SPEC-16)
 
@@ -48,8 +51,9 @@ respuesta ↔ producto). **Salida esperada**:
   reales: array, objeto-envuelto, objeto suelto.
 - `observacion` pide máx 12 palabras — es lo más verboso y el
   `numPredict` escala con el lote (100 tok/item).
-- Ventas acotadas a las últimas 10 por producto — historiales
-  largos inflarían el input más allá del `numCtx` del lote.
+- Por producto van las stats compactas en una línea (`statsTxt`)
+  — mucho más acotado que la lista cruda de movimientos del
+  historial que se usaba antes (SPEC-26).
 - Un item faltante/inválido NO tira el lote: ese producto cae a la
   llamada individual (Prompt 1). Solo si la respuesta entera no
   parsea, todos caen a individual.

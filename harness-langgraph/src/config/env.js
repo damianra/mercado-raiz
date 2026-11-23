@@ -52,9 +52,10 @@ export const config = {
   umbralAprobacion: Number(required('UMBRAL_APROBACION', '50000')),
 
   /**
-   * Triage heurístico (SPEC-12): si el coeficiente de variación de
-   * las ventas diarias es menor a este umbral, la demanda se estima
-   * por promedio histórico sin llamar al LLM.
+   * Triage heurístico (SPEC-12/R26.8): si el coeficiente de
+   * variación de las ventas diarias (lo calcula el backend en
+   * /api/estadisticas/demanda) es menor a este umbral, la demanda
+   * ponderada del backend se usa tal cual sin llamar al LLM.
    */
   umbralCv: Number(required('UMBRAL_CV', '0.3')),
 
@@ -75,4 +76,16 @@ export const config = {
    * Ojo: lotes >6-7 agrandan numCtx (ver ollama.js, llmJsonBatch).
    */
   demandaBatch: Math.max(1, Number(required('DEMANDA_BATCH', '5')) || 5),
+
+  /**
+   * Ventana de días para las estadísticas de demanda (SPEC-26):
+   * el parámetro `dias` de /api/estadisticas/demanda.
+   */
+  demandaDias: Math.min(365, Math.max(7, Number(required('DEMANDA_DIAS', '90')) || 90)),
+
+  /**
+   * Factor z del stock de seguridad (SPEC-26, R26.8):
+   * z·σ_demanda·√lead_esperado. 1.65 ≈ 95% de nivel de servicio.
+   */
+  zSeguridad: Number(required('Z_SEGURIDAD', '1.65')),
 };

@@ -1872,8 +1872,10 @@ manual de la migración (counts y muestras coinciden con
   (pendiente regresión lineal sobre agregado diario), `cv`, `dias_con_venta`,
   `dias_en_quiebre` (días con stock 0 en el período — no cuentan como
   demanda 0 en el denominador; fuente a definir en T26.5 — si no hay
-  dato confiable responde `null`, nunca inventado), `ultima_venta`.
-  Consumida por el agente y por el front.
+  dato confiable responde `null`, nunca inventado), `ultima_venta`,
+  `desvio_demanda` (σ diario sobre días elegibles — insumo del stock
+  de seguridad, agregado en T26.6). Consumida por el agente y por el
+  front.
 - **R26.8** Agente: `analizar-demanda` usa la nueva fuente; con
   `dias_con_venta ≥ 3` y CV bajo → heurístico backend; si no → LLM
   con los agregados reales en el prompt. `calcular-cantidad` suma
@@ -1934,9 +1936,18 @@ manual de la migración (counts y muestras coinciden con
   (UTC; `null` cuando no hay movimientos — nunca inventado). Los días
   en quiebre se excluyen de los denominadores. Ventana anclada a
   `CURRENT_DATE` de la DB, no al host. 11 tests.
-- **T26.6** Harness: `ventas.client`, `analizar-demanda` y
+- **T26.6** Harness: `estadisticas.client`, `analizar-demanda` y
   `calcular-cantidad` sobre la nueva fuente + stock de seguridad
-  (R26.8) + tests de nodos.
+  (R26.8) + tests de nodos. ✅
+  `estadisticas.client.js` (reemplaza `historial.client.js`):
+  `GET /api/estadisticas/demanda` por producto con `dias=DEMANDA_DIAS`.
+  Triage (R26.8/R26.10): `dias_con_venta=0` → demanda 0
+  determinística sin LLM ni cache; `≥3 días y CV < UMBRAL_CV` →
+  `demanda_diaria` del backend tal cual; resto → LLM con las stats
+  en el prompt (`statsTxt`) — mismo pipeline de lote/fallback que
+  SPEC-16. El análisis lleva `desvio_demanda` (nuevo campo del
+  endpoint) y `calcular-cantidad` usa `lead_dias_esperado` +
+  `z·σ·√lead` con `Z_SEGURIDAD`/`DEMANDA_DIAS` en config.
 - **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e.
 
 ### Verificado por

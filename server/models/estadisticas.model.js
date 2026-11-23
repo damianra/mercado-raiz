@@ -57,10 +57,9 @@ export async function estadisticaDemanda(productoId, dias) {
 
   // cv y tendencia sobre la serie elegible (días sin quiebre).
   const media = n > 0 ? elegibles.reduce((a, b) => a + b, 0) / n : 0;
-  const cv =
-    media > 0
-      ? Math.sqrt(elegibles.reduce((s, v) => s + (v - media) ** 2, 0) / n) / media
-      : null;
+  const desvio =
+    n > 0 ? Math.sqrt(elegibles.reduce((s, v) => s + (v - media) ** 2, 0) / n) : 0;
+  const cv = media > 0 ? desvio / media : null;
 
   // Pendiente OLS sobre el índice de día REAL de la ventana (no el
   // comprimido): con quiebres, el tiempo entre días elegibles se
@@ -91,6 +90,9 @@ export async function estadisticaDemanda(productoId, dias) {
     demanda_diaria: Number(demanda_diaria.toFixed(4)),
     tendencia: Number(tendencia.toFixed(4)),
     cv: cv == null ? null : Number(cv.toFixed(4)),
+    // σ de la demanda diaria sobre días elegibles — el stock de
+    // seguridad del agente lo usa en z·σ·√lead (R26.8).
+    desvio_demanda: Number(desvio.toFixed(4)),
     dias_con_venta: conVenta.length,
     dias_en_quiebre: quiebre.dias,
     // MAX global (no acotado a la ventana): distingue venta
