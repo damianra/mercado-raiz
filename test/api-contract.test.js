@@ -66,6 +66,26 @@ const ENDPOINTS = [
     "method": "get",
     "path": "/api/productos/",
     "file": "productos.js"
+  },
+  {
+    "method": "get",
+    "path": "/api/usuarios/",
+    "file": "usuarios.js"
+  },
+  {
+    "method": "post",
+    "path": "/api/usuarios/",
+    "file": "usuarios.js"
+  },
+  {
+    "method": "patch",
+    "path": "/api/usuarios/:id",
+    "file": "usuarios.js"
+  },
+  {
+    "method": "delete",
+    "path": "/api/usuarios/:id",
+    "file": "usuarios.js"
   }
 ];
 

@@ -1567,7 +1567,8 @@ usuario real → logout → redirect. Review por sub-agente del PR.
 - **Origen:** pedido del usuario — endpoints para agregar, editar y
   eliminar usuarios con manejo de roles. Depende de SPEC-23 (auth +
   matriz de roles base).
-- **Estado global:** 📋 especificada — pendiente de implementación
+- **Estado global:** 🚧 parcial — T24.1 implementada (backend CRUD);
+  T24.2 (pantalla admin) pendiente
 
 ### Decisiones
 
@@ -1625,7 +1626,13 @@ usuario real → logout → redirect. Review por sub-agente del PR.
 ### Tareas
 
 - **T24.1** Backend CRUD `/api/usuarios` + matriz de roles +
-  revocación + tests.
+  revocación + tests. ✅ implementada — `GET/POST/PATCH/DELETE
+  /api/usuarios` bajo `requireRole('ADMIN')` (`server/routes/usuarios.js`
+  → controller → `models/usuarios.model.js`); listado paginado con
+  whitelist explícita (nunca `password_hash`/`token_version`/campos de
+  bloqueo); alta con `409` email dup + `400` rol/password<12; PATCH y
+  DELETE aplican guards self/último-ADMIN (`409`) y revocan sesiones
+  (`token_version++` + refreshes) ante cambio de rol o `activo=0`.
 - **T24.2** Front pantalla admin de usuarios + e2e.
 
 ### Verificado por
