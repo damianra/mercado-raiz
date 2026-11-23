@@ -15,7 +15,7 @@ function required(name, fallback) {
 }
 
 export const config = {
-  /** URL base del backend MVC (Express + SQLite). */
+  /** URL base del backend MVC (Express + Postgres). */
   backendUrl: required('BACKEND_URL', 'http://localhost:4000'),
 
   /**

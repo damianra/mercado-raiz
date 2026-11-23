@@ -35,9 +35,10 @@ En `src/langgraph/` el agente se define así:
 - **Estado** (`state.js`): un objeto compartido que pasa de nodo
   en nodo — es la "memoria" de la corrida.
 - **Checkpoints**: después de cada nodo, LangGraph persiste el
-  estado en `checkpoints.sqlite` — la corrida queda auditable paso
-  a paso y la infraestructura de pausa/reanudación queda disponible
-  (SPEC-12: el flujo actual es atómico y no la usa).
+  estado en las tablas `checkpoint_*` de `mercadoraiz-db` (Postgres,
+  SPEC-25) — la corrida queda auditable paso a paso y la
+  infraestructura de pausa/reanudación queda disponible (SPEC-12:
+  el flujo actual es atómico y no la usa).
 
 El recorrido completo del grafo:
 
@@ -80,7 +81,8 @@ confiable*. Vive en `src/harness/`:
 | `error-handler.js` | Reintentos con backoff ante fallas transitorias. |
 | `cost-tracker.js` | Cuenta tokens y tiempos de inferencia del LLM por llamada — modelo, duraciones en ms (con un modelo pago, los tokens serían la factura). |
 | `metrics.js` | Duración de corrida, llamadas al LLM, fallbacks y contadores de negocio (productos evaluados, órdenes creadas/pausadas, errores). |
-| `analisis-cache.js` | Cache incremental (SPEC-16): hash del input por producto → demanda y justificación reusadas entre corridas (`data/analisis-cache.json`). |
+| `analisis-cache.js` | Cache incremental (SPEC-16): hash del input por producto → demanda y justificación reusadas entre corridas (tabla `analisis_cache` en Postgres, SPEC-25). |
+| `pg.js` | Pool `pg` compartido del harness: connection string del cache y del checkpointer; `DATABASE_URL_TEST` en tests. |
 
 Además el servidor es lo que mantiene vivo el proceso entre
 corridas: el grafo termina, pero `/status`, `/metrics` y `/run`
@@ -188,9 +190,9 @@ harness-langgraph/
 │   │   └── prompts/        → lo que se le pide al LLM
 │   ├── integrations/       → clientes HTTP para hablar con el backend :4000
 │   └── utils/              → logger, parser de JSON del LLM, concurrencia.js (pool con límite)
-├── checkpoints.sqlite      → estado persistido tras cada nodo (auditoría / compat resume)
 ├── .last-thread            → thread_id de la última corrida (gitignored, SPEC-15)
-├── data/                   → analisis-cache.json (cache de análisis, gitignored)
+  (checkpoints y cache de análisis: tablas en `mercadoraiz-db` —
+   Postgres, SPEC-25; ya no hay archivos locales de estado)
 └── docs/                   → arquitectura.md, flujo-datos.md, flujo-ejecucion.md,
                               prompts.md, benchmarks/, diagramas/ (Graphviz:
                               flujo-negocio, flujo-agente, flujo-orquestador)
