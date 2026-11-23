@@ -1,7 +1,13 @@
 import { CANALES_VENTA, listVentas } from '../models/ventas.model.js';
 import { capString } from '../security.js';
 
-const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Valida forma YYYY-MM-DD y que sea una fecha real — '2026-99-99'
+// pasaría el regex pero reventaría el cast ::date con un 500.
+const esFechaValida = (v) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+};
 
 export async function list(req, res) {
   const { producto_id, canal, desde, hasta, page = '1', limit = '50' } = req.query;
@@ -15,8 +21,8 @@ export async function list(req, res) {
     return res.status(400).json({ error: `canal inválido — válidos: ${CANALES_VENTA.join(', ')}` });
   }
   for (const [nombre, valor] of [['desde', desde], ['hasta', hasta]]) {
-    if (valor && !FECHA_RE.test(valor)) {
-      return res.status(400).json({ error: `${nombre} debe ser YYYY-MM-DD` });
+    if (valor && !esFechaValida(valor)) {
+      return res.status(400).json({ error: `${nombre} debe ser una fecha YYYY-MM-DD válida` });
     }
   }
   let productoId;

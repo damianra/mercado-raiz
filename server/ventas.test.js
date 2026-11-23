@@ -80,7 +80,7 @@ describe('GET /api/ventas', () => {
   });
 
   it('400 ante params inválidos', async () => {
-    for (const q of ['?canal=OTRO', '?desde=ayer', '?hasta=2026/11/01', '?producto_id=abc', '?limit=0']) {
+    for (const q of ['?canal=OTRO', '?desde=ayer', '?desde=2026-99-99', '?desde=2026-02-31', '?hasta=2026/11/01', '?producto_id=abc', '?limit=0']) {
       const res = await get(`/ventas${q}`);
       expect(res.status).toBe(400);
     }
