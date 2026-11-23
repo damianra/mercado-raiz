@@ -16,12 +16,13 @@ import {
   mapOrden,
   rechazarOrden,
 } from './lib/api.js';
+import { logout } from './lib/auth.js';
 
 let toastKey = 0;
 
 const esAprobada = (o) => o.estado === 'APROBADO' || o.estado === 'APROBADO_AUTO';
 
-export default function App() {
+export default function App({ usuario }) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
   const [ordenes, setOrdenes] = useState([]);
@@ -138,6 +139,8 @@ export default function App() {
           alertas={ordenes.filter((o) => o.urgente)}
           onMenu={() => setMenuOpen(true)}
           onSelectOrden={setDetalle}
+          usuario={usuario}
+          onLogout={logout}
         />
 
         <main className="flex-1 space-y-6 p-4 sm:p-8">

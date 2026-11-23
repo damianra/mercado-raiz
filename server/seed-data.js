@@ -305,14 +305,24 @@ export const seedData = {
 
   historial_stock,
 
+  // SPEC-23: password_hash argon2id (PHC) de passwords dev
+  // documentadas en README → "Usuarios demo". El PHC lleva sus
+  // params, así el hash sigue verificando aunque cambie ARGON.
+  // `agente` es la cuenta de servicio del harness (rol SERVICIO).
   usuarios: [
     {
       id: 1,
       email: 'carlos.martinez@mercadorai.com',
       nombre: 'Carlos Martínez',
       rol: 'GERENTE',
+      password_hash:
+        '$argon2id$m=65536,t=3,p=4$rgFQ+9ynIlgnKVE24YVAEA==$JHgF3nsX9JjVZnDDkKgah/XYdRIxaaQfSVIb9tAQmzg=',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
     {
@@ -320,8 +330,14 @@ export const seedData = {
       email: 'maria.lopez@mercadorai.com',
       nombre: 'María López',
       rol: 'APROBADOR',
+      password_hash:
+        '$argon2id$m=65536,t=3,p=4$gXSvr7G8bMNxG4Kt7YxYoQ==$OiDoFUJPrEZODo6OEJrhhC6RdMA2q0DFhgKki7LMWoQ=',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
     {
@@ -329,8 +345,29 @@ export const seedData = {
       email: 'admin@mercadorai.com',
       nombre: 'Administrador',
       rol: 'ADMIN',
+      password_hash:
+        '$argon2id$m=65536,t=3,p=4$T2QftSWy8xpaUIQ8jvcC1w==$3He/Tg1LbaeEmasRG2B+4lua5/4/4thr9PkLk+Atdfo=',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
+      fecha_creacion: '2026-10-20T09:00:00',
+    },
+    {
+      id: 4,
+      email: 'agente@mercadorai.com',
+      nombre: 'Agente de reposición',
+      rol: 'SERVICIO',
+      password_hash:
+        '$argon2id$m=65536,t=3,p=4$zfPJIJyQ/xGQD9zL3NI8Uw==$Uxl8KfFkXxckCNjEOWUFW6jG6aU6nt6bm5jCfHtef/M=',
+      avatar_url: null,
+      activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
   ],

@@ -57,6 +57,9 @@ Detalles en `docs/`: `arquitectura.md`, `flujo-datos.md`,
 ## Configuración
 
 Ver `.env.example` (copiado a `.env`): `BACKEND_URL`,
+`AGENTE_EMAIL`/`AGENTE_PASSWORD` (cuenta de servicio `agente@…`
+rol `SERVICIO` — SPEC-23: el backend exige JWT; `backend-client`
+loguea ante el primer 401 y re-loguea si el token vence),
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `HARNESS_PORT`, `UMBRAL_APROBACION`,
 `UMBRAL_CV` (triage heurístico — SPEC-12), `AGENTE_CONCURRENCIA`
 (default 3 — tareas en vuelo por nodo LLM, SPEC-16),

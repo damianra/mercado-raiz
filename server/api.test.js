@@ -10,24 +10,28 @@ import { createApp } from './app.js';
 import { openDb } from './db.js';
 import { seedData } from './seed-data.js';
 import { UMBRAL_APROBACION } from './models/ordenes.model.js';
+import { loginComo } from './test-auth.js';
 
 let server;
 let base;
+let sesion; // 1 login por archivo — el JWT es stateless (SPEC-23)
 const db = openDb(':memory:');
 
 beforeEach(async () => {
   const app = await createApp();
   server = app.listen(0);
   base = `http://localhost:${server.address().port}`;
+  // GERENTE: aprueba órdenes — la suite ejercita ese camino.
+  sesion ??= await loginComo(base, 'GERENTE');
 });
 
 afterEach(() => server?.close());
 
-const get = (path) => fetch(`${base}/api${path}`);
+const get = (path) => fetch(`${base}/api${path}`, { headers: sesion.headers });
 const post = (path, body) =>
   fetch(`${base}/api${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...sesion.headers },
     body: JSON.stringify(body),
   });
 

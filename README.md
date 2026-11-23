@@ -105,16 +105,31 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | … | SPEC-10→20 en `SPEC.md` (observabilidad, stress, performance del agente, higiene) |
 | SPEC-21 | Dataset externo: muestra de artículos retail-radar (`data/`) |
 | SPEC-22 | Catálogo interno de artículos (seed real desde el dataset, sku `MR#####`, marca/EAN) |
+| SPEC-23 | Autenticación JWT (login + refresh rotativo + roles + cuenta de servicio del agente) |
 
 ## Usuarios demo
 
-No hay login (alcance demo): el cliente usa un `USUARIO_DEMO` hardcodeado. La tabla `usuarios` se persiste y seedea con:
+La app exige login (SPEC-23): JWT de 15 min en memoria + refresh
+rotativo en cookie httpOnly. Usuarios del seed (`npm run seed`):
 
-| Email | Rol |
-|---|---|
-| carlos.martinez@mercadorai.com | GERENTE |
-| maria.lopez@mercadorai.com | APROBADOR |
-| admin@mercadorai.com | ADMIN |
+| Email | Password dev | Rol | Puede |
+|---|---|---|---|
+| carlos.martinez@mercadorai.com | `demo-gerente-2026` | GERENTE | leer, crear, aprobar/rechazar |
+| maria.lopez@mercadorai.com | `demo-aprobadora-2026` | APROBADOR | leer, crear, aprobar/rechazar |
+| admin@mercadorai.com | `demo-admin-2026` | ADMIN | todo + gestión de usuarios |
+| agente@mercadorai.com | `demo-agente-2026` | SERVICIO | leer + crear órdenes (cuenta del agente LangGraph — no puede aprobar) |
+
+Las passwords dev también sirven para el agente
+(`harness-langgraph/.env` → `AGENTE_EMAIL`/`AGENTE_PASSWORD`).
+
+Endpoints de auth: `POST /api/auth/login` → `{access_token, usuario}`
++ cookies `mr_refresh` (httpOnly) y `mr_csrf` (legible → header
+`X-CSRF-Token` en refresh/logout); `POST /refresh` rota el par;
+`POST /logout` revoca; `GET /me`; `POST /cambiar-password` invalida
+todas las sesiones (`token_version++`). Todas las rutas del dominio
+exigen `Authorization: Bearer` — el `aprobado_por` sale del JWT.
+5 fallos de login bloquean la cuenta 15 min; límites configurables
+vía `AUTH_RATE_LIMIT` (login) y `API_RATE_LIMIT` (escrituras).
 
 ## Tests
 

@@ -7,15 +7,19 @@ import { createApp } from './app.js';
 import { openDb } from './db.js';
 import { seedData } from './seed-data.js';
 import { UMBRAL_APROBACION } from './models/ordenes.model.js';
+import { loginComo } from './test-auth.js';
 
 let server;
 let base;
+let sesion;
 const db = openDb(':memory:');
 
 beforeEach(async () => {
   const app = await createApp();
   server = app.listen(0);
   base = `http://localhost:${server.address().port}`;
+  // SERVICIO: la cuenta del agente también crea órdenes (SPEC-23).
+  sesion ??= await loginComo(base, 'SERVICIO');
 });
 
 afterEach(() => server?.close());
@@ -23,7 +27,7 @@ afterEach(() => server?.close());
 const post = (body) =>
   fetch(`${base}/api/ordenes/batch`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...sesion.headers },
     body: JSON.stringify(body),
   });
 

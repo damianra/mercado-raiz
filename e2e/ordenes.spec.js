@@ -8,10 +8,79 @@ import { test, expect } from '@playwright/test';
 
 const FILAS = 'section[aria-label="Tabla de órdenes de compra"] tbody tr';
 
-async function cargarDashboard(page) {
+// Credenciales del seed (SPEC-23 — ver README → Usuarios demo).
+const LOGIN_EMAIL = 'carlos.martinez@mercadorai.com';
+const LOGIN_PASS = 'demo-gerente-2026';
+
+// Login real UI→API: form + checkbox privacidad + submit → dashboard.
+async function login(page, email = LOGIN_EMAIL, password = LOGIN_PASS) {
   await page.goto('/');
+  await page.getByLabel('Email corporativo').fill(email);
+  await page.getByLabel('Contraseña').fill(password);
+  await page.getByLabel(/Acepto la/).check();
+  await page.getByRole('button', { name: 'Ingresar' }).click();
+}
+
+async function cargarDashboard(page) {
+  await login(page);
   await expect(page.locator(FILAS).first()).toBeVisible();
 }
+
+test('sin sesión, toda ruta protegida cae en el login', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
+  await expect(page.getByLabel('Email corporativo')).toBeVisible();
+  // Una ruta inexistente para un anónimo también termina en login.
+  await page.goto('/ruta-que-no-existe');
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
+});
+
+test('Ingresar queda disabled hasta formulario válido + consentimiento', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const submit = page.getByRole('button', { name: 'Ingresar' });
+  await expect(submit).toBeDisabled();
+  await page.getByLabel('Email corporativo').fill(LOGIN_EMAIL);
+  await page.getByLabel('Contraseña').fill(LOGIN_PASS);
+  // Falta el checkbox de privacidad → sigue disabled (regla UI).
+  await expect(submit).toBeDisabled();
+  await page.getByLabel(/Acepto la/).check();
+  await expect(submit).toBeEnabled();
+});
+
+test('credenciales inválidas muestran error sin salir del login', async ({
+  page,
+}) => {
+  await login(page, 'nadie@mercadorai.com', 'password-mala-123');
+  await expect(page.getByRole('alert')).toContainText('credenciales');
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
+});
+
+test('login → dashboard real; la API recibe Authorization Bearer', async ({
+  page,
+}) => {
+  const ordenesReq = page.waitForRequest(
+    (r) => r.url().includes('/api/ordenes') && r.method() === 'GET',
+  );
+  await cargarDashboard(page);
+  const req = await ordenesReq;
+  expect(req.headers()['authorization']).toMatch(/^Bearer .+/);
+  await expect(
+    page.getByRole('heading', { name: 'Órdenes Pendientes de Aprobación' }),
+  ).toBeVisible();
+  // El topbar muestra el usuario autenticado, no un mock.
+  await expect(page.getByText('Carlos Martínez')).toBeVisible();
+});
+
+test('logout cierra la sesión y un reload no la recupera', async ({ page }) => {
+  await cargarDashboard(page);
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
+  // El refresh quedó revocado en el backend — recargar no restaura.
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
+});
 
 test('el dashboard carga órdenes reales del seed y renderiza los KPIs', async ({
   page,
@@ -24,7 +93,7 @@ test('el dashboard carga órdenes reales del seed y renderiza los KPIs', async (
       r.request().method() === 'GET' &&
       r.ok(),
   );
-  await page.goto('/');
+  await login(page);
   const body = await (await ordenesReq).json();
 
   expect(Array.isArray(body.data)).toBe(true);
@@ -126,7 +195,7 @@ test('muestra skeleton mientras la API responde', async ({ page }) => {
     await gate;
     await route.continue();
   });
-  await page.goto('/');
+  await login(page);
   await expect(page.locator('[aria-busy="true"]')).toBeVisible();
   release();
   await expect(page.locator(FILAS).first()).toBeVisible();
@@ -143,7 +212,7 @@ test('muestra un estado vacío informativo si la API devuelve []', async ({
       },
     }),
   );
-  await page.goto('/');
+  await login(page);
   await expect(page.getByText('Sin resultados')).toBeVisible();
   await expect(
     page.getByText('No hay órdenes que coincidan'),
@@ -152,7 +221,7 @@ test('muestra un estado vacío informativo si la API devuelve []', async ({
 
 test('muestra un error controlado si la API cae', async ({ page }) => {
   await page.route(/\/api\/ordenes/, (route) => route.abort());
-  await page.goto('/');
+  await login(page);
   await expect(
     page.getByText('No se pudieron cargar las órdenes'),
   ).toBeVisible();
@@ -164,7 +233,7 @@ test('muestra un error controlado si la API cae', async ({ page }) => {
 test('el footer linkea a /privacidad con el aviso de datos', async ({
   page,
 }) => {
-  await page.goto('/');
+  await cargarDashboard(page);
   await page
     .locator('footer')
     .getByRole('link', { name: 'Privacidad' })
@@ -179,6 +248,9 @@ test('el footer linkea a /privacidad con el aviso de datos', async ({
 test('una ruta inexistente muestra 404 con vuelta al inicio', async ({
   page,
 }) => {
+  // Autenticado: una ruta desconocida sí muestra el 404 (el login
+  // solo intercepta a quien no tiene sesión).
+  await cargarDashboard(page);
   await page.goto('/ruta-que-no-existe');
   await expect(page.getByText('404', { exact: true })).toBeVisible();
   await expect(

@@ -1,7 +1,10 @@
 // Cliente único del backend — todo fetch a /api pasa por apiFetch
 // (manejo centralizado de errores: red caída, JSON inválido o error
 // del servidor terminan en ApiError con mensaje legible para toast).
-export const USUARIO_DEMO = 'carlos.martinez@mercadorai.com';
+// SPEC-23: adjunta el Bearer de la sesión en memoria y ante un 401
+// intenta un silent refresh + reintento único; si el refresh falla
+// la sesión queda null y el Root vuelve a /login.
+import { getSession, refrescarSesion } from './auth.js';
 
 export class ApiError extends Error {
   constructor(message, status = 0) {
@@ -11,16 +14,24 @@ export class ApiError extends Error {
   }
 }
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(path, options = {}, reintento = false) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const token = getSession()?.accessToken;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   let res;
   try {
-    res = await fetch(`/api${path}`, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options,
-    });
+    res = await fetch(`/api${path}`, { ...options, headers });
   } catch {
     throw new ApiError('No se pudo conectar con el servidor');
   }
+
+  // Token vencido/revocado → un refresh y un solo reintento.
+  if (res.status === 401 && !reintento) {
+    const sesion = await refrescarSesion();
+    if (sesion) return apiFetch(path, options, true);
+  }
+
   let body = null;
   try {
     body = await res.json();
@@ -84,14 +95,16 @@ export const crearOrden = ({ productoId, cantidad, requiereAprobacion }) =>
     }),
   });
 
+// La identidad del aprobador sale del JWT (SPEC-23 R23.6) — no se
+// manda más en el body.
 export const aprobarOrden = (ordenId) =>
   apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/aprobar`, {
     method: 'POST',
-    body: JSON.stringify({ aprobado_por: USUARIO_DEMO }),
+    body: '{}',
   });
 
 export const rechazarOrden = (ordenId, motivo) =>
   apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/rechazar`, {
     method: 'POST',
-    body: JSON.stringify({ rechazado_por: USUARIO_DEMO, motivo }),
+    body: JSON.stringify({ motivo }),
   });

@@ -82,8 +82,35 @@ CREATE TABLE IF NOT EXISTS usuarios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT UNIQUE NOT NULL,
   nombre TEXT NOT NULL,
-  rol TEXT NOT NULL CHECK (rol IN ('APROBADOR', 'GERENTE', 'ADMIN')),
+  rol TEXT NOT NULL CHECK (rol IN ('APROBADOR', 'GERENTE', 'ADMIN', 'SERVICIO')),
+  password_hash TEXT NOT NULL,
   avatar_url TEXT,
   activo INTEGER NOT NULL DEFAULT 1,
+  intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+  bloqueado_hasta TEXT,
+  ultimo_login TEXT,
+  token_version INTEGER NOT NULL DEFAULT 0,
   fecha_creacion TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Refresh tokens opacos (SPEC-23): solo se persiste el SHA-256 del
+-- token; `familia` agrupa rotaciones para reuse detection — un token
+-- ya usado revoca la familia completa.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL,
+  familia TEXT NOT NULL,
+  csrf_hash TEXT NOT NULL,
+  expira_en TEXT NOT NULL,
+  revocado INTEGER NOT NULL DEFAULT 0,
+  user_agent TEXT,
+  ip TEXT,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now')),
+
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_familia ON refresh_tokens(familia);
+CREATE INDEX IF NOT EXISTS idx_refresh_usuario ON refresh_tokens(usuario_id);

@@ -1433,7 +1433,8 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 - **Origen:** pedido del usuario — login profesional seguro según
   normativas (OWASP ASVS + Ley 25.326). Reemplaza `USUARIO_DEMO`
   hardcodeado por sesiones reales con roles.
-- **Estado global:** 📋 especificada — pendiente de implementación
+- **Estado global:** ✅ implementada (T23.1+T23.2 en un solo PR —
+  mergear el backend solo dejaba `main` con el front roto)
 
 ### Decisiones
 
@@ -1441,9 +1442,24 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
   httpOnly.** No localStorage (exfiltrable por XSS); no sesiones
   opacas para el access (un solo backend, lookup innecesario). El
   refresh sí persiste hasheado porque la revocación importa.
-- **Hashing argon2id** (`argon2`, m=64MB, t=3, p=4); fallback
-  documentado: `crypto.scrypt` nativo (N=2¹⁴, r=8, p=1) +
-  `timingSafeEqual` si el nativo no compila.
+- **Hashing argon2id** — *ajuste de implementación*: Node 24 expone
+  `crypto.argon2Sync` nativo (`m=64MB, t=3, p=4`, formato PHC) →
+  cero deps de hashing; el fallback `crypto.scrypt` documentado
+  quedó sin necesidad de usarse.
+- **CSRF double-submit por cookie legible** — *ajuste*: el valor
+  CSRF viaja en cookie `mr_csrf` (legible, `SameSite=Strict,
+  Path=/`) cuyo SHA-256 se persiste en `refresh_tokens`; el front
+  la lee y la reenvía como `X-CSRF-Token`. La alternativa del spec
+  (devolverlo solo en el body del login) moría al recargar la
+  página: `document.cookie` solo expone cookies cuyo `Path` cubre
+  la URL actual.
+- **Login perezoso del agente** — *ajuste*: `backend-client` no
+  loguea al boot sino ante el primer 401 (ausente, vencido o
+  revocado) → login + un reintento; equivalente funcional y evita
+  autenticar procesos que no pegan al backend.
+- **`API_RATE_LIMIT`**: el limiter global de escrituras también se
+  hizo configurable (default 20/min) — los e2e acumulan
+  login+refresh+POSTs sobre una misma IP en <60s.
 - **Sin oráculo de usuarios**: `401` genérica idéntica para email
   inexistente y password malo; comparación timing-safe.
 - **`token_version` se verifica contra DB por request**: lookup
@@ -1517,8 +1533,8 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
   401/expiración. Los scripts (`stress-llm.mjs`,
   `smoke-rate-limit.mjs`) pasan por el mismo cliente — siguen
   funcionando.
-- **R23.12** Deps nuevas: `jose` (JWT) + `argon2` (hashing) vía
-  `npm add` — versiones con ≥7 días de publicación.
+- **R23.12** Deps nuevas: `jose@^6.2.17` (JWT) vía `npm add` —
+  argon2 salió nativo de `node:crypto` (ver Decisiones).
 - **R23.13** Tests existentes: `api.test.js`, `ordenes-batch.test.js`
   y e2e pasan a requerir sesión — helper `loginComo(rol)` que hace
   login una vez por suite y adjunta el Bearer; `api-client.test.js`
@@ -1526,10 +1542,10 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
 
 ### Tareas
 
-- **T23.1** Núcleo auth backend: schema + endpoints `/api/auth/*` +
+- **T23.1** ✅ Núcleo auth backend: schema + endpoints `/api/auth/*` +
   middleware aplicado a rutas existentes + cuenta servicio agente +
   seed passwords + tests.
-- **T23.2** Front login + integración (`auth.js`, guards, quita
+- **T23.2** ✅ Front login + integración (`auth.js`, guards, quita
   `USUARIO_DEMO`, e2e login→aprobar→logout).
 
 ### Verificado por

@@ -9,7 +9,9 @@ export default defineConfig({
   // scope no tiene backend: nada consulta /api.
   server: {
     proxy: {
-      '/api': 'http://localhost:4000',
+      // VITE_API_PROXY permite apuntar a una API en otro puerto (e2e
+      // en CI con puertos propios); default: la API local en :4000.
+      '/api': process.env.VITE_API_PROXY ?? 'http://localhost:4000',
     },
   },
   test: {

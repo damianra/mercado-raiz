@@ -4,7 +4,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
-  USUARIO_DEMO,
   aprobarOrden,
   getDashboardStats,
   getOrdenes,
@@ -128,7 +127,7 @@ describe('apiFetch (vía funciones del cliente)', () => {
     expect(err.message).toBe('No se pudo conectar con el servidor');
   });
 
-  it('aprobar/rechazar envían POST con el usuario demo', async () => {
+  it('aprobar/rechazar envían POST — la identidad sale del JWT, no del body', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -137,7 +136,7 @@ describe('apiFetch (vía funciones del cliente)', () => {
       '/api/ordenes/OC-002/aprobar',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ aprobado_por: USUARIO_DEMO }),
+        body: '{}',
       }),
     );
 
@@ -146,7 +145,7 @@ describe('apiFetch (vía funciones del cliente)', () => {
       '/api/ordenes/OC-002/rechazar',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ rechazado_por: USUARIO_DEMO, motivo: 'sin stock necesario' }),
+        body: JSON.stringify({ motivo: 'sin stock necesario' }),
       }),
     );
   });
