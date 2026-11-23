@@ -1948,7 +1948,7 @@ manual de la migración (counts y muestras coinciden con
   SPEC-16. El análisis lleva `desvio_demanda` (nuevo campo del
   endpoint) y `calcular-cantidad` usa `lead_dias_esperado` +
   `z·σ·√lead` con `Z_SEGURIDAD`/`DEMANDA_DIAS` en config.
-- **T26.8** `POST /run` del harness acepta `{limite: N}` opcional:
+- **T26.8** `POST /run` del harness acepta `{limite: N}` opcional: ✅
   recorta `productosBajos` tras leer-inventario — corridas de
   validación acotadas sin tocar el pipeline ni la DB.
 - **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e. ✅

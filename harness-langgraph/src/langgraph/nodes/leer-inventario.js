@@ -3,7 +3,7 @@
  *
  * Llama al backend (productos.client → GET /api/productos por
  * estado) y devuelve la lista de productos que necesitan reposición.
- * Lee del estado: nada. Escribe: productosBajos.
+ * Lee del estado: limite (T26.8). Escribe: productosBajos.
  */
 import { listarProductosAReponer } from '../../integrations/productos.client.js';
 import { log } from '../../utils/logger.js';

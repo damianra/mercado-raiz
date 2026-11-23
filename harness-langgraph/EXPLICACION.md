@@ -118,7 +118,7 @@ npm run agente          # desde la raíz; o cd harness-langgraph && npm run agen
 └───┬────┘         └────┬─────┘        └─────┬─────┘       └───┬────┘
     │                   │                    │               │
     │  (opcional) POST /run ───────────────────────────────▶  │ arranca corrida
-    │                   │                    │               │ (npm run agente ya la dispara solo)
+    │  (body {limite: N} acota el lote — T26.8)              │ (npm run agente ya la dispara solo)
     │                   │                    │               │
     │                   │               GET /api/productos ◀─│ leer-inventario
     │                   │                    │               │ ... LLM ... crear-orden
