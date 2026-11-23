@@ -31,6 +31,14 @@ const mergeObjeto = () =>
   });
 
 export const EstadoGrafo = Annotation.Root({
+  /**
+   * Tope de productos a procesar (POST /run {limite: N} — T26.8).
+   * DEBE ser canal declarado: LangGraph filtra las keys del input
+   * que no lo son y `limite` nunca llegaría al nodo.
+   * Escribe: input de la corrida. Lee: leer-inventario.
+   */
+  limite: ultimoGana(),
+
   /** Escribe: leer-inventario. Leen: analizar-demanda, calcular-cantidad, generar-analisis, crear-orden. */
   productosBajos: listaVacia(),
 

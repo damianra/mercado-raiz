@@ -64,8 +64,12 @@ export function iniciarServidor() {
     if (orchestrator.corrida.fase === 'corriendo') {
       return res.status(409).json({ error: 'ya hay una corrida en curso' });
     }
-    orchestrator.iniciar().catch((err) => log(`corrida falló: ${err.message}`));
-    res.status(202).json({ ok: true });
+    // Solo {limite} es input válido — el body crudo podría inyectar
+    // cualquier canal del estado (errores, analisisPorProducto...).
+    const limite = Number(req.body?.limite);
+    const input = Number.isInteger(limite) && limite > 0 ? { limite } : {};
+    orchestrator.iniciar(input).catch((err) => log(`corrida falló: ${err.message}`));
+    res.status(202).json({ ok: true, ...input });
   });
 
   const server = app.listen(config.harnessPort, () =>

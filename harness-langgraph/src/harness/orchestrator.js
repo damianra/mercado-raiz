@@ -88,8 +88,8 @@ export const orchestrator = {
     return 'terminado';
   },
 
-  /** Dispara una corrida nueva. */
-  async iniciar() {
+  /** Dispara una corrida nueva. `input` opcional: {limite} — T26.8. */
+  async iniciar(input = {}) {
     const threadId = `run-${Date.now()}`;
     writeFileSync(ARCHIVO_THREAD, threadId);
     this.corrida = { threadId, fase: 'corriendo', detalle: null };
@@ -97,7 +97,7 @@ export const orchestrator = {
     costTracker.reset();
     seccion(`🚀 CORRIDA ${threadId}`);
     try {
-      const resultado = await this.ejecutar(threadId, {});
+      const resultado = await this.ejecutar(threadId, input);
       if (resultado === 'terminado') this.resumenFinal();
       return resultado;
     } catch (err) {
