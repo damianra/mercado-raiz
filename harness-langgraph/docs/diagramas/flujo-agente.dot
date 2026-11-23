@@ -41,7 +41,7 @@ digraph flujo {
   fin -> end;
 
   backend [shape=box, style="rounded,filled", fillcolor="#e7e5e4",
-           label="Backend MVC :4000\nExpress + SQLite — fuente de verdad\nproductos · historial · órdenes · dashboard"];
+           label="Backend MVC :4000\nExpress + Postgres — fuente de verdad\nproductos · historial · órdenes · dashboard"];
   ollama  [shape=box, style="rounded,filled", fillcolor="#e7e5e4",
            label="Ollama :11434\nqwen3:8b\n(solo estima demanda\ny redacta justificación)"];
   humano  [shape=box, style="rounded,filled", fillcolor="#e7e5e4",

@@ -116,12 +116,14 @@ export async function listOrdenes({
   }
   // Con fecha sin hora se compara por date() — un '<= 2026-10-31' a
   // pelo excluiría todo lo creado ese día después de las 00:00.
+  // El 'día' es UTC: AT TIME ZONE fija la fecha al calendario UTC
+  // (como era en SQLite) — sin eso date() usa la TZ de sesión.
   if (fechaDesde) {
-    where.push(esSoloFecha(fechaDesde) ? 'date(o.fecha_creacion) >= ?' : 'o.fecha_creacion >= ?');
+    where.push(esSoloFecha(fechaDesde) ? "date(o.fecha_creacion AT TIME ZONE 'UTC') >= ?" : 'o.fecha_creacion >= ?');
     params.push(fechaDesde);
   }
   if (fechaHasta) {
-    where.push(esSoloFecha(fechaHasta) ? 'date(o.fecha_creacion) <= ?' : 'o.fecha_creacion <= ?');
+    where.push(esSoloFecha(fechaHasta) ? "date(o.fecha_creacion AT TIME ZONE 'UTC') <= ?" : 'o.fecha_creacion <= ?');
     params.push(fechaHasta);
   }
   if (search) {

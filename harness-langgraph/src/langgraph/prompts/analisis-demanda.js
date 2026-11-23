@@ -5,9 +5,11 @@
  * y responder SOLO JSON {"demanda_diaria","tendencia","observacion"}
  * — el nodo lo parsea con utils/llm-json.js contra schemaAnalisis.
  */
+import { diaUtc } from '../../utils/fecha.js';
+
 export function promptAnalisisDemanda(producto, ventas) {
   const ventasTxt = ventas.length
-    ? ventas.map((v) => `${v.fecha.slice(0, 10)}: ${Math.abs(v.diferencia)} unidades`).join('; ')
+    ? ventas.map((v) => `${diaUtc(v.fecha)}: ${Math.abs(v.diferencia)} unidades`).join('; ')
     : 'sin ventas registradas';
 
   return `Sos un analista de inventario. Estimá la demanda diaria de este producto mirando sus ventas.

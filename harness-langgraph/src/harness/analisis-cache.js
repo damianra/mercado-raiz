@@ -29,6 +29,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config/env.js';
 import { poolPg } from './pg.js';
+import { diaUtc } from '../utils/fecha.js';
 
 let tablaLista = null; // promise memoizada — CREATE idempotente
 
@@ -83,7 +84,7 @@ const mismoAnalisis = (a, b) => canonico(a) === canonico(b);
  */
 export function hashAnalisis(producto, ventas) {
   const input = {
-    ventas: ventas.map((v) => [v.fecha.slice(0, 10), Math.abs(v.diferencia)]),
+    ventas: ventas.map((v) => [diaUtc(v.fecha), Math.abs(v.diferencia)]),
     producto: [
       producto.sku,
       producto.nombre,
