@@ -1,4 +1,5 @@
 import {
+  ChartColumn,
   TriangleAlert,
   LayoutDashboard,
   ClipboardCheck,
@@ -16,6 +17,9 @@ const NAV = [
   { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck },
   // SPEC-27 T27.4: quiebres y margen en riesgo — operativo, todos los roles.
   { id: 'quiebres', label: 'Quiebres', icon: TriangleAlert, to: '/quiebres' },
+  // SPEC-28 T28.2: scorecard de métricas retail — operativo, todos
+  // los roles (fill rate, riesgo, inventario, proveedores).
+  { id: 'metricas', label: 'Métricas', icon: ChartColumn, to: '/metricas' },
   // SPEC-24: gestión de usuarios — solo visible para ADMIN; `to`
   // navega a otra página, los demás son anchors de la home.
   { id: 'usuarios', label: 'Usuarios', icon: Users, to: '/usuarios', roles: ['ADMIN'] },

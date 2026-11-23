@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth-middleware.js';
-import { demanda } from '../controllers/estadisticas.controller.js';
+import { demanda, metricas } from '../controllers/estadisticas.controller.js';
 
 const router = Router();
 // Auth sola (sin rol): la consume el front (dashboard) y el agente
@@ -8,5 +8,6 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/demanda', demanda);
+router.get('/metricas', metricas);
 
 export default router;

@@ -2005,6 +2005,48 @@ en `analisis_ia` para SKUs con historial.
 
 ---
 
+## SPEC-28 · Scorecard de métricas retail
+
+Las preguntas operativas del dueño ("qué góndola vacía me cuesta
+más, qué stock no se mueve, qué órdenes firmo hoy") no tienen un
+endpoint que las responda agregadas — hoy hay que correr queries
+ad-hoc. SPEC-27 dejó costos y márgenes reales: con eso el scorecard
+se calcula en plata, no en unidades.
+
+**R28.1** `GET /api/estadisticas/metricas?dias=90` (auth, todos los
+roles) devuelve el scorecard agregado — reutiliza
+`estadisticasDemandaBulk` como única fuente de stats por producto
+(cero divergencia con agente/dashboard):
+
+- `quiebres`: `skus_sin_stock`, `skus_bajo_minimo`,
+  `venta_riesgo_dia` (Σ demanda × precio_venta de los en cero),
+  `margen_riesgo_dia` (ídem × margen; null si ninguno tiene costo),
+  `margen_perdido_ventana` (Σ `margen_perdido` del bulk).
+- `riesgo`: buckets por cobertura (stock ÷ demanda) vs
+  `lead_dias_esperado` del proveedor principal — `quiebre_seguro`
+  (<lead), `riesgo_alto` (<1.5×), `riesgo_medio` (<2×), `cubierto`,
+  `sin_demanda`. Los de stock 0 cuentan en `quiebre_seguro`.
+- `inventario`: `valor_costo` (Σ stock × costo, null si falta),
+  `valor_venta`, `dead_stock` (skus con stock>0 sin venta en la
+  ventana — `ultima_venta` null o anterior al corte — y su valor a
+  costo), `exceso` (cobertura > 60d y su valor a costo).
+- `servicio`: `fill_rate_pct` = 1 − Σdías_quiebre / (skus
+  confiables × dias) — solo productos con `dias_en_quiebre`
+  confiable (no null), `skus_con_historial`.
+- `ordenes`: `pendientes` + `pendientes_monto`
+  (`PENDIENTE_APROBACION`).
+- `proveedores`: scorecard por proveedor — skus principales,
+  órdenes totales/pendientes y montos, `lead_dias_esperado`,
+  `confiabilidad_pct`.
+
+**R28.2** Vista `/metricas` (todos los roles): tarjetas por sección
+del scorecard + tabla de proveedores. Misma estética que `/quiebres`.
+
+- **T28.1** Endpoint + modelo agregador + tests. ✅
+- **T28.2** Vista `/metricas` + e2e. ✅
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |

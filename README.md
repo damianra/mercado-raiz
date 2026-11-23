@@ -83,6 +83,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
+- `GET /api/estadisticas/metricas?dias=` — scorecard agregado (SPEC-28): quiebres en $/día de margen, riesgo por cobertura vs lead, inventario a costo/venta, dead stock, exceso, fill rate, órdenes pendientes y scorecard de proveedores
 - `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, σ, días con venta/en quiebre, última venta); sin `producto_id` devuelve `{data:[...]}` con las mismas stats de todos los productos (R26.9 — las columnas demanda/cobertura del dashboard)
 - `GET|POST /api/usuarios` · `PATCH|DELETE /api/usuarios/:id` — CRUD de usuarios, solo rol `ADMIN` (SPEC-24; soft delete, revoca sesiones del afectado)
 - `GET|POST /api/proveedores` · `GET|PATCH|DELETE /api/proveedores/:id` — CRUD de proveedores, solo rol `ADMIN` (SPEC-26; soft delete `activo=0`, 409 si hay órdenes `PENDIENTE_APROBACION`/`ENVIADA` vivas)
@@ -129,6 +130,7 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-25 | Migración de persistencia a PostgreSQL (`mercadoraiz-db` en Docker) |
 | SPEC-26 | Demanda real y proveedores enriquecidos (`ventas`, `/api/estadisticas/demanda`, CRUD `/proveedores`) |
 | SPEC-27 | Precios por proveedor y margen (`producto_proveedor`, `precio_venta`/`costo`, agente elige proveedor, vista `/quiebres`) |
+| SPEC-28 | Scorecard de métricas retail (`/api/estadisticas/metricas` + vista `/metricas`) |
 
 ## Usuarios demo
 
@@ -157,7 +159,11 @@ Todos los roles ven **Quiebres** en el sidebar → `/quiebres`
 bajo el mínimo ordenados por margen que se deja de ganar por día
 (`demanda × margen_unitario`), con KPIs de SKUs sin stock, margen
 en riesgo/día y margen perdido en 90 días. Solo `ADMIN` ve
-además **Proveedores** (`/proveedores`, SPEC-26).
+además **Proveedores** (`/proveedores`, SPEC-26). También todos
+los roles ven **Métricas** (`/metricas`, SPEC-28): fill rate,
+margen en riesgo/día, inventario a costo, dead stock, exceso,
+órdenes por aprobar y scorecard de proveedores (SKUs, lead
+esperado, confiabilidad, órdenes y montos).
 
 Endpoints de auth: `POST /api/auth/login` → `{access_token, usuario}`
 + cookies `mr_refresh` (httpOnly) y `mr_csrf` (legible → header
