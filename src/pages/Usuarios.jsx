@@ -19,7 +19,7 @@ import {
   editarUsuario,
   getUsuarios,
 } from '../lib/api.js';
-import { logout } from '../lib/auth.js';
+import { actualizarUsuarioSesion, logout } from '../lib/auth.js';
 import { Link } from '../lib/router.jsx';
 
 const ROLES = ['ADMIN', 'GERENTE', 'APROBADOR', 'SERVICIO'];
@@ -71,10 +71,17 @@ export default function Usuarios({ usuario }) {
     cargar(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroRol]);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+      clearTimeout(debounce.current);
+    },
+    [],
+  );
 
   const onSearch = (v) => {
     setSearch(v);
+    setPage(1);
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => cargar(1, v), 300);
   };
@@ -393,6 +400,14 @@ function UsuarioModal({ usuario, esSelf, onClose, onSaved }) {
     try {
       if (esEdicion) {
         await editarUsuario(usuario.id, cambios);
+        // Self-edit de nombre/email → reflejarlo en la Topbar sin
+        // esperar al próximo refresh.
+        if (esSelf && (cambios.nombre || cambios.email)) {
+          actualizarUsuarioSesion({
+            ...(cambios.nombre && { nombre: cambios.nombre }),
+            ...(cambios.email && { email: cambios.email }),
+          });
+        }
         await onSaved(`${nombre.trim()} actualizado`);
       } else {
         await crearUsuario({

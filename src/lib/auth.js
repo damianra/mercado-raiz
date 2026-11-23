@@ -20,6 +20,13 @@ const setSession = (s) => {
 
 export const getSession = () => session;
 
+// Refleja en la sesión en memoria cambios hechos desde otra vista
+// (p.ej. el admin editando su propio nombre en /usuarios) para que
+// el Topbar no quede viejo hasta el próximo refresh.
+export function actualizarUsuarioSesion(cambios) {
+  if (session?.usuario) setSession({ ...session, usuario: { ...session.usuario, ...cambios } });
+}
+
 export function onSesion(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);

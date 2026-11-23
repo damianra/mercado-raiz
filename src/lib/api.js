@@ -131,6 +131,3 @@ export const editarUsuario = (id, cambios) =>
     method: 'PATCH',
     body: JSON.stringify(cambios),
   });
-
-export const borrarUsuario = (id) =>
-  apiFetch(`/usuarios/${id}`, { method: 'DELETE' });
