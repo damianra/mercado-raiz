@@ -49,7 +49,7 @@ export async function getProveedor(id) {
 
 // Validación compartida POST/PATCH: devuelve { status, error } o un
 // objeto con los campos normalizados (solo los presentes).
-function validarCampos(body, { parcial = false } = {}) {
+function validarCampos(body) {
   const out = {};
   const err = (status, error) => ({ status, error });
 
@@ -58,12 +58,16 @@ function validarCampos(body, { parcial = false } = {}) {
   const str = (campo, { requerido = false, max = 200 } = {}) => {
     const v = body[campo];
     if (v === undefined) return;
-    if (typeof v !== 'string' || !v.trim()) {
-      if (!requerido) {
-        out[campo] = null;
-        return;
-      }
-      return err(400, `${campo} requerido`);
+    if (v === null) {
+      if (requerido) return err(400, `${campo} requerido`);
+      out[campo] = null;
+      return;
+    }
+    if (typeof v !== 'string') return err(400, `${campo} debe ser un string`);
+    if (!v.trim()) {
+      if (requerido) return err(400, `${campo} requerido`);
+      out[campo] = null;
+      return;
     }
     out[campo] = capString(v.trim(), max);
   };
@@ -141,7 +145,7 @@ export async function crearProveedor(body) {
     return { status: 400, error: 'tiempo_entrega_min_dias no puede superar al máximo' };
   }
 
-  if (await db.get('SELECT id FROM proveedores WHERE nombre ILIKE ?', [campos.nombre])) {
+  if (await db.get('SELECT id FROM proveedores WHERE LOWER(nombre) = LOWER(?)', [campos.nombre])) {
     return { status: 409, error: 'ya existe un proveedor con ese nombre' };
   }
 
@@ -178,7 +182,7 @@ export async function patchearProveedor(id, body) {
   const actual = await db.get('SELECT * FROM proveedores WHERE id = ?', [id]);
   if (!actual) return { status: 404, error: 'proveedor no encontrado' };
 
-  const campos = validarCampos(body, { parcial: true });
+  const campos = validarCampos(body);
   if (campos.error) return campos;
 
   let activo;
@@ -193,9 +197,14 @@ export async function patchearProveedor(id, body) {
     return { status: 400, error: 'nada que actualizar' };
   }
 
-  // min ≤ max sobre los valores fusionados (patch parcial).
-  const min = campos.tiempo_entrega_min_dias ?? actual.tiempo_entrega_min_dias;
-  const max = campos.tiempo_entrega_max_dias ?? actual.tiempo_entrega_max_dias;
+  // min ≤ max sobre los valores fusionados (patch parcial): un
+  // campo ausente conserva el valor actual; un null explícito lo limpia.
+  const min = 'tiempo_entrega_min_dias' in campos
+    ? campos.tiempo_entrega_min_dias
+    : actual.tiempo_entrega_min_dias;
+  const max = 'tiempo_entrega_max_dias' in campos
+    ? campos.tiempo_entrega_max_dias
+    : actual.tiempo_entrega_max_dias;
   if (min != null && max != null && min > max) {
     return { status: 400, error: 'tiempo_entrega_min_dias no puede superar al máximo' };
   }
@@ -229,14 +238,14 @@ export async function borrarProveedor(id) {
   const actual = await db.get('SELECT * FROM proveedores WHERE id = ?', [id]);
   if (!actual) return { status: 404, error: 'proveedor no encontrado' };
 
+  if (actual.activo === 0) {
+    return { status: 200, data: await getProveedorRow(db, id) };
+  }
   if (await tieneOrdenesVivas(db, id)) {
     return {
       status: 409,
       error: 'el proveedor tiene órdenes pendientes de aprobación o enviadas — no se puede desactivar',
     };
-  }
-  if (actual.activo === 0) {
-    return { status: 200, data: await getProveedorRow(db, id) };
   }
 
   await db.run('UPDATE proveedores SET activo = 0 WHERE id = ?', [id]);
