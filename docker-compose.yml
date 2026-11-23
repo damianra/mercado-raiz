@@ -1,0 +1,28 @@
+# Infra de dev (SPEC-25) — NO es el build de la app: es solo el
+# Postgres local que necesitan `npm run api`, `npm run seed`,
+# `npx vitest run` y `npm run test:e2e`.
+# Uso: `docker compose up -d` (funciona igual con podman).
+services:
+  mercadoraiz-db:
+    image: postgres:16
+    container_name: mercadoraiz-db
+    environment:
+      POSTGRES_USER: mercadoraiz
+      POSTGRES_PASSWORD: dev-local-2026
+      # La base canónica se llama mercadoraiz-db (el guion exige
+      # comillas en psql). La de test se crea una vez — ver abajo.
+      POSTGRES_DB: mercadoraiz-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - mercadoraiz-pgdata:/var/lib/postgresql/data
+      # Crea mercadoraiz-db-test al primer boot del volumen.
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mercadoraiz -d mercadoraiz-db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mercadoraiz-pgdata:

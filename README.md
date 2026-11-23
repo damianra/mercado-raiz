@@ -12,30 +12,37 @@ prompt front - back Qwen 3.7
 ## Stack
 
 - React + Vite + Tailwind CSS (frontend)
-- Node.js + Express + SQLite (backend, arquitectura MVC)
+- Node.js + Express + PostgreSQL (backend, arquitectura MVC — base `mercadoraiz-db`)
 - Vitest (tests) + Playwright + Chromium (E2E)
 - LangGraph + Ollama (agente de reposición, `harness-langgraph/`)
 
 ## Requisitos
 
 - Node.js >= 20
+- Docker o Podman (el Postgres local corre en contenedor)
 - (Opcional, para el agente) Ollama con `qwen3:8b`
 
 ## Levantar el proyecto
 
 ```bash
 npm install
-cp .env.example .env   # completar JWT_SECRET (ver archivo)
-npm run seed           # puebla la DB: catálogo real de 1.471 artículos + demo del flujo
-npm run dev            # frontend en http://localhost:5173
-npm run api            # API Express en http://localhost:4000
+cp .env.example .env      # completar JWT_SECRET (ver archivo)
+docker compose up -d      # Postgres 16 → base mercadoraiz-db en :5432 (con podman: podman compose up -d)
+npm run seed              # puebla la DB: catálogo real de 1.471 artículos + demo del flujo
+npm run dev               # frontend en http://localhost:5173
+npm run api               # API Express en http://localhost:4000
 ```
 
 El proxy de Vite redirige `/api` al puerto 4000 en dev.
 
-> **DBs existentes de antes de SPEC-23**: el schema de `usuarios`
-> cambió (columnas de auth) — `npm run seed` recrea `server/app.sqlite`
-> desde cero; sin re-seed ningún login funcionará.
+> **PostgreSQL (SPEC-25)**: la persistencia vive en el contenedor
+> `mercadoraiz-db` del `docker-compose.yml` (volumen
+> `mercadoraiz-pgdata`). Conexión por `DATABASE_URL` — el default de
+> `.env` apunta al compose local. La suite corre contra la base
+> hermana `mercadoraiz-db-test` (creada por
+> `scripts/init-test-db.sql` en el primer boot) con un schema
+> aislado por archivo de test. Para migrar datos de una
+> `app.sqlite` anterior: `node server/migrate-sqlite-to-pg.js`.
 
 ### Agente de reposición (opcional)
 
@@ -89,7 +96,7 @@ convierte cada artículo canónico en un producto propio — sku `MR#####`,
 marca, EAN, categoría, precio propio (determinístico, ~21% por encima
 del máximo de mercado para análisis de competitividad) y stock con mix
 CRITICO/STOCK_BAJO/OK. `productos` gana columnas `marca`/`ean`: bases
-existentes deben re-seedear (`npm run seed` recrea `app.sqlite`).
+existentes deben re-seedear (`npm run seed` trunca y repuebla).
 (SPEC-22)
 
 ## Specs
