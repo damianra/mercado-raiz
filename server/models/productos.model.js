@@ -132,12 +132,12 @@ export async function getProducto(id) {
     `SELECT pp.proveedor_id, pr.nombre AS proveedor, pp.costo_unitario,
             pp.lead_dias,
             COALESCE(pp.lead_dias, (pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
-                     pr.tiempo_entrega_dias) AS lead_efectivo,
+                     pr.tiempo_entrega_dias)::double precision AS lead_efectivo,
             pp.es_principal, pp.activo
      FROM producto_proveedor pp
      JOIN proveedores pr ON pr.id = pp.proveedor_id
      WHERE pp.producto_id = ?
-     ORDER BY pp.es_principal DESC, pp.costo_unitario ASC`,
+     ORDER BY pp.es_principal DESC, pp.costo_unitario ASC, pp.id`,
     [id],
   );
   return { ...mapProducto(row), precios };

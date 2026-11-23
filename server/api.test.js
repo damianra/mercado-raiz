@@ -318,6 +318,8 @@ describe('GET /api/productos/:id — precios por proveedor (SPEC-27)', () => {
     // el alternativo del mayorista general si existe
     const alt = p.precios.find((x) => x.es_principal === 0);
     if (alt) expect(alt.proveedor_id).toBe(8);
+    // numeric sin cast llega como string — el lead debe ser number
+    for (const x of p.precios) expect(typeof x.lead_efectivo).toBe('number');
   });
 
   it('404 si no existe / 400 si el id no es entero', async () => {
