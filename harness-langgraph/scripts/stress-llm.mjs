@@ -173,7 +173,7 @@ async function procesarArticulo(p) {
     // Misma aritmética que el nodo calcular-cantidad:
     // ceil(demanda × (lead+7) + z·σ·√lead) − stock (SPEC-26).
     const lead = p.proveedor.lead_dias_esperado ?? p.proveedor.tiempo_entrega_dias;
-    const ss = 1.65 * (p.stats.desvio_demanda ?? 0) * Math.sqrt(lead);
+    const ss = config.zSeguridad * (p.stats.desvio_demanda ?? 0) * Math.sqrt(lead);
     const objetivo = Math.ceil(analisis.demanda_diaria * (lead + 7) + ss);
     const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
     const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;

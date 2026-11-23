@@ -35,7 +35,7 @@ export const EstadoGrafo = Annotation.Root({
   productosBajos: listaVacia(),
 
   /**
-   * { [productoId]: { demanda_diaria, tendencia, observacion } }
+   * { [productoId]: { demanda_diaria, tendencia, observacion, desvio_demanda } }
    * Escribe: analizar-demanda (LLM). Leen: calcular-cantidad, generar-analisis.
    */
   analisisPorProducto: mergeObjeto(),

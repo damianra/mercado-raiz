@@ -65,7 +65,10 @@ loguea ante el primer 401 y re-loguea si el token vence),
 (default 3 — tareas en vuelo por nodo LLM, SPEC-16),
 `DEMANDA_BATCH` (default 5 — productos volátiles por llamada de
 demanda; los que el modelo omita o devuelva inválidos caen a
-llamada individual — SPEC-16).
+llamada individual — SPEC-16), `DEMANDA_DIAS` (default 90, rango
+7–365 — ventana de `/api/estadisticas/demanda`, SPEC-26) y
+`Z_SEGURIDAD` (default 1.65 ≈ 95% service level — factor z del
+stock de seguridad z·σ·√lead de `calcular-cantidad`, SPEC-26).
 
 Runtime del LLM (`src/config/ollama.js`): `numCtx: 2048` y
 `numPredict` acotado por instancia — los prompts usan ~250 tokens y
