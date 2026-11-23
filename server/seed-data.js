@@ -16,9 +16,12 @@
 //   APROBADO_AUTO del front = APROBADA con requiere_aprobacion = 0
 //   y aprobado_por = 'auto'.
 
-import { generarArticulos } from './seed-articulos.js';
+import { generarArticulos, generarPreciosProveedor } from './seed-articulos.js';
 
 const productos = generarArticulos();
+// SPEC-27: costo por proveedor (principal del artículo + alternativos
+// del mayorista general en ~40% de los casos).
+const producto_proveedor = generarPreciosProveedor(productos);
 
 // Artículos bajo stock repartidos en el catálogo (determinístico — el
 // orden del CSV es fijo). Las OC demo apuntan a estos.
@@ -27,7 +30,13 @@ const paso = Math.max(1, Math.floor(bajos.length / 11));
 const elegidos = bajos.filter((_, i) => i % paso === 0).slice(0, 11);
 
 const cantidadOrden = (p) => 2 * p.stock_minimo - p.stock_actual;
-const monto = (p) => Math.round(cantidadOrden(p) * p.precio_unitario * 100) / 100;
+// SPEC-27: la orden snapshottea el COSTO del proveedor (producto_proveedor),
+// no el precio de venta. Fallback a precio_venta si faltara la fila.
+const costoDe = (p) =>
+  producto_proveedor.find(
+    (pp) => pp.producto_id === p.id && pp.proveedor_id === p.proveedor_id,
+  )?.costo_unitario ?? p.precio_venta;
+const monto = (p) => Math.round(cantidadOrden(p) * costoDe(p) * 100) / 100;
 
 // Mismo patrón de estados/fechas que el seed original (los tests de
 // filtros por fecha dependen de él): 4 pendientes, 4 aprobadas,
@@ -154,7 +163,7 @@ const ordenes_compra = elegidos.map((p, i) => {
     producto_id: p.id,
     proveedor_id: p.proveedor_id,
     cantidad,
-    precio_unitario: p.precio_unitario,
+    precio_unitario: costoDe(p),
     monto_total: monto(p),
     estado: t.estado,
     requiere_aprobacion: t.requiere_aprobacion,
@@ -339,9 +348,34 @@ export const seedData = {
       activo: 1,
       fecha_creacion: '2026-10-20T09:00:00',
     },
+    {
+      // SPEC-27: mayorista general (tipo Diarco/Maxiconsumo) — cubre
+      // todo el catálogo. Es la alternativa de producto_proveedor:
+      // suele ser más barato pero con lead más largo y pedido mínimo
+      // alto → el agente elige costo vs velocidad.
+      id: 8,
+      nombre: 'Distribuidora Nacional SA',
+      contacto: 'Ventas Mayoristas',
+      telefono: '+54 11 5555-0110',
+      email: 'ventas@distnacional.com',
+      tiempo_entrega_min_dias: 4,
+      tiempo_entrega_max_dias: 8,
+      confiabilidad_pct: 80,
+      pedido_minimo_monto: 250000,
+      costo_envio: 12000,
+      categorias_cubiertas: [
+        'Almacén', 'Desayuno y Merienda', 'Bebidas', 'Perfumería',
+        'Limpieza', 'Frescos', 'Congelados', 'Frutas y Verduras',
+      ],
+      tiempo_entrega_dias: 6,
+      activo: 1,
+      fecha_creacion: '2026-10-20T09:00:00',
+    },
   ],
 
   productos,
+
+  producto_proveedor,
 
   ordenes_compra,
 

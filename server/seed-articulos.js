@@ -117,7 +117,7 @@ function articuloDeCsv(row, id) {
   // punto medio del mercado — algunos artículos quedan por encima del
   // máximo observado (análisis de competitividad, SPEC-22).
   const base = (row.min_price + row.max_price) / 2;
-  const precio_unitario = round2(base * (0.88 + rand(row.ean, 'precio') * 0.3));
+  const precio_venta = round2(base * (0.88 + rand(row.ean, 'precio') * 0.3));
 
   const stock_minimo = 5 + Math.floor(rand(row.ean, 'min') * 16); // 5..20
   const rStock = rand(row.ean, 'stock');
@@ -141,7 +141,7 @@ function articuloDeCsv(row, id) {
     categoria: row.categoria,
     stock_actual,
     stock_minimo,
-    precio_unitario,
+    precio_venta,
     proveedor_id: cat.proveedor_id,
     ubicacion: cat.ubicacion,
     estado,
@@ -150,4 +150,56 @@ function articuloDeCsv(row, id) {
 
 export function generarArticulos() {
   return parseCsv().map((row, i) => articuloDeCsv(row, i + 1));
+}
+
+// SPEC-27 — margen objetivo por categoría (sobre venta). Rangos
+// realistas de supermercado argentino: perfumería/F&V márgenes altos,
+// frescos bajos (rotación + merma).
+const MARGEN_CATEGORIA = {
+  'Almacén': 0.22,
+  'Desayuno y Merienda': 0.28,
+  Bebidas: 0.35,
+  'Perfumería': 0.45,
+  Limpieza: 0.3,
+  Frescos: 0.18,
+  Congelados: 0.25,
+  'Frutas y Verduras': 0.4,
+};
+
+const PROVEEDOR_MAYORISTA = 8; // Distribuidora Nacional SA (seed-data)
+
+/**
+ * Filas de producto_proveedor por artículo:
+ * - SIEMPRE el proveedor principal (el de la categoría): costo =
+ *   venta / (1 + margen·jitter), jitter determinístico ∈ [0.9, 1.1).
+ * - ~40% además el mayorista general: costo ±8% del principal y sin
+ *   lead propio (usa el del proveedor, más largo) → costo vs lead.
+ */
+export function generarPreciosProveedor(articulos) {
+  const filas = [];
+  for (const a of articulos) {
+    const margen = MARGEN_CATEGORIA[a.categoria];
+    if (!margen) throw new Error(`Categoría sin margen: "${a.categoria}"`);
+    const jitter = 0.9 + rand(a.ean, 'costo') * 0.2;
+    const costoPpal = round2(a.precio_venta / (1 + margen * jitter));
+    filas.push({
+      producto_id: a.id,
+      proveedor_id: a.proveedor_id,
+      costo_unitario: costoPpal,
+      lead_dias: null,
+      es_principal: 1,
+      activo: 1,
+    });
+    if (rand(a.ean, 'alt') < 0.4) {
+      filas.push({
+        producto_id: a.id,
+        proveedor_id: PROVEEDOR_MAYORISTA,
+        costo_unitario: round2(costoPpal * (0.92 + rand(a.ean, 'altcosto') * 0.16)),
+        lead_dias: null,
+        es_principal: 0,
+        activo: 1,
+      });
+    }
+  }
+  return filas;
 }

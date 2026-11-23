@@ -116,7 +116,7 @@ try {
     console.log(`  ${marca} ${tabla}: sqlite=${origen} → pg=${destino}`);
   }
   // Muestras: primer producto y primer usuario, campos clave.
-  const p = await db.get(`SELECT sku, ean, precio_unitario FROM productos ORDER BY id LIMIT 1`);
+  const p = await db.get(`SELECT sku, ean, precio_venta FROM productos ORDER BY id LIMIT 1`);
   const u = await db.get(`SELECT email, rol, password_hash IS NOT NULL AS tiene_hash FROM usuarios ORDER BY id LIMIT 1`);
   console.log(`  muestra producto: ${JSON.stringify(p)}`);
   console.log(`  muestra usuario : ${JSON.stringify(u)}`);
