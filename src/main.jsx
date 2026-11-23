@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Proveedores from './pages/Proveedores.jsx';
+import Quiebres from './pages/Quiebres.jsx';
 import Usuarios from './pages/Usuarios.jsx';
 import { usePath } from './lib/router.jsx';
 import { getSession, onSesion, refrescarSesion } from './lib/auth.js';
@@ -53,6 +54,11 @@ function Root() {
     ) : (
       <NotFound />
     );
+  }
+
+  if (segmento === 'quiebres') {
+    // SPEC-27 T27.4: vista operativa de quiebres — todos los roles.
+    return <Quiebres usuario={sesion.usuario} />;
   }
 
   if (segmento === 'proveedores') {
