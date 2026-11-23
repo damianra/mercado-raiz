@@ -37,11 +37,14 @@ export async function getStats() {
   const hoy = isoDaysAgo(0).slice(0, 10);
   const ayer = isoDaysAgo(1).slice(0, 10);
   const pendientesHoy = await count(
-    "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion) = ?",
+    // El 'día' es UTC (AT TIME ZONE fija el calendario, igual que
+    // cuando las fechas eran TEXT en SQLite) — sin eso date() usa
+    // la TZ de sesión del servidor.
+    "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion AT TIME ZONE 'UTC') = ?",
     hoy,
   );
   const pendientesAyer = await count(
-    "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion) = ?",
+    "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion AT TIME ZONE 'UTC') = ?",
     ayer,
   );
 

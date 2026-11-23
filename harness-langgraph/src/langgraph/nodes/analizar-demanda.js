@@ -31,6 +31,7 @@ import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
 import { buscarDemanda, guardarDemanda, hashAnalisis } from '../../harness/analisis-cache.js';
+import { diaUtc } from '../../utils/fecha.js';
 import { parseJsonArrayResponse, parseJsonResponse } from '../../utils/llm-json.js';
 import { conLimite } from '../../utils/concurrencia.js';
 import { promptAnalisisDemanda } from '../prompts/analisis-demanda.js';
@@ -57,7 +58,7 @@ const schemaAnalisisBatch = schemaAnalisis.extend({
 export function coeficienteVariacion(ventas) {
   const porDia = new Map();
   for (const v of ventas) {
-    const dia = v.fecha.slice(0, 10);
+    const dia = diaUtc(v.fecha);
     porDia.set(dia, (porDia.get(dia) ?? 0) + Math.abs(v.diferencia));
   }
   const valores = [...porDia.values()];
@@ -70,7 +71,7 @@ export function coeficienteVariacion(ventas) {
 
 /** Plan B sin LLM: promedio simple de unidades vendidas por día. */
 function fallbackDesdeVentas(ventas) {
-  const dias = new Set(ventas.map((v) => v.fecha.slice(0, 10))).size || 1;
+  const dias = new Set(ventas.map((v) => diaUtc(v.fecha))).size || 1;
   const unidades = ventas.reduce((acc, v) => acc + Math.abs(v.diferencia), 0);
   return {
     demanda_diaria: Math.max(0.5, Math.round((unidades / dias) * 10) / 10),

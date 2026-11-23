@@ -36,7 +36,10 @@ const ROL_BADGE = {
   SERVICIO: 'bg-warmgray/15 text-warmgray',
 };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const fmtFecha = (f) => (f ? f.replace('T', ' ').slice(0, 16) : '—');
+// timestamptz llega como ISO con Z — parsear como Date y mostrar
+// en TZ local (antes era un string UTC que se cortaba a pelo).
+const fmtFecha = (f) =>
+  f ? new Date(f).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 let toastKey = 0;
 
 // SPEC-24: gestión de usuarios — solo ADMIN llega acá (el guard de

@@ -34,7 +34,7 @@ mocks. El orquestador lo ejecutó en 6 pasos → los SPECs 01–07 mapean
 ```
 ┌──────────────┐   HTTP /api    ┌──────────────────────┐
 │  Frontend    │ ◄────────────► │  Backend MVC (:4000) │
-│  React :5173 │                │  Express + SQLite    │
+│  React :5173 │                │  Express + Postgres  │
 └──────────────┘                └──────────▲───────────┘
                                            │ aprobación REST
 ┌──────────────────┐   HTTP :4000          │ (SPEC-12)
@@ -1657,7 +1657,8 @@ sin rol no ve la sección. Review por sub-agente del PR.
   PostgreSQL; la base se llama `mercadoraiz-db`. Es la primera
   tarea del roadmap nuevo: SPEC-26 (demanda real + proveedores) y
   todo desarrollo posterior se implementan **ya sobre Postgres**.
-- **Estado global:** ⏳ planificada
+- **Estado global:** ✅ implementada — T25.1 a T25.5 mergeadas
+  (PRs #30, #31, #32, #33, #34).
 
 ### Decisiones
 
@@ -1779,6 +1780,13 @@ sin rol no ve la sección. Review por sub-agente del PR.
 - **T25.5** Auditoría de fechas front+harness y limpieza:
   retirar `better-sqlite3` del backend, `checkpoints.sqlite`,
   `app.sqlite` y doc de obsoleto en `AGENTS.md`/`SPEC.md`.
+  ✅ implementada — `date(fecha_creacion)` → `date(... AT TIME
+  ZONE 'UTC')` en ordenes/dashboard (PG usaba TZ de sesión, SQLite
+  era UTC naíf); `utils/fecha.js#diaUtc` reemplaza `slice(0,10)`
+  en los 4 puntos del harness; `fmtFecha` de Usuarios parsea ISO
+  y muestra TZ local; diagramas regenerados (Express + Postgres);
+  artefactos `checkpoints.sqlite*` eliminados; `better-sqlite3`
+  ya fuera de deps (la migración usa `node:sqlite` nativo).
 
 ### Verificado por
 
