@@ -82,6 +82,28 @@ export const getOrdenes = () =>
 
 export const getProductos = () => apiFetch('/productos?limit=100');
 
+// SPEC-27 T27.4: todos los productos STOCK_BAJO + CRITICO (vista de
+// quiebres). Mismo patrón de páginas paralelas que el client del
+// agente — el backend topea limit en 100.
+async function todosLosDe(estado) {
+  const primera = await apiFetch(`/productos?estado=${estado}&limit=100&page=1`);
+  const totalPages = primera.pagination?.totalPages ?? 1;
+  if (totalPages <= 1) return primera.data;
+  const restantes = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, i) =>
+      apiFetch(`/productos?estado=${estado}&limit=100&page=${i + 2}`)),
+  );
+  return [primera, ...restantes].flatMap((r) => r.data);
+}
+
+export const getProductosQuiebres = async () => {
+  const [bajos, criticos] = await Promise.all([
+    todosLosDe('STOCK_BAJO'),
+    todosLosDe('CRITICO'),
+  ]);
+  return [...bajos, ...criticos];
+};
+
 export const getDashboardStats = () => apiFetch('/dashboard/stats');
 
 // R26.9/T26.7: stats de demanda de TODOS los productos (sin

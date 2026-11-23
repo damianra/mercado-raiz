@@ -1,4 +1,5 @@
 import {
+  TriangleAlert,
   LayoutDashboard,
   ClipboardCheck,
   Leaf,
@@ -13,6 +14,8 @@ import { Link } from '../lib/router.jsx';
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck },
+  // SPEC-27 T27.4: quiebres y margen en riesgo — operativo, todos los roles.
+  { id: 'quiebres', label: 'Quiebres', icon: TriangleAlert, to: '/quiebres' },
   // SPEC-24: gestión de usuarios — solo visible para ADMIN; `to`
   // navega a otra página, los demás son anchors de la home.
   { id: 'usuarios', label: 'Usuarios', icon: Users, to: '/usuarios', roles: ['ADMIN'] },

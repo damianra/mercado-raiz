@@ -126,6 +126,9 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-22 | Catálogo interno de artículos (seed real desde el dataset, sku `MR#####`, marca/EAN) |
 | SPEC-23 | Autenticación JWT (login + refresh rotativo + roles + cuenta de servicio del agente) |
 | SPEC-24 | Gestión de usuarios y roles (CRUD `/api/usuarios` + pantalla admin `/usuarios`) |
+| SPEC-25 | Migración de persistencia a PostgreSQL (`mercadoraiz-db` en Docker) |
+| SPEC-26 | Demanda real y proveedores enriquecidos (`ventas`, `/api/estadisticas/demanda`, CRUD `/proveedores`) |
+| SPEC-27 | Precios por proveedor y margen (`producto_proveedor`, `precio_venta`/`costo`, agente elige proveedor, vista `/quiebres`) |
 
 ## Usuarios demo
 
@@ -148,6 +151,13 @@ Con rol `ADMIN` aparece el ítem **Usuarios** en el sidebar →
 se revocan). Un admin no puede desactivarse ni degradarse a sí
 mismo, y el backend impide dejar el sistema sin el último ADMIN
 activo (`409`).
+
+Todos los roles ven **Quiebres** en el sidebar → `/quiebres`
+(SPEC-27 T27.4): la lista de acción diaria — productos en cero o
+bajo el mínimo ordenados por margen que se deja de ganar por día
+(`demanda × margen_unitario`), con KPIs de SKUs sin stock, margen
+en riesgo/día y margen perdido en 90 días. Solo `ADMIN` ve
+además **Proveedores** (`/proveedores`, SPEC-26).
 
 Endpoints de auth: `POST /api/auth/login` → `{access_token, usuario}`
 + cookies `mr_refresh` (httpOnly) y `mr_csrf` (legible → header
