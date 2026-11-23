@@ -103,7 +103,7 @@ export function hashAnalisis(producto, stats) {
       producto.nombre,
       producto.stock_actual,
       producto.stock_minimo,
-      producto.precio_unitario,
+      producto.costo_unitario ?? producto.precio_venta,
       producto.categoria,
       producto.proveedor?.nombre,
       producto.proveedor?.lead_dias_esperado ?? producto.proveedor?.tiempo_entrega_dias,

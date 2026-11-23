@@ -16,7 +16,7 @@ const producto = (id, stock, minimo, precio, lead = 1, leadEsperado) => ({
   nombre: `Producto ${id}`,
   stock_actual: stock,
   stock_minimo: minimo,
-  precio_unitario: precio,
+  costo_unitario: precio,
   proveedor: { nombre: 'Prov', tiempo_entrega_dias: lead, lead_dias_esperado: leadEsperado },
 });
 

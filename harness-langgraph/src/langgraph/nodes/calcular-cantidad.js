@@ -6,7 +6,7 @@
  * "demanda × (lead esperado del proveedor + 7 días de buffer) +
  * stock de seguridad z·σ·√lead" (SPEC-26, R26.8), nunca por debajo
  * de 2× el stock mínimo, y calcula el monto con el
- * precio_unitario. No usa el LLM: la cantidad es aritmética de
+ * costo del proveedor (producto_proveedor). No usa el LLM: la cantidad es aritmética de
  * negocio — el modelo estima, el código calcula.
  * Escribe: decisionPorProducto {cantidad, monto_total}.
  */
@@ -30,7 +30,7 @@ export function calcularCantidad(state) {
     const objetivo = Math.ceil(demanda * (lead + DIAS_COBERTURA) + seguridad);
     const minimo = p.stock_minimo * 2; // nunca quedar bajo el mínimo tras la compra
     const cantidad = Math.max(objetivo - p.stock_actual, minimo - p.stock_actual, 1);
-    const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
+    const monto = Math.round(cantidad * (p.costo_unitario ?? p.precio_venta) * 100) / 100;
 
     decision[p.id] = { cantidad, monto_total: monto };
     log(`  ${p.sku}: ordenar ${cantidad} u → $${monto.toFixed(2)} (demanda ${demanda}/día, lead ${lead}d, SS ${seguridad.toFixed(1)}u)`);

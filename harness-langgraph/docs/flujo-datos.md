@@ -6,7 +6,7 @@ Cada nodo devuelve campos que se funden en el estado:
 
 ```
 leer-inventario    → productosBajos: [ {id, sku, nombre, stock_actual,
-                                        stock_minimo, precio_unitario,
+                                        stock_minimo, precio_venta + costo_unitario (producto_proveedor),
                                         proveedor:{id,nombre,tiempo_entrega_dias,lead_dias_esperado}, estado} ]
                       (SPEC-14: pagina todas las páginas del backend, limit=100)
 analizar-demanda   → analisisPorProducto: { [id]: {demanda_diaria, tendencia, observacion, desvio_demanda} }

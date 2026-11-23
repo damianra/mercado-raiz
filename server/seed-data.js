@@ -10,7 +10,7 @@
 // Coherencia:
 // - estado de producto derivado de stock_actual vs stock_minimo
 //   (0 → CRITICO, < minimo → STOCK_BAJO, si no OK)
-// - monto_total = cantidad * precio_unitario
+// - monto_total = cantidad * costo del proveedor
 // - OC-001..OC-011 replican el flujo de aprobación sobre artículos
 //   reales en CRITICO/STOCK_BAJO (cantidad = 2·min − actual, R5.5);
 //   APROBADO_AUTO del front = APROBADA con requiere_aprobacion = 0

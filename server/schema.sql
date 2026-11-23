@@ -182,7 +182,8 @@ CREATE INDEX IF NOT EXISTS idx_pp_producto ON producto_proveedor(producto_id);
 -- Upgrade SPEC-27: bases con precio_unitario viejo lo renombran.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name='productos' AND column_name='precio_unitario') THEN
+             WHERE table_name='productos' AND column_name='precio_unitario'
+               AND table_schema = current_schema()) THEN
     ALTER TABLE productos RENAME COLUMN precio_unitario TO precio_venta;
   END IF;
 END $$;

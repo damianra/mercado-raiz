@@ -152,7 +152,8 @@ export function generarArticulos() {
   return parseCsv().map((row, i) => articuloDeCsv(row, i + 1));
 }
 
-// SPEC-27 — margen objetivo por categoría (sobre venta). Rangos
+// SPEC-27 — markup objetivo por categoría (costo = venta/(1+markup)).
+// El margen_pct resultante sobre venta queda en ~14–33%. Rangos
 // realistas de supermercado argentino: perfumería/F&V márgenes altos,
 // frescos bajos (rotación + merma).
 const MARGEN_CATEGORIA = {

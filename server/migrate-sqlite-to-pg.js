@@ -91,12 +91,17 @@ try {
       const filas = filasDe(tabla);
       if (!filas.length) { out.push([tabla, 0]); continue; }
       const colsDestino = await colsPg(tabla);
-      const cols = Object.keys(filas[0]).filter((c) => colsDestino.has(c));
+      // SPEC-27: el sqlite viejo trae precio_unitario; el destino lo
+      // renombró a precio_venta (era semánticamente el precio de venta).
+      const rename = { precio_unitario: 'precio_venta' };
+      const pares = Object.keys(filas[0])
+        .map((c) => [c, rename[c] ?? c])
+        .filter(([, d]) => colsDestino.has(d));
       const stmt = t.prepare(
-        `INSERT INTO ${tabla} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+        `INSERT INTO ${tabla} (${pares.map(([, d]) => d).join(', ')}) VALUES (${pares.map(() => '?').join(', ')})`,
       );
-      for (const fila of filas) await stmt.run(...cols.map((c) => fila[c]));
-      if (cols.includes('id')) {
+      for (const fila of filas) await stmt.run(...pares.map(([c]) => fila[c]));
+      if (pares.some(([, d]) => d === 'id')) {
         await t.query(
           `SELECT setval(pg_get_serial_sequence('${tabla}', 'id'), MAX(id)) FROM ${tabla}`,
         );

@@ -81,7 +81,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         <div className="mt-2 rounded-lg bg-white p-4 shadow-soft ring-1 ring-root/10">
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <dt className="text-warmgray">Precio unitario</dt>
+              <dt className="text-warmgray">Costo unitario</dt>
               <dd className="tabular font-mono text-grafito">
                 {formatMoney(orden.precioUnitario)}
               </dd>

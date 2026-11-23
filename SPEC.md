@@ -1972,7 +1972,7 @@ más barato pero más lento) → el agente tiene qué elegir.
 pagado). El agente puede elegir proveedor por costo/lead.
 
 - **T27.1** Schema + seed + modelos (producto/orden exponen
-  precio_venta, costo y margen_pct) + tests.
+  precio_venta, costo y margen_pct) + tests. ✅
 - **T27.2** Endpoints/stats: precios por proveedor en el detalle del
   producto + margen perdido en quiebres.
 - **T27.3** Agente: elige proveedor (costo vs lead) y lo envía en la
