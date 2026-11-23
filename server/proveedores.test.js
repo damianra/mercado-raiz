@@ -183,6 +183,22 @@ describe('PATCH /api/proveedores/:id', () => {
     expect((await req('/proveedores/9999', 'PATCH', { nombre: 'X' })).status).toBe(404);
   });
 
+  it('409 al renombrar pisando el nombre de otro proveedor', async () => {
+    const { body: creado } = await crearFixture();
+    const r = await req(`/proveedores/${creado.id}`, 'PATCH', {
+      nombre: seedData.proveedores[0].nombre.toUpperCase(),
+    });
+    expect(r.status).toBe(409);
+    // Renombrar a sí mismo (solo case) no choca consigo mismo.
+    const self = await req(`/proveedores/${seedData.proveedores[0].id}`, 'PATCH', {
+      nombre: seedData.proveedores[0].nombre.toLowerCase(),
+    });
+    expect(self.status).toBe(200);
+    await req(`/proveedores/${seedData.proveedores[0].id}`, 'PATCH', {
+      nombre: seedData.proveedores[0].nombre,
+    }); // restaurar el nombre del seed
+  });
+
   it('desactivar por PATCH corre el mismo guard de órdenes vivas', async () => {
     const id = provConOrdenViva();
     const r = await req(`/proveedores/${id}`, 'PATCH', { activo: 0 });

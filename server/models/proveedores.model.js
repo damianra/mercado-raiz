@@ -198,6 +198,19 @@ export async function patchearProveedor(id, body) {
     return { status: 400, error: 'nada que actualizar' };
   }
 
+  // Unicidad de nombre (misma regla que POST): si cambia el nombre,
+  // no puede pisar el de otro proveedor (case-insensitive).
+  if (
+    campos.nombre &&
+    campos.nombre.toLowerCase() !== actual.nombre.toLowerCase() &&
+    (await db.get(
+      'SELECT id FROM proveedores WHERE LOWER(nombre) = LOWER(?) AND id != ?',
+      [campos.nombre, id],
+    ))
+  ) {
+    return { status: 409, error: 'ya existe un proveedor con ese nombre' };
+  }
+
   // min ≤ max sobre los valores fusionados (patch parcial): un
   // campo ausente conserva el valor actual; un null explícito lo limpia.
   const min = 'tiempo_entrega_min_dias' in campos

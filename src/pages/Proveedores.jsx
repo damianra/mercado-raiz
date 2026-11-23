@@ -465,9 +465,11 @@ function ProveedorModal({ proveedor, onClose, onSaved }) {
     Number.isInteger(payload.tiempo_entrega_dias) &&
     payload.tiempo_entrega_dias >= 0 &&
     (payload.tiempo_entrega_min_dias == null ||
-      Number.isInteger(payload.tiempo_entrega_min_dias)) &&
+      (Number.isInteger(payload.tiempo_entrega_min_dias) &&
+        payload.tiempo_entrega_min_dias >= 0)) &&
     (payload.tiempo_entrega_max_dias == null ||
-      Number.isInteger(payload.tiempo_entrega_max_dias)) &&
+      (Number.isInteger(payload.tiempo_entrega_max_dias) &&
+        payload.tiempo_entrega_max_dias >= 0)) &&
     (payload.confiabilidad_pct == null ||
       (Number.isInteger(payload.confiabilidad_pct) &&
         payload.confiabilidad_pct >= 0 &&
