@@ -64,7 +64,7 @@ export function iniciarServidor() {
     if (orchestrator.corrida.fase === 'corriendo') {
       return res.status(409).json({ error: 'ya hay una corrida en curso' });
     }
-    orchestrator.iniciar().catch((err) => log(`corrida falló: ${err.message}`));
+    orchestrator.iniciar(req.body ?? {}).catch((err) => log(`corrida falló: ${err.message}`));
     res.status(202).json({ ok: true });
   });
 
