@@ -46,3 +46,19 @@ describe('leer-inventario — limite (T26.8)', () => {
     }
   });
 });
+
+describe('leer-inventario — limite a través del grafo (canal declarado)', () => {
+  it('invoke({limite}) entrega el canal al nodo (mapInput no lo dropea)', async () => {
+    const { END, START, StateGraph } = await import('@langchain/langgraph');
+    const { EstadoGrafo } = await import('../../src/langgraph/state.js');
+    listar.mockResolvedValue(productos(150));
+    const grafo = new StateGraph(EstadoGrafo)
+      .addNode('leer-inventario', leerInventario)
+      .addEdge(START, 'leer-inventario')
+      .addEdge('leer-inventario', END)
+      .compile();
+    const estado = await grafo.invoke({ limite: 100 });
+    expect(estado.limite).toBe(100);
+    expect(estado.productosBajos).toHaveLength(100);
+  });
+});
