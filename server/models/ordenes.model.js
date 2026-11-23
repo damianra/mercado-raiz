@@ -18,10 +18,10 @@ export const SORT_COLUMNS = {
   estado: 'o.estado',
 };
 
-// Formato consistente con el seed ('YYYY-MM-DDTHH:MM:SS') — mezclarlo
-// con el datetime('now') de SQLite (espacio en vez de 'T') rompería el
-// orden lexicográfico que usan los filtros de fecha y el sort.
-const now = () => new Date().toISOString().slice(0, 19);
+// Las escrituras mandan el timestamp desde JS en ISO — timestamptz lo
+// acepta tal cual y queda consistente con los cutoffs que calcula el
+// dashboard.
+const now = () => new Date().toISOString();
 
 const FROM_ORDEN = `FROM ordenes_compra o
   JOIN productos p ON p.id = o.producto_id
@@ -91,7 +91,7 @@ function mapOrdenDetalle(row) {
 
 const esSoloFecha = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
-export function listOrdenes({
+export async function listOrdenes({
   estado,
   requiereAprobacion,
   fechaDesde,
@@ -102,7 +102,7 @@ export function listOrdenes({
   page,
   limit,
 }) {
-  const db = openDb();
+  const db = await openDb();
   const where = [];
   const params = [];
 
@@ -125,19 +125,21 @@ export function listOrdenes({
     params.push(fechaHasta);
   }
   if (search) {
-    where.push('(o.orden_id LIKE ? OR p.nombre LIKE ? OR p.sku LIKE ? OR pr.nombre LIKE ?)');
+    // ILIKE — ver nota en productos.model.
+    where.push('(o.orden_id ILIKE ? OR p.nombre ILIKE ? OR p.sku ILIKE ? OR pr.nombre ILIKE ?)');
     const like = `%${search}%`;
     params.push(like, like, like, like);
   }
 
   const fromWhere = `${FROM_ORDEN}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
 
-  const { c: total } = db.prepare(`SELECT COUNT(*) AS c ${fromWhere}`).get(...params);
-  const rows = db
-    .prepare(`${SELECT_ORDEN}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY ${SORT_COLUMNS[sort]} ${order}
-       LIMIT ? OFFSET ?`)
-    .all(...params, limit, (page - 1) * limit);
+  const { c: total } = await db.get(`SELECT COUNT(*) AS c ${fromWhere}`, params);
+  const rows = await db.all(
+    `${SELECT_ORDEN}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+     ORDER BY ${SORT_COLUMNS[sort]} ${order}
+     LIMIT ? OFFSET ?`,
+    [...params, limit, (page - 1) * limit],
+  );
 
   return {
     data: rows.map(mapOrdenResumen),
@@ -145,8 +147,9 @@ export function listOrdenes({
   };
 }
 
-export function getOrden(ordenId) {
-  const row = openDb().prepare(`${SELECT_ORDEN} WHERE o.orden_id = ?`).get(ordenId);
+export async function getOrden(ordenId) {
+  const db = await openDb();
+  const row = await db.get(`${SELECT_ORDEN} WHERE o.orden_id = ?`, [ordenId]);
   return row ? mapOrdenDetalle(row) : null;
 }
 
@@ -156,10 +159,10 @@ const INSERT_ORDEN = `INSERT INTO ordenes_compra
    fecha_creacion, fecha_actualizacion)
  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-function insertarOrden(db, ordenId, producto, { cantidad, requiereAprobacion, analisisIa }, ts) {
+async function insertarOrden(t, ordenId, producto, { cantidad, requiereAprobacion, analisisIa }, ts) {
   const montoTotal = Math.round(cantidad * producto.precio_unitario * 100) / 100;
   const requiere = requiereAprobacion ?? montoTotal >= UMBRAL_APROBACION;
-  db.prepare(INSERT_ORDEN).run(
+  await t.prepare(INSERT_ORDEN).run(
     ordenId,
     producto.id,
     producto.proveedor_id,
@@ -176,26 +179,25 @@ function insertarOrden(db, ordenId, producto, { cantidad, requiereAprobacion, an
   );
 }
 
+const PROXIMO_ID =
+  "SELECT MAX(CAST(SUBSTR(orden_id, 4) AS INTEGER)) AS maxId FROM ordenes_compra WHERE orden_id LIKE 'OC-%'";
+
 // Crea la orden: precio y proveedor salen del producto, el monto se
 // calcula server-side y el orden_id es el próximo 'OC-NNN' secuencial.
 // Devuelve null si el producto no existe (el controller → 404).
-export function createOrden({ productoId, cantidad, requiereAprobacion, analisisIa }) {
-  const db = openDb();
-  const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(productoId);
+export async function createOrden({ productoId, cantidad, requiereAprobacion, analisisIa }) {
+  const db = await openDb();
+  const producto = await db.get('SELECT * FROM productos WHERE id = ?', [productoId]);
   if (!producto) return null;
 
   // Transacción: el MAX(orden_id) y el INSERT deben ser atómicos o dos
   // creaciones concurrentes podrían generar el mismo OC-NNN.
-  const ordenId = db.transaction(() => {
-    const { maxId } = db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(orden_id, 4) AS INTEGER)) AS maxId FROM ordenes_compra WHERE orden_id LIKE 'OC-%'",
-      )
-      .get();
-    const nextId = `OC-${String((maxId ?? 0) + 1).padStart(3, '0')}`;
-    insertarOrden(db, nextId, producto, { cantidad, requiereAprobacion, analisisIa }, now());
+  const ordenId = await db.tx(async (t) => {
+    const { maxid } = await t.prepare(PROXIMO_ID).get();
+    const nextId = `OC-${String((maxid ?? 0) + 1).padStart(3, '0')}`;
+    await insertarOrden(t, nextId, producto, { cantidad, requiereAprobacion, analisisIa }, now());
     return nextId;
-  })();
+  });
 
   return getOrden(ordenId);
 }
@@ -208,58 +210,59 @@ export function createOrden({ productoId, cantidad, requiereAprobacion, analisis
  * secuencia OC-NNN y los INSERT en una sola transacción.
  * items: [{ productoId, cantidad, requiereAprobacion?, analisisIa? }]
  */
-export function createOrdenesBatch(items) {
-  const db = openDb();
+export async function createOrdenesBatch(items) {
+  const db = await openDb();
   const buscarProducto = db.prepare('SELECT * FROM productos WHERE id = ?');
 
   const faltantes = [];
-  const resueltos = items.map((item, indice) => {
-    const producto = buscarProducto.get(item.productoId);
+  const resueltos = [];
+  for (const [indice, item] of items.entries()) {
+    const producto = await buscarProducto.get(item.productoId);
     if (!producto) faltantes.push({ indice, producto_id: item.productoId });
-    return { item, producto };
-  });
+    resueltos.push({ item, producto });
+  }
   if (faltantes.length) return { faltantes };
 
-  const ordenIds = db.transaction(() => {
-    const { maxId } = db
-      .prepare(
-        "SELECT MAX(CAST(SUBSTR(orden_id, 4) AS INTEGER)) AS maxId FROM ordenes_compra WHERE orden_id LIKE 'OC-%'",
-      )
-      .get();
-    let next = (maxId ?? 0) + 1;
+  const ordenIds = await db.tx(async (t) => {
+    const { maxid } = await t.prepare(PROXIMO_ID).get();
+    let next = (maxid ?? 0) + 1;
     const ts = now();
-    return resueltos.map(({ item, producto }) => {
+    const ids = [];
+    for (const { item, producto } of resueltos) {
       const ordenId = `OC-${String(next++).padStart(3, '0')}`;
-      insertarOrden(db, ordenId, producto, item, ts);
-      return ordenId;
-    });
-  })();
+      await insertarOrden(t, ordenId, producto, item, ts);
+      ids.push(ordenId);
+    }
+    return ids;
+  });
 
-  return { ordenes: ordenIds.map(getOrden) };
+  const ordenes = [];
+  for (const ordenId of ordenIds) ordenes.push(await getOrden(ordenId));
+  return { ordenes };
 }
 
 // Las transiciones solo son válidas desde PENDIENTE_APROBACION — el
 // controller verifica existencia/estado antes de llamar acá.
-export function aprobarOrden(ordenId, aprobadoPor) {
+export async function aprobarOrden(ordenId, aprobadoPor) {
+  const db = await openDb();
   const ts = now();
-  openDb()
-    .prepare(
-      `UPDATE ordenes_compra
-       SET estado = 'APROBADA', aprobado_por = ?, fecha_aprobacion = ?, fecha_actualizacion = ?
-       WHERE orden_id = ?`,
-    )
-    .run(aprobadoPor, ts, ts, ordenId);
+  await db.run(
+    `UPDATE ordenes_compra
+     SET estado = 'APROBADA', aprobado_por = ?, fecha_aprobacion = ?, fecha_actualizacion = ?
+     WHERE orden_id = ?`,
+    [aprobadoPor, ts, ts, ordenId],
+  );
   return getOrden(ordenId);
 }
 
-export function rechazarOrden(ordenId, rechazadoPor, motivo) {
+export async function rechazarOrden(ordenId, rechazadoPor, motivo) {
+  const db = await openDb();
   const ts = now();
-  openDb()
-    .prepare(
-      `UPDATE ordenes_compra
-       SET estado = 'RECHAZADA', aprobado_por = ?, motivo_rechazo = ?, fecha_aprobacion = ?, fecha_actualizacion = ?
-       WHERE orden_id = ?`,
-    )
-    .run(rechazadoPor, motivo, ts, ts, ordenId);
+  await db.run(
+    `UPDATE ordenes_compra
+     SET estado = 'RECHAZADA', aprobado_por = ?, motivo_rechazo = ?, fecha_aprobacion = ?, fecha_actualizacion = ?
+     WHERE orden_id = ?`,
+    [rechazadoPor, motivo, ts, ts, ordenId],
+  );
   return getOrden(ordenId);
 }

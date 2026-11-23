@@ -1,13 +1,14 @@
 // @vitest-environment node
-// Tests de la API del dominio contra una DB SQLite en memoria — el
-// singleton de db.js seedea schema.sql + seed-data.js en ':memory:'.
+// Tests de la API del dominio contra un schema aislado de
+// mercadoraiz-db-test (SPEC-25) — el equivalente al viejo ':memory:'.
+// El singleton de db.js seedea schema.sql + seed-data.js en t_api.
 // Server fresco por test: el rate limit de POSTs (20/min por IP, en
 // una closure por instancia de app) no se comparte entre tests; la DB
 // sí persiste (singleton), así que los describes están ordenados:
 // primero lecturas, después mutaciones.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { closeDb, openDb } from './db.js';
 import { seedData } from './seed-data.js';
 import { UMBRAL_APROBACION } from './models/ordenes.model.js';
 import { loginComo } from './test-auth.js';
@@ -15,7 +16,7 @@ import { loginComo } from './test-auth.js';
 let server;
 let base;
 let sesion; // 1 login por archivo — el JWT es stateless (SPEC-23)
-const db = openDb(':memory:');
+const db = await openDb({ searchPath: 't_api' });
 
 beforeEach(async () => {
   const app = await createApp();
@@ -26,6 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => server?.close());
+afterAll(() => closeDb(true));
 
 const get = (path) => fetch(`${base}/api${path}`, { headers: sesion.headers });
 const post = (path, body) =>
@@ -370,7 +372,7 @@ describe('estado de producto recalculado al leer', () => {
     // stock — la API debe reportar CRITICO recalculando, no el valor
     // viejo de la columna.
     const prod = seedData.productos.find((p) => p.estado === 'OK');
-    db.prepare('UPDATE productos SET stock_actual = 0 WHERE sku = ?').run(prod.sku);
+    await db.prepare('UPDATE productos SET stock_actual = 0 WHERE sku = ?').run(prod.sku);
     const res = await get(`/productos?search=${prod.sku}`);
     const body = await res.json();
     expect(body.data[0].estado).toBe('CRITICO');

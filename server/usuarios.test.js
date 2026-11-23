@@ -2,15 +2,15 @@
 // SPEC-24: CRUD /api/usuarios solo ADMIN. DB ':memory:' compartida
 // por archivo — los describes crean usuarios propios para no pisar
 // el seed (los guards self/último-admin usan al admin del seed).
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { closeDb, openDb } from './db.js';
 import { loginComo } from './test-auth.js';
 
 let server;
 let base;
 let sesion; // ADMIN — el único rol que puede /api/usuarios
-const db = openDb(':memory:');
+const db = await openDb({ searchPath: 't_usuarios' });
 
 beforeEach(async () => {
   const app = await createApp();
@@ -20,6 +20,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => server?.close());
+afterAll(() => closeDb(true));
 
 const req = (path, method = 'GET', body, headers = sesion.headers) =>
   fetch(`${base}/api${path}`, {
@@ -146,7 +147,7 @@ describe('PATCH /api/usuarios/:id — edición', () => {
       body: JSON.stringify({ email, password: 'su-password-123' }),
     });
     const { access_token } = await login.json();
-    const target = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+    const target = await db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
     await req(`/usuarios/${target.id}`, 'PATCH', { nombre: 'Solo Nombre Nuevo' });
     const sigue = await fetch(`${base}/api/ordenes`, {
       headers: { Authorization: `Bearer ${access_token}` },
@@ -172,7 +173,7 @@ describe('PATCH /api/usuarios/:id — edición', () => {
     });
     expect(antes.status).toBe(200);
 
-    const target = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+    const target = await db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
     await req(`/usuarios/${target.id}`, 'PATCH', { rol: 'GERENTE' });
 
     const despues = await fetch(`${base}/api/ordenes`, {
@@ -189,7 +190,7 @@ describe('PATCH /api/usuarios/:id — edición', () => {
   it('desactivar invalida sesiones y bloquea login', async () => {
     const email = 'deactivate@test.com';
     await crear({ email, password: 'su-password-123' });
-    const target = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+    const target = await db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
     await req(`/usuarios/${target.id}`, 'PATCH', { activo: false });
 
     const login = await fetch(`${base}/api/auth/login`, {
@@ -207,10 +208,10 @@ describe('DELETE /api/usuarios/:id — soft delete y guards', () => {
     const r = await req(`/usuarios/${u.id}`, 'DELETE');
     expect(r.status).toBe(200);
     expect((await r.json()).activo).toBe(0);
-    const row = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u.id);
+    const row = await db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u.id);
     expect(row).toBeTruthy();
     expect(row.activo).toBe(0);
-    const { c: tokens } = db
+    const { c: tokens } = await db
       .prepare('SELECT COUNT(*) AS c FROM refresh_tokens WHERE usuario_id = ? AND revocado = 0')
       .get(u.id);
     expect(tokens).toBe(0);

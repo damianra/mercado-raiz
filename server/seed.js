@@ -1,21 +1,27 @@
 import 'dotenv/config';
-import { rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { openDb } from './db.js';
+import { closeDb, openDb, seedIfEmpty } from './db.js';
 import { seedData } from './seed-data.js';
 
-// Re-seed: borra la base local y la recrea con el seed de seed-data.js
-// (openDb aplica schema.sql + seedIfEmpty por tabla).
-const here = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(here, 'app.sqlite');
-for (const suffix of ['', '-wal', '-shm']) {
-  rmSync(dbPath + suffix, { force: true });
-}
+// Re-seed (SPEC-25): vacía las tablas del dominio y las repuebla con
+// seed-data.js vía seedIfEmpty (schema.sql ya corrió en openDb).
+// RESTART IDENTITY reinicia las secuencias; CASCADE resuelve las FKs.
+const db = await openDb();
+const tablas = [
+  'refresh_tokens',
+  'historial_stock',
+  'ordenes_compra',
+  'productos',
+  'usuarios',
+  'proveedores',
+];
+await db.query(`TRUNCATE ${tablas.join(', ')} RESTART IDENTITY CASCADE`);
 
-const db = openDb(dbPath);
+for (const [table, rows] of Object.entries(seedData)) {
+  await seedIfEmpty(db, table, rows);
+}
 for (const table of Object.keys(seedData)) {
-  const { c } = db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get();
+  const { c } = await db.get(`SELECT COUNT(*) AS c FROM ${table}`);
   console.log(`${table}: ${c} filas`);
 }
-console.log(`seed ok → ${dbPath}`);
+console.log('seed ok → mercadoraiz-db');
+await closeDb();

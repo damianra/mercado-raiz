@@ -11,8 +11,8 @@ const CAMPOS =
   'id, email, nombre, rol, avatar_url, activo, ultimo_login, fecha_creacion';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function listUsuarios({ rol, activo, search, page, limit }) {
-  const db = openDb();
+export async function listUsuarios({ rol, activo, search, page, limit }) {
+  const db = await openDb();
   const where = [];
   const params = [];
 
@@ -25,18 +25,18 @@ export function listUsuarios({ rol, activo, search, page, limit }) {
     params.push(activo);
   }
   if (search) {
-    where.push('(email LIKE ? OR nombre LIKE ?)');
+    // ILIKE — ver nota en productos.model.
+    where.push('(email ILIKE ? OR nombre ILIKE ?)');
     params.push(`%${search}%`, `%${search}%`);
   }
 
   const fromWhere = `FROM usuarios${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
 
-  const { c: total } = db.prepare(`SELECT COUNT(*) AS c ${fromWhere}`).get(...params);
-  const rows = db
-    .prepare(
-      `SELECT ${CAMPOS} ${fromWhere} ORDER BY nombre ASC LIMIT ? OFFSET ?`,
-    )
-    .all(...params, limit, (page - 1) * limit);
+  const { c: total } = await db.get(`SELECT COUNT(*) AS c ${fromWhere}`, params);
+  const rows = await db.all(
+    `SELECT ${CAMPOS} ${fromWhere} ORDER BY nombre ASC LIMIT ? OFFSET ?`,
+    [...params, limit, (page - 1) * limit],
+  );
 
   return {
     data: rows,
@@ -44,8 +44,8 @@ export function listUsuarios({ rol, activo, search, page, limit }) {
   };
 }
 
-export function crearUsuario({ email, nombre, rol, password }) {
-  const db = openDb();
+export async function crearUsuario({ email, nombre, rol, password }) {
+  const db = await openDb();
   const emailNorm =
     typeof email === 'string' ? capString(email.trim().toLowerCase(), 254) : '';
 
@@ -63,38 +63,38 @@ export function crearUsuario({ email, nombre, rol, password }) {
       error: `password debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
     };
   }
-  if (db.prepare('SELECT id FROM usuarios WHERE email = ?').get(emailNorm)) {
+  if (await db.get('SELECT id FROM usuarios WHERE email = ?', [emailNorm])) {
     return {
       status: 409,
       error: 'email ya registrado — si fue eliminado, reactivá el usuario existente',
     };
   }
 
-  let lastInsertRowid;
+  let insertado;
   try {
-    ({ lastInsertRowid } = db
+    ({ lastInsertRowid: insertado } = await db
       .prepare(
-        'INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?, ?, ?, ?)',
+        'INSERT INTO usuarios (email, nombre, rol, password_hash) VALUES (?, ?, ?, ?) RETURNING id',
       )
       .run(emailNorm, nombreNorm, rol, hashPassword(password)));
   } catch (e) {
-    // UNIQUE constraint: el check anterior ya cubre el caso normal;
-    // esto blinda una carrera si el storage dejara de ser sync.
-    if (String(e.code ?? '').startsWith('SQLITE_CONSTRAINT')) {
+    // UNIQUE violation en PG: el check anterior ya cubre el caso
+    // normal; esto blinda la carrera entre el SELECT y el INSERT.
+    if (e.code === '23505') {
       return { status: 409, error: 'email ya registrado — si fue eliminado, reactivá el usuario existente' };
     }
     throw e;
   }
   return {
     status: 201,
-    data: db.prepare(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`).get(lastInsertRowid),
+    data: await db.get(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`, [insertado]),
   };
 }
 
 // Guards compartidos PATCH/DELETE: un admin no puede degradarse ni
 // desactivarse a sí mismo, y ninguna operación puede dejar el sistema
 // sin el último ADMIN activo.
-function guardTarget(usuario, cambios, actorId) {
+async function guardTarget(db, usuario, cambios, actorId) {
   const pierdeAdmin =
     usuario.rol === 'ADMIN' &&
     ((cambios.rol !== undefined && cambios.rol !== 'ADMIN') || cambios.activo === 0);
@@ -104,9 +104,10 @@ function guardTarget(usuario, cambios, actorId) {
     return { status: 409, error: 'no podés quitarte el rol de admin ni desactivarte a vos mismo' };
   }
   if (usuario.rol === 'ADMIN' && usuario.activo === 1 && (pierdeAdmin || seDesactiva)) {
-    const { c: otrosAdmins } = openDb()
-      .prepare('SELECT COUNT(*) AS c FROM usuarios WHERE rol = ? AND activo = 1 AND id != ?')
-      .get('ADMIN', usuario.id);
+    const { c: otrosAdmins } = await db.get(
+      'SELECT COUNT(*) AS c FROM usuarios WHERE rol = ? AND activo = 1 AND id != ?',
+      ['ADMIN', usuario.id],
+    );
     if (otrosAdmins === 0) {
       return { status: 409, error: 'no se puede eliminar el último administrador activo' };
     }
@@ -116,14 +117,14 @@ function guardTarget(usuario, cambios, actorId) {
 
 // Revoca todas las sesiones del target: token_version++ invalida los
 // JWT ya emitidos y revocarRefreshesDe tira los refresh tokens.
-function invalidarSesiones(db, usuarioId) {
-  db.prepare('UPDATE usuarios SET token_version = token_version + 1 WHERE id = ?').run(usuarioId);
-  revocarRefreshesDe(usuarioId);
+async function invalidarSesiones(db, usuarioId) {
+  await db.run('UPDATE usuarios SET token_version = token_version + 1 WHERE id = ?', [usuarioId]);
+  await revocarRefreshesDe(usuarioId);
 }
 
-export function patchearUsuario(id, { nombre, email, rol, activo }, actorId) {
-  const db = openDb();
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id);
+export async function patchearUsuario(id, { nombre, email, rol, activo }, actorId) {
+  const db = await openDb();
+  const usuario = await db.get('SELECT * FROM usuarios WHERE id = ?', [id]);
   if (!usuario) return { status: 404, error: 'usuario no encontrado' };
 
   if (nombre === undefined && email === undefined && rol === undefined && activo === undefined) {
@@ -144,9 +145,10 @@ export function patchearUsuario(id, { nombre, email, rol, activo }, actorId) {
     const emailNorm =
       typeof email === 'string' ? capString(email.trim().toLowerCase(), 254) : '';
     if (!EMAIL_RE.test(emailNorm)) return { status: 400, error: 'email inválido' };
-    const dup = db
-      .prepare('SELECT id FROM usuarios WHERE email = ? AND id != ?')
-      .get(emailNorm, id);
+    const dup = await db.get('SELECT id FROM usuarios WHERE email = ? AND id != ?', [
+      emailNorm,
+      id,
+    ]);
     if (dup) return { status: 409, error: 'email ya registrado por otro usuario' };
     sets.push('email = ?');
     params.push(emailNorm);
@@ -170,30 +172,30 @@ export function patchearUsuario(id, { nombre, email, rol, activo }, actorId) {
     rol: rol !== undefined && rol !== usuario.rol ? rol : undefined,
     activo: activo !== undefined && (activo ? 1 : 0) !== usuario.activo ? (activo ? 1 : 0) : undefined,
   };
-  const guard = guardTarget(usuario, cambios, actorId);
+  const guard = await guardTarget(db, usuario, cambios, actorId);
   if (guard) return guard;
 
-  db.prepare(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = ?`).run(...params, id);
+  await db.run(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
 
   // Cambio de rol o desactivación → cerrar todas sus sesiones.
   if (cambios.rol !== undefined || cambios.activo === 0) {
-    invalidarSesiones(db, id);
+    await invalidarSesiones(db, id);
   }
-  return { status: 200, data: db.prepare(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`).get(id) };
+  return { status: 200, data: await db.get(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`, [id]) };
 }
 
-export function borrarUsuario(id, actorId) {
-  const db = openDb();
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id);
+export async function borrarUsuario(id, actorId) {
+  const db = await openDb();
+  const usuario = await db.get('SELECT * FROM usuarios WHERE id = ?', [id]);
   if (!usuario) return { status: 404, error: 'usuario no encontrado' };
 
-  const guard = guardTarget(usuario, { activo: 0 }, actorId);
+  const guard = await guardTarget(db, usuario, { activo: 0 }, actorId);
   if (guard) return guard;
   if (usuario.activo === 0) {
-    return { status: 200, data: db.prepare(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`).get(id) };
+    return { status: 200, data: await db.get(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`, [id]) };
   }
 
-  db.prepare('UPDATE usuarios SET activo = 0 WHERE id = ?').run(id);
-  invalidarSesiones(db, id);
-  return { status: 200, data: db.prepare(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`).get(id) };
+  await db.run('UPDATE usuarios SET activo = 0 WHERE id = ?', [id]);
+  await invalidarSesiones(db, id);
+  return { status: 200, data: await db.get(`SELECT ${CAMPOS} FROM usuarios WHERE id = ?`, [id]) };
 }

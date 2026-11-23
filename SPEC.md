@@ -1741,6 +1741,12 @@ sin rol no ve la sección. Review por sub-agente del PR.
 - **T25.1** Capa de datos async: interfaz `get/all/run/tx` en
   `db.js` sobre `pg`, conversión de los 6 modelos + controllers +
   seed a `await`; schema PG; suite verde contra `mercadoraiz-db-test`.
+  ✅ implementada — `server/db.js` expone `openDb()` async con
+  pool `pg` + helpers `get/all/run/prepare/tx` (traducción `?`→`$n`
+  respeta literales); `schema.sql` en dialecto PG (`IDENTITY`,
+  `timestamptz`, `DOUBLE PRECISION`); tests con schema aislado por
+  archivo (`searchPath`), `closeDb(true)` lo dropea; `npm run seed`
+  trunca+repuebla. Suite: 169 vitest + 20 e2e + smoke API real.
 - **T25.2** Infra de dev/CI: `docker-compose.yml` (servicio
   `mercadoraiz-db`), `.env.example` (`DATABASE_URL`), service
   container en CI, README actualizado.

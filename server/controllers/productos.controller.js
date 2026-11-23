@@ -1,7 +1,7 @@
 import { capString } from '../security.js';
 import { ESTADOS_PRODUCTO, listProductos } from '../models/productos.model.js';
 
-export function list(req, res) {
+export async function list(req, res) {
   const { estado, categoria, proveedor_id, search, page = '1', limit = '20' } = req.query;
 
   const p = Number(page);
@@ -21,7 +21,7 @@ export function list(req, res) {
   }
 
   res.json(
-    listProductos({
+    await listProductos({
       estado: estado || undefined,
       categoria: categoria ? capString(categoria, 100) : undefined,
       proveedorId,

@@ -14,7 +14,7 @@ export async function requireAuth(req, res, next) {
   }
   try {
     const payload = await verificarAccessToken(token);
-    const usuario = usuarioParaToken(payload);
+    const usuario = await usuarioParaToken(payload);
     if (!usuario) {
       return res.status(401).json({ error: 'sesión inválida o expirada' });
     }
