@@ -1675,10 +1675,11 @@ sin rol no ve la sección. Review por sub-agente del PR.
   `await` (`all/get/run/tx`) y modelos/controllers se convierten.
   Es el cambio estructural mayor del spec.
 - **`timestamptz` canónico**: las columnas `TEXT` de fecha pasan a
-  `timestamptz`. El JSON serializa ISO-8601 con `Z` (no el
-  `YYYY-MM-DD HH:MM:SS` de SQLite) — el front y el harness comparan
-  fechas y deben auditarse (`ordenes.model.js` documenta una
-  comparación sensible al formato).
+  `timestamptz`. El JSON serializa ISO-8601 con `Z` (hoy la app
+  escribe `YYYY-MM-DDTHH:MM:SS` y los defaults `datetime('now')`
+  emiten con espacio) — el front y el harness comparan fechas y
+  deben auditarse (`ordenes.model.js` documenta una comparación
+  sensible al formato).
 - **Schema**: `AUTOINCREMENT` → `GENERATED ALWAYS AS IDENTITY`;
   `datetime('now', '+N units')` → `now() + interval 'N units'`;
   `LIKE` → `ILIKE` (SQLite LIKE es case-insensitive en ASCII y PG no);
@@ -1710,11 +1711,14 @@ sin rol no ve la sección. Review por sub-agente del PR.
 - **R25.5** Infra: `docker-compose.yml` con servicio `postgres:16`
   (db `mercadoraiz-db`, volumen persistente, healthcheck); README
   con `docker compose up` como prerequisito de dev. El servicio del
-  compose se llama `mercadoraiz-db`.
+  compose se llama `mercadoraiz-db`. (El compose es infra de dev —
+  la regla de AGENTS.md sobre archivos Docker cubre el build de la
+  app, no esto; se aclara en `AGENTS.md` en la misma tarea.)
 - **R25.6** Suite completa contra PG: Vitest con `PG*_TEST` o
   `DATABASE_URL_TEST` → `mercadoraiz-db-test` (truncate/reset entre
   tests); Playwright y smokes levantan contra la misma instancia.
-  CI agrega service `postgres` + envs.
+  CI agrega service `postgres` + envs. Todas las vars (runtime y
+  test) se declaran en `.env.example`.
 - **R25.7** Script de migración `server/migrate-sqlite-to-pg.js`:
   lee `server/app.sqlite` existente y vuelca productos, proveedores,
   órdenes, historial y usuarios (password hashes migran tal cual —
@@ -1723,10 +1727,11 @@ sin rol no ve la sección. Review por sub-agente del PR.
 - **R25.8** Auditoría de fechas: front (`src/lib/api.js`, páginas)
   y harness dejan de asumir formato SQLite; cualquier comparación
   `fecha < ahora` usa `Date` parseado, no strings.
-- **R25.9** Harness: checkpointer `PostgresSaver` +
-  `analisis-cache`/métricas persistidas en PG; `checkpoints.sqlite`
-  y `app.sqlite` quedan fuera de uso (gitignored, borrables tras
-  migración exitosa).
+- **R25.9** Harness: checkpointer `PostgresSaver` + cache de
+  análisis en tabla PG; `checkpoints.sqlite` y `app.sqlite` quedan
+  fuera de uso (gitignored, borrables tras migración exitosa). Las
+  métricas siguen en memoria (hoy no se persisten — fuera de
+  scope).
 - **R25.10** Contrato HTTP inmutable: ningún endpoint cambia shape
   salvo el formato de fechas (ISO-8601 `timestamptz`) — documentado
   como divergencia en Anexo B si el front requería el formato viejo.
@@ -1764,8 +1769,8 @@ manual de la migración (counts y muestras coinciden con
   de una tabla administrable. Depende de SPEC-25 (las tablas
   nuevas se crean directo en Postgres).
 - **Estado global:** ⏳ planificada
-- **Contexto:** hoy `historial_stock` seedea ~7 movimientos para
-  ~10 productos → ~1.460 SKUs sin ventas → `demanda_diaria = 0` →
+- **Contexto:** hoy `historial_stock` seedea 7 movimientos sobre
+  7 productos → ~1.460 SKUs sin ventas → `demanda_diaria = 0` →
   la prosa del LLM es correcta pero vacía. El `tiempo_entrega_dias`
   del proveedor ya es dato real (join `ordenes→proveedores`), pero
   la tabla no es administrable ni tiene variabilidad.
@@ -1804,8 +1809,9 @@ manual de la migración (counts y muestras coinciden con
   `referencia`. Índices `(producto_id, fecha)` y `(fecha)`.
 - **R26.2** `GET /api/ventas` autenticado: filtros `producto_id`,
   `desde`, `hasta`, paginado estándar. El harness cambia
-  `historial.client` → `ventas.client` (mismo contrato de items:
-  fecha + unidades).
+  `historial.client` → `ventas.client`; los items traen
+  `fecha` + `unidades` (no `diferencia` como `historial_stock`) —
+  `analizar-demanda` remapea el campo al consumirlos.
 - **R26.3** Seed de ventas: `server/seed-ventas.js` genera 90 días
   por SKU con perfil por categoría (rotación alta en Frescos,
   media en Almacén/Bebidas, baja en Perfumería/Limpieza), ruido
@@ -1818,10 +1824,10 @@ manual de la migración (counts y muestras coinciden con
   cálculo pasa a usar el valor esperado (`min`+`max`)/2 o
   `tiempo_entrega_dias` si no hay rango — documentado.
 - **R26.5** CRUD `GET/POST/PATCH/DELETE /api/proveedores` solo
-  ADMIN: soft delete (`activo=0`) igual que usuarios; `409` si se
-  intenta borrar un proveedor con productos u órdenes referenciadas
-  (o desactivar — decisión de controller: no borrar con referencias,
-  solo `activo=0`).
+  ADMIN: `DELETE` es siempre soft delete (`activo=0`) — el
+  histórico de órdenes conserva la referencia; `409` solo si el
+  proveedor tiene órdenes `PENDIENTE_APROBACION`/`ENVIADA` vivas
+  (desactivar cortaría el flujo de esas órdenes).
 - **R26.6** Pantalla admin `/proveedores` (solo ADMIN en sidebar):
   tabla, alta/edición con `FormShell` gateado, activar/desactivar,
   `EmptyState`/`ErrorState` — mismas reglas UI que `/usuarios`.
@@ -1829,8 +1835,9 @@ manual de la migración (counts y muestras coinciden con
   `demanda_diaria` (media móvil ponderada por recencia), `tendencia`
   (pendiente regresión lineal sobre agregado diario), `cv`, `dias_con_venta`,
   `dias_en_quiebre` (días con stock 0 en el período — no cuentan como
-  demanda 0 en el denominador), `ultima_venta`. Consumida por el agente
-  y por el front.
+  demanda 0 en el denominador; fuente a definir en T26.5 — si no hay
+  dato confiable responde `null`, nunca inventado), `ultima_venta`.
+  Consumida por el agente y por el front.
 - **R26.8** Agente: `analizar-demanda` usa la nueva fuente; con
   `dias_con_venta ≥ 3` y CV bajo → heurístico backend; si no → LLM
   con los agregados reales en el prompt. `calcular-cantidad` suma
