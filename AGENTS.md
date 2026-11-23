@@ -4,7 +4,7 @@ Este proyecto fue generado por MetaBuilder. Stack esperado:
 
 - **Frontend**: React + Vite + Tailwind CSS (si aplica)
 - **Backend**: Node.js + Express (si aplica)
-- **Base de datos**: SQLite (archivo local, sin servidores externos) (si aplica)
+- **Base de datos**: PostgreSQL (`mercadoraiz-db`, `pg` async via `server/db.js`; ver `docker-compose.yml` para el local)
 - **Testing**: Vitest (unit/integración), Playwright + Chromium (E2E, si hay frontend)
 
 ## Reglas de UI obligatorias (React + Tailwind)
@@ -68,12 +68,12 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 - Al escribir tests E2E con Playwright, cubrir explícitamente las reglas de UI de arriba.
 - **Backend**: cada `server/routes/<name>.js` que exporte un `Router` default se monta solo en `/api/<name>` — no tocar `server/app.js` ni `server/db.js`.
 - **Secretos/config**: API keys y config sensible van en `.env` (gitignored), leídas via `process.env.NOMBRE` — `server/index.js` ya carga `dotenv/config`. Toda variable que la app use debe declararse en `.env.example` (commiteado, con valor placeholder o vacío) para que otro dev sepa qué configurar. Nunca hardcodear secretos ni commitear `.env`.
-- **Docker**: `Dockerfile`, `.dockerignore` (y `nginx.conf` si aplica) los provee el orquestador — no modificarlos ni crear otros. El backend ya sirve `dist/` si existe, así que el contenedor fullstack corre solo `node server/index.js`.
+- **Docker**: `Dockerfile`, `.dockerignore` (y `nginx.conf` si aplica) los provee el orquestador — no modificarlos ni crear otros. El backend ya sirve `dist/` si existe, así que el contenedor fullstack corre solo `node server/index.js`. Excepción (SPEC-25): `docker-compose.yml` es infra de dev (Postgres local), no build de la app — sí es del repo.
 - **Capa de datos**: schema en `server/schema.sql` (idempotente), seed en `server/seed-data.js` (se inserta si la tabla está vacía); queries con `q()` prepared statements de `server/db.js` (despacha por `DB_DRIVER`).
 
 ## Arquitectura backend
 
-**Arquitectura MVC**: `server/routes/*.js` solo mapean HTTP → `server/controllers/`; los controllers orquestan request/response y delegan a `server/models/` (fat models con toda la lógica de negocio y las queries SQLite via `server/db.js`). Al agregar endpoints: route fino + método en controller + lógica en model.
+**Arquitectura MVC**: `server/routes/*.js` solo mapean HTTP → `server/controllers/`; los controllers orquestan request/response y delegan a `server/models/` (fat models con toda la lógica de negocio y las queries async via `server/db.js` (`get`/`all`/`run`/`prepare`/`tx`, placeholders `?` traducidos a `$n`)). Al agregar endpoints: route fino + método en controller + lógica en model.
 
 ## Workflow de cambios (obligatorio)
 

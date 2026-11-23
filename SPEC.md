@@ -1749,7 +1749,13 @@ sin rol no ve la sección. Review por sub-agente del PR.
   trunca+repuebla. Suite: 169 vitest + 20 e2e + smoke API real.
 - **T25.2** Infra de dev/CI: `docker-compose.yml` (servicio
   `mercadoraiz-db`), `.env.example` (`DATABASE_URL`), service
-  container en CI, README actualizado.
+  container en CI, README actualizado. ✅ implementada —
+  `docker-compose.yml` con `postgres:16` + volumen persistente +
+  healthcheck + `scripts/init-test-db.sql` (crea
+  `mercadoraiz-db-test` al primer boot); CI con service postgres
+  (entró con T25.1 para no dejar main rojo); README documenta
+  `docker compose up -d` como prerequisito; `AGENTS.md` aclara la
+  excepción compose-dev.
 - **T25.3** Harness a PG: `PostgresSaver`, cache de análisis y
   métricas sobre la misma base; `.env.example` del harness.
 - **T25.4** Migración de datos: script sqlite→pg + validación

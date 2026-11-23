@@ -19,14 +19,16 @@ const esTest = () => process.env.VITEST || process.env.NODE_ENV === 'test';
 // Conexión: en test gana DATABASE_URL_TEST y el default apunta a la
 // base hermana -test (nunca al dev DB); en runtime gana DATABASE_URL.
 export function connectionString() {
+  // `||` y no `??`: un .env con `DATABASE_URL=` vacía debe caer al
+  // default, no entregar '' al Pool (que caería a defaults libpq).
   if (esTest()) {
     return (
-      process.env.DATABASE_URL_TEST ??
+      process.env.DATABASE_URL_TEST ||
       'postgres://mercadoraiz:dev-local-2026@localhost:5432/mercadoraiz-db-test'
     );
   }
   return (
-    process.env.DATABASE_URL ??
+    process.env.DATABASE_URL ||
     'postgres://mercadoraiz:dev-local-2026@localhost:5432/mercadoraiz-db'
   );
 }
