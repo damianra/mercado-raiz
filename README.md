@@ -84,6 +84,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
 - `GET|POST /api/usuarios` · `PATCH|DELETE /api/usuarios/:id` — CRUD de usuarios, solo rol `ADMIN` (SPEC-24; soft delete, revoca sesiones del afectado)
+- `GET|POST /api/proveedores` · `GET|PATCH|DELETE /api/proveedores/:id` — CRUD de proveedores, solo rol `ADMIN` (SPEC-26; soft delete `activo=0`, 409 si hay órdenes `PENDIENTE_APROBACION`/`ENVIADA` vivas)
 
 Contrato completo en `SPEC.md` → SPEC-03.
 

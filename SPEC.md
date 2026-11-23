@@ -1908,7 +1908,14 @@ manual de la migración (counts y muestras coinciden con
   proveedores del seed con valores coherentes con sus categorías
   reales; `lead_dias_esperado` = `(min+max)/2` o `tiempo_entrega_dias`
   expuesto en `proveedor` de `/api/ordenes` y `/api/productos`.
-- **T26.3** CRUD `/api/proveedores` admin + tests.
+- **T26.3** CRUD `/api/proveedores` admin + tests. ✅
+  `GET /` (paginado + `activo`/`search`), `GET /:id`, `POST`,
+  `PATCH /:id`, `DELETE /:id` — todo bajo `requireRole('ADMIN')`
+  (R26.5). DELETE es soft delete (`activo=0`, idempotente); 409 solo
+  con órdenes `PENDIENTE_APROBACION`/`ENVIADA` vivas — el mismo guard
+  corre para `PATCH activo=0`. Validaciones: nombre requerido y único
+  (ILIKE → 409), min ≤ max sobre valores fusionados, confiabilidad
+  0–100, montos ≥ 0, `categorias_cubiertas` array. 22 tests.
 - **T26.4** Pantalla `/proveedores` front + e2e.
 - **T26.5** `/api/estadisticas/demanda` (R26.7) + tests.
 - **T26.6** Harness: `ventas.client`, `analizar-demanda` y
