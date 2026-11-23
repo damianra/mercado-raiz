@@ -1767,6 +1767,15 @@ sin rol no ve la sección. Review por sub-agente del PR.
   por diseño; `@langchain/langgraph-checkpoint-sqlite` retirada.
 - **T25.4** Migración de datos: script sqlite→pg + validación
   (counts por tabla, muestras) + doc de corte en README.
+  ✅ implementada — `server/migrate-sqlite-to-pg.js` lee la base
+  vieja con `node:sqlite` nativo (sin deps) y copia proveedores →
+  productos → usuarios → ordenes → historial en una tx con
+  `SET LOCAL TIME ZONE 'UTC'` (los timestamps naive de sqlite son
+  UTC); intersecta columnas para bancar schemas viejos; preserva
+  `password_hash`, NO migra `refresh_tokens`; guard de corte único
+  (destino no vacío → aborta); `openDb({sembrar:false})` aplica el
+  schema sin seed. Verificado end-to-end: counts OK, `+00` en
+  timestamptz, secuencia avanzada.
 - **T25.5** Auditoría de fechas front+harness y limpieza:
   retirar `better-sqlite3` del backend, `checkpoints.sqlite`,
   `app.sqlite` y doc de obsoleto en `AGENTS.md`/`SPEC.md`.
