@@ -116,7 +116,7 @@ describe('calcular-cantidad — selección de proveedor (T27.3)', () => {
     expect(d.proveedor_id).toBe(8);
     expect(d.cantidad).toBe(61); // lead 6 → más unidades
     expect(d.monto_total).toBeCloseTo(305);
-    expect(d.motivo_proveedor).toMatch(/alternativo/);
+    expect(d.motivo_proveedor).toMatch(/menor costo total/);
   });
 
   it('elige el principal si el alternativo lento encarece el total', () => {

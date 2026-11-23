@@ -208,8 +208,9 @@ async function resolverCosto(db, producto, proveedorId) {
     return { costoResuelto: null }; // usa la fila del JOIN principal
   }
   const pp = await db.get(
-    `SELECT costo_unitario FROM producto_proveedor
-     WHERE producto_id = ? AND proveedor_id = ? AND activo = 1`,
+    `SELECT pp.costo_unitario FROM producto_proveedor pp
+     JOIN proveedores pr ON pr.id = pp.proveedor_id AND pr.activo = 1
+     WHERE pp.producto_id = ? AND pp.proveedor_id = ? AND pp.activo = 1`,
     [producto.id, proveedorId],
   );
   return pp

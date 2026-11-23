@@ -60,7 +60,7 @@ export function calcularCantidad(state) {
       monto_total: monto,
       proveedor_id: mejor.proveedor_id,
       proveedor_nombre: mejor.proveedor,
-      motivo_proveedor: mejor.es_principal ? 'proveedor principal' : 'alternativo más barato',
+      motivo_proveedor: mejor.es_principal ? 'proveedor principal' : 'alternativo de menor costo total',
     };
     const alt = mejor.es_principal ? '' : ` ← ${mejor.proveedor} (alternativo)`;
     log(`  ${p.sku}: ordenar ${mejor.cantidad} u → $${monto.toFixed(2)} (demanda ${demanda}/día, lead ${mejor.lead}d, SS ${mejor.seguridad.toFixed(1)}u)${alt}`);

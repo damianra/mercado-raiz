@@ -93,6 +93,33 @@ describe('POST /api/ordenes/batch', () => {
     expect(await totalOrdenes()).toBe(antes);
   });
 
+  it('proveedor sin precio para el producto → 400, cero persistidas (SPEC-27)', async () => {
+    const antes = await totalOrdenes();
+    const res = await post([
+      { producto_id: PRODUCTO, cantidad: 5 },
+      { producto_id: PRODUCTO, proveedor_id: 3, cantidad: 3 }, // no vende prod 1
+    ]);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/sin precio/);
+    expect(body.detalle[0].indice).toBe(1);
+    expect(await totalOrdenes()).toBe(antes);
+  });
+
+  it('lote con proveedor alternativo válido crea con su costo y proveedor', async () => {
+    const conAlt = seedData.producto_proveedor.find(
+      (pp) => pp.proveedor_id === 8 && pp.es_principal === 0,
+    );
+    const res = await post([
+      { producto_id: conAlt.producto_id, proveedor_id: 8, cantidad: 2 },
+    ]);
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    expect(data[0].proveedor.id).toBe(8);
+    expect(data[0].precio_unitario).toBeCloseTo(conAlt.costo_unitario, 2);
+  });
+
   it('rechaza body no-array, array vacío y lote > 200', async () => {
     const antes = await totalOrdenes();
     expect((await post({ producto_id: PRODUCTO, cantidad: 1 })).status).toBe(400);
