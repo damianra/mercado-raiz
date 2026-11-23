@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seedData } from './seed-data.js';
+import { seedVentas } from './seed-ventas.js';
 
 const { Pool } = pg;
 
@@ -85,7 +86,7 @@ const wrap = (queryFn) => ({
  * aislado dentro de mercadoraiz-db-test — el equivalente al viejo
  * ':memory:' por archivo. `closeDb(true)` lo dropea.
  */
-export async function openDb({ searchPath, connString, sembrar = true } = {}) {
+export async function openDb({ searchPath, connString, sembrar = true, sembrarVentas } = {}) {
   if (state) return state;
   opening ??= (async () => {
     if (searchPath && !IDENT_RE.test(searchPath)) {
@@ -119,6 +120,11 @@ export async function openDb({ searchPath, connString, sembrar = true } = {}) {
       for (const [table, rows] of Object.entries(seedData)) {
         await seedIfEmpty(db, table, rows);
       }
+      // ventas se generan (no vienen en seedData): dependen del
+      // catálogo ya poblado — por eso van después del loop. En
+      // schemas de test se saltea por defecto (~60k filas por
+      // schema sería lento); los tests siembran fixtures propias.
+      if (sembrarVentas ?? !searchPath) await seedVentas(db);
     }
     state = db;
     return state;
