@@ -1977,7 +1977,11 @@ pagado). El agente puede elegir proveedor por costo/lead.
   producto + margen perdido en quiebres. ✅
 - **T27.3** Agente: elige proveedor (costo vs lead) y lo envía en la
   orden; `calcular-cantidad` usa ese costo. ✅
-- **T27.4** Dashboard: margen en quiebres/listado. ✅
+- **T27.4** Vista `/quiebres` (todos los roles): productos
+  CRITICO/STOCK_BAJO ordenados por margen que se deja de ganar por
+  día (demanda × margen_unitario de T27.2). KPIs: SKUs en cero,
+  margen en riesgo/día, margen perdido 90d. Filtro por estado;
+  degrada a solo-stock si `/estadisticas` falla (toast). ✅
   recorta `productosBajos` tras leer-inventario — corridas de
   validación acotadas sin tocar el pipeline ni la DB.
 - **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e. ✅

@@ -66,3 +66,13 @@ test('GERENTE también accede a la vista operativa', async ({ page }) => {
   await irAQuiebres(page, GERENTE);
   expect(await page.locator(FILAS_Q).count()).toBeGreaterThan(0);
 });
+
+test('la navegación del sidebar vuelve al dashboard', async ({ page }) => {
+  await irAQuiebres(page);
+  await page.getByRole('link', { name: 'Órdenes' }).click();
+  await expect(page.locator(FILAS).first()).toBeVisible();
+  await page.getByRole('link', { name: 'Quiebres' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Quiebres de stock' }),
+  ).toBeVisible();
+});

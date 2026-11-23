@@ -28,11 +28,11 @@ export default function Quiebres({ usuario }) {
   const [toasts, setToasts] = useState([]);
   const timers = useRef([]);
 
-  const toast = useCallback((tipo, mensaje) => {
-    const id = ++toastKey;
-    setToasts((t) => [...t, { id, tipo, mensaje }]);
+  const pushToast = useCallback((mensaje, tipo = 'ok') => {
+    const key = ++toastKey;
+    setToasts((t) => [...t, { key, tipo, mensaje }]);
     timers.current.push(
-      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000),
+      setTimeout(() => setToasts((t) => t.filter((x) => x.key !== key)), 4000),
     );
   }, []);
 
@@ -45,6 +45,12 @@ export default function Quiebres({ usuario }) {
         getDemandaStats(90),
       ]);
       if (productos.status === 'rejected') throw productos.reason;
+      if (statsRes.status === 'rejected') {
+        pushToast(
+          'Estadísticas de demanda no disponibles: se muestran solo los datos de stock',
+          'error',
+        );
+      }
       const stats =
         statsRes.status === 'fulfilled' && Array.isArray(statsRes.value?.data)
           ? new Map(statsRes.value.data.map((d) => [d.producto_id, d]))
@@ -56,7 +62,9 @@ export default function Quiebres({ usuario }) {
           const margen = s.margen_unitario ?? null;
           // $ de margen que se deja de ganar POR DÍA sin stock.
           const perdidaDia =
-            p.stock_actual === 0 && margen != null ? demanda * margen : null;
+            p.stock_actual === 0 && margen != null
+              ? Math.max(0, demanda * margen)
+              : null;
           return {
             ...p,
             demanda,
@@ -73,7 +81,7 @@ export default function Quiebres({ usuario }) {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [pushToast]);
 
   useEffect(() => {
     cargar();
@@ -96,6 +104,7 @@ export default function Quiebres({ usuario }) {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         activeId="quiebres"
+        base="/"
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar usuario={usuario} onMenu={() => setMenuOpen(true)} onLogout={logout} />
