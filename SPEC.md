@@ -1925,7 +1925,15 @@ manual de la migración (counts y muestras coinciden con
   DELETE (soft delete — el 409 con órdenes vivas llega al toast);
   reactivar vía PATCH. Sidebar + guard ADMIN en `main.jsx` (404 al
   resto). 7 tests e2e.
-- **T26.5** `/api/estadisticas/demanda` (R26.7) + tests.
+- **T26.5** `/api/estadisticas/demanda` (R26.7) + tests. ✅
+  `GET /api/estadisticas/demanda?producto_id=&dias=90` con auth (sin
+  rol — la consume el agente SERVICIO y el dashboard): `demanda_diaria`
+  ponderada exponencial (half-life 30d), `tendencia` (pendiente OLS
+  u/día²), `cv`, `dias_con_venta`, `ultima_venta` y `dias_en_quiebre`
+  reconstruido desde la cadena de posiciones de `historial_stock`
+  (UTC; `null` cuando no hay movimientos — nunca inventado). Los días
+  en quiebre se excluyen de los denominadores. Ventana anclada a
+  `CURRENT_DATE` de la DB, no al host. 11 tests.
 - **T26.6** Harness: `ventas.client`, `analizar-demanda` y
   `calcular-cantidad` sobre la nueva fuente + stock de seguridad
   (R26.8) + tests de nodos.
