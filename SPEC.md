@@ -1976,7 +1976,7 @@ pagado). El agente puede elegir proveedor por costo/lead.
 - **T27.2** Endpoints/stats: precios por proveedor en el detalle del
   producto + margen perdido en quiebres. ✅
 - **T27.3** Agente: elige proveedor (costo vs lead) y lo envía en la
-  orden; `calcular-cantidad` usa ese costo.
+  orden; `calcular-cantidad` usa ese costo. ✅
 - **T27.4** Dashboard: margen en quiebres/listado.
   recorta `productosBajos` tras leer-inventario — corridas de
   validación acotadas sin tocar el pipeline ni la DB.

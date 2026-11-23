@@ -92,3 +92,46 @@ describe('decidir-aprobacion', () => {
     expect(decisionPorProducto[2].requiere_aprobacion).toBe(true);
   });
 });
+
+
+describe('calcular-cantidad — selección de proveedor (T27.3)', () => {
+  const pBase = () => ({
+    id: 1, sku: 'X', nombre: 'X', stock_actual: 4, stock_minimo: 20,
+    precio_venta: 10,
+    proveedor: { id: 1, nombre: 'Principal', lead_dias_esperado: 1 },
+    precios: [
+      { proveedor_id: 1, proveedor: 'Principal', costo_unitario: 10, lead_efectivo: 1, es_principal: 1 },
+      { proveedor_id: 8, proveedor: 'Mayorista', costo_unitario: 8, lead_efectivo: 6, es_principal: 0 },
+    ],
+  });
+  const stats = { analisisPorProducto: { 1: { demanda_diaria: 5, desvio_demanda: 0 } } };
+
+  it('elige el alternativo si su total (costo×cantidad) es menor pese al lead', () => {
+    const p = pBase();
+    // ppal: ceil(5×8)=40−4=36u ×10 = 360; alt: ceil(5×13)=65−4=61u ×8 = 488
+    // → ppal gana acá; bajar el costo alt para que gane
+    p.precios[1].costo_unitario = 5; // 61×5=305 < 360
+    const { decisionPorProducto } = calcularCantidad({ productosBajos: [p], ...stats });
+    const d = decisionPorProducto[1];
+    expect(d.proveedor_id).toBe(8);
+    expect(d.cantidad).toBe(61); // lead 6 → más unidades
+    expect(d.monto_total).toBeCloseTo(305);
+    expect(d.motivo_proveedor).toMatch(/alternativo/);
+  });
+
+  it('elige el principal si el alternativo lento encarece el total', () => {
+    const p = pBase(); // ppal 360 < alt 488
+    const { decisionPorProducto } = calcularCantidad({ productosBajos: [p], ...stats });
+    const d = decisionPorProducto[1];
+    expect(d.proveedor_id).toBe(1);
+    expect(d.cantidad).toBe(36);
+    expect(d.motivo_proveedor).toMatch(/principal/);
+  });
+
+  it('sin precios usa el proveedor del producto (fallback)', () => {
+    const p = { ...pBase(), precios: [] };
+    const { decisionPorProducto } = calcularCantidad({ productosBajos: [p], ...stats });
+    expect(decisionPorProducto[1].proveedor_id).toBe(1);
+    expect(decisionPorProducto[1].monto_total).toBeCloseTo(360);
+  });
+});

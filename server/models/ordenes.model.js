@@ -168,18 +168,22 @@ const INSERT_ORDEN = `INSERT INTO ordenes_compra
    fecha_creacion, fecha_actualizacion)
  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-async function insertarOrden(t, ordenId, producto, { cantidad, requiereAprobacion, analisisIa }, ts) {
-  // SPEC-27: la orden se precia con el costo del proveedor
-  // (producto_proveedor), no con el precio de venta. Fallback al
-  // precio_venta si el producto no tiene fila de precios (insert
-  // manual en tests) — el margen queda en 0 pero la orden sale.
-  const costo = producto.costo_unitario ?? producto.precio_venta;
+async function insertarOrden(
+  t, ordenId, producto,
+  { cantidad, requiereAprobacion, analisisIa, proveedorId, costoResuelto }, ts,
+) {
+  // SPEC-27: la orden se precia con el costo del proveedor elegido
+  // (item.proveedorId → su fila producto_proveedor ya validada); el
+  // default es el principal. Fallback a precio_venta si el producto
+  // no tiene fila de precios (insert manual en tests).
+  const proveedor = proveedorId ?? producto.proveedor_id;
+  const costo = costoResuelto ?? producto.costo_unitario ?? producto.precio_venta;
   const montoTotal = Math.round(cantidad * costo * 100) / 100;
   const requiere = requiereAprobacion ?? montoTotal >= UMBRAL_APROBACION;
   await t.prepare(INSERT_ORDEN).run(
     ordenId,
     producto.id,
-    producto.proveedor_id,
+    proveedor,
     cantidad,
     costo,
     montoTotal,
@@ -196,10 +200,28 @@ async function insertarOrden(t, ordenId, producto, { cantidad, requiereAprobacio
 const PROXIMO_ID =
   "SELECT MAX(CAST(SUBSTR(orden_id, 4) AS INTEGER)) AS maxId FROM ordenes_compra WHERE orden_id LIKE 'OC-%'";
 
+// SPEC-27 (T27.3): si el item pide un proveedor alternativo, su
+// costo sale de producto_proveedor (debe existir fila activa — sino
+// 400). Devuelve { costoResuelto } o { sinPrecio }.
+async function resolverCosto(db, producto, proveedorId) {
+  if (proveedorId == null || proveedorId === producto.proveedor_id) {
+    return { costoResuelto: null }; // usa la fila del JOIN principal
+  }
+  const pp = await db.get(
+    `SELECT costo_unitario FROM producto_proveedor
+     WHERE producto_id = ? AND proveedor_id = ? AND activo = 1`,
+    [producto.id, proveedorId],
+  );
+  return pp
+    ? { costoResuelto: pp.costo_unitario }
+    : { sinPrecio: `proveedor ${proveedorId} sin precio activo para producto ${producto.id}` };
+}
+
 // Crea la orden: precio y proveedor salen del producto, el monto se
 // calcula server-side y el orden_id es el próximo 'OC-NNN' secuencial.
 // Devuelve null si el producto no existe (el controller → 404).
-export async function createOrden({ productoId, cantidad, requiereAprobacion, analisisIa }) {
+export async function createOrden(requerido) {
+  const { productoId } = requerido;
   const db = await openDb();
   const producto = await db.get(
     `SELECT p.*, pp.costo_unitario FROM productos p
@@ -209,13 +231,16 @@ export async function createOrden({ productoId, cantidad, requiereAprobacion, an
     [productoId],
   );
   if (!producto) return null;
+  const resolucion = await resolverCosto(db, producto, requerido.proveedorId);
+  if (resolucion.sinPrecio) return { sinPrecio: resolucion.sinPrecio };
+  const item = { ...requerido, costoResuelto: resolucion.costoResuelto };
 
   // Transacción: el MAX(orden_id) y el INSERT deben ser atómicos o dos
   // creaciones concurrentes podrían generar el mismo OC-NNN.
   const ordenId = await db.tx(async (t) => {
     const { maxid } = await t.prepare(PROXIMO_ID).get();
     const nextId = `OC-${String((maxid ?? 0) + 1).padStart(3, '0')}`;
-    await insertarOrden(t, nextId, producto, { cantidad, requiereAprobacion, analisisIa }, now());
+    await insertarOrden(t, nextId, producto, item, now());
     return nextId;
   });
 
@@ -238,13 +263,23 @@ export async function createOrdenesBatch(items) {
     WHERE p.id = ?`);
 
   const faltantes = [];
+  const sinPrecio = [];
   const resueltos = [];
   for (const [indice, item] of items.entries()) {
     const producto = await buscarProducto.get(item.productoId);
-    if (!producto) faltantes.push({ indice, producto_id: item.productoId });
-    resueltos.push({ item, producto });
+    if (!producto) {
+      faltantes.push({ indice, producto_id: item.productoId });
+      resueltos.push({ item, producto });
+      continue;
+    }
+    const resolucion = await resolverCosto(db, producto, item.proveedorId);
+    if (resolucion.sinPrecio) {
+      sinPrecio.push({ indice, producto_id: item.productoId, error: resolucion.sinPrecio });
+    }
+    resueltos.push({ item: { ...item, costoResuelto: resolucion.costoResuelto }, producto });
   }
   if (faltantes.length) return { faltantes };
+  if (sinPrecio.length) return { sinPrecio };
 
   const ordenIds = await db.tx(async (t) => {
     const { maxid } = await t.prepare(PROXIMO_ID).get();

@@ -59,7 +59,7 @@ async function justificarUno(state, p) {
     metrics.llamadaLlm();
     const respuesta = await conReintentos(
       async () => {
-        const r = await llm.invoke(promptGenerarAnalisis(p, analisis, cantidad, monto_total));
+        const r = await llm.invoke(promptGenerarAnalisis(p, analisis, cantidad, monto_total, state.decisionPorProducto[p.id]));
         costTracker.registrar(r);
         const texto = String(r.content).trim().replace(/^["']|["']$/g, '');
         if (texto.length < 20) throw new Error('justificación demasiado corta');

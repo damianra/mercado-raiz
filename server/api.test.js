@@ -389,6 +389,34 @@ describe('POST /api/ordenes', () => {
     expect(data.estado).toBe('PENDIENTE_APROBACION');
   });
 
+  it('precia con el proveedor alternativo si se pide proveedor_id (SPEC-27)', async () => {
+    // artículo con alternativa en el mayorista (id 8)
+    const conAlt = seedData.producto_proveedor.find(
+      (pp) => pp.proveedor_id === 8 && pp.es_principal === 0,
+    );
+    const prod = seedData.productos.find((p) => p.id === conAlt.producto_id);
+    const res = await post('/ordenes', {
+      producto_id: prod.id,
+      proveedor_id: 8,
+      cantidad: 1,
+    });
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    expect(data.proveedor.id).toBe(8);
+    expect(data.precio_unitario).toBeCloseTo(conAlt.costo_unitario, 2);
+  });
+
+  it('400 si el proveedor no tiene precio para el producto', async () => {
+    const res = await post('/ordenes', {
+      producto_id: 1,
+      proveedor_id: 3, // Perfumería Integral no vende el producto 1
+      cantidad: 1,
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/sin precio/);
+  });
+
   it('valida el body (400) y producto inexistente (404)', async () => {
     for (const body of [
       {},

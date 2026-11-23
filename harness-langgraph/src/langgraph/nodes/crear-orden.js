@@ -30,6 +30,7 @@ async function crearIndividual(pedidos, salida) {
     try {
       const res = await crearOrden({
         productoId: p.id,
+        proveedorId: d.proveedor_id,
         cantidad: d.cantidad,
         requiereAprobacion: d.requiere_aprobacion,
         analisisIa: d.analisis_ia,
@@ -54,6 +55,7 @@ export async function crearOrdenes(state) {
     try {
       const res = await crearOrdenesBatch(lote.map(({ p, d }) => ({
         producto_id: p.id,
+        proveedor_id: d.proveedor_id,
         cantidad: d.cantidad,
         requiere_aprobacion: d.requiere_aprobacion,
         analisis_ia: d.analisis_ia,

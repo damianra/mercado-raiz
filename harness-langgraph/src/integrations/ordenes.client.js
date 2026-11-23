@@ -9,9 +9,10 @@
  */
 import { api } from './backend-client.js';
 
-export function crearOrden({ productoId, cantidad, requiereAprobacion, analisisIa }) {
+export function crearOrden({ productoId, proveedorId, cantidad, requiereAprobacion, analisisIa }) {
   return api.post('/ordenes', {
     producto_id: productoId,
+    proveedor_id: proveedorId,
     cantidad,
     requiere_aprobacion: requiereAprobacion,
     analisis_ia: analisisIa,
