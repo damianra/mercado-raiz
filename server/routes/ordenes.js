@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../auth-middleware.js';
+import { requireAuth, bloquearBuyer, requireRole } from '../auth-middleware.js';
 import { aprobar, create, createBatch, detail, list, rechazar } from '../controllers/ordenes.controller.js';
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, bloquearBuyer);
 
 router.get('/', list);
 router.post('/', create);

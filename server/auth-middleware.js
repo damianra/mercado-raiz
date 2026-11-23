@@ -35,3 +35,13 @@ export function requireRole(...roles) {
     next();
   };
 }
+
+// SPEC-29 (R29.1): el BUYER solo consume /api/alertas — el resto
+// de las rutas de dominio lo rechaza con 403. Se aplica después de
+// requireAuth en cada routes/<name>.js protegido.
+export function bloquearBuyer(req, res, next) {
+  if (req.usuario?.rol === 'BUYER') {
+    return res.status(403).json({ error: 'permisos insuficientes' });
+  }
+  next();
+}

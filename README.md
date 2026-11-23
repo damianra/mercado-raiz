@@ -83,6 +83,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
+- `GET /api/alertas?leida=&tipo=` · `PATCH /api/alertas/:id/leida` · `PATCH /api/alertas/leer-todas` · `POST /api/alertas/evaluar` — alertas operativas (SPEC-29): QUIEBRE/RIESGO_LEAD/DEAD_STOCK/ORDEN_PENDIENTE por reglas determinísticas; evaluación lazy cada 60min en el GET. Roles: `BUYER` y `ADMIN`
 - `GET /api/estadisticas/metricas?dias=` — scorecard agregado (SPEC-28): quiebres en $/día de margen, riesgo por cobertura vs lead, inventario a costo/venta, dead stock, exceso, fill rate, órdenes pendientes y scorecard de proveedores
 - `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, σ, días con venta/en quiebre, última venta); sin `producto_id` devuelve `{data:[...]}` con las mismas stats de todos los productos (R26.9 — las columnas demanda/cobertura del dashboard)
 - `GET|POST /api/usuarios` · `PATCH|DELETE /api/usuarios/:id` — CRUD de usuarios, solo rol `ADMIN` (SPEC-24; soft delete, revoca sesiones del afectado)
@@ -131,6 +132,7 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-26 | Demanda real y proveedores enriquecidos (`ventas`, `/api/estadisticas/demanda`, CRUD `/proveedores`) |
 | SPEC-27 | Precios por proveedor y margen (`producto_proveedor`, `precio_venta`/`costo`, agente elige proveedor, vista `/quiebres`) |
 | SPEC-28 | Scorecard de métricas retail (`/api/estadisticas/metricas` + vista `/metricas`) |
+| SPEC-29 | Alertas operativas + rol BUYER (`/api/alertas`, reglas determinísticas, dashboard exclusivo `/alertas`) |
 
 ## Usuarios demo
 
@@ -143,6 +145,7 @@ rotativo en cookie httpOnly. Usuarios del seed (`npm run seed`):
 | maria.lopez@mercadorai.com | `demo-aprobadora-2026` | APROBADOR | leer, crear, aprobar/rechazar |
 | admin@mercadorai.com | `demo-admin-2026` | ADMIN | todo + gestión de usuarios |
 | agente@mercadorai.com | `demo-agente-2026` | SERVICIO | leer + crear órdenes (cuenta del agente LangGraph — no puede aprobar) |
+| buyer@mercadorai.com | `demo-buyer-2026` | BUYER | solo `/alertas` — el resto del dominio devuelve 403 (SPEC-29) |
 
 Las passwords dev también sirven para el agente
 (`harness-langgraph/.env` → `AGENTE_EMAIL`/`AGENTE_PASSWORD`).

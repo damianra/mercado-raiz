@@ -6,7 +6,7 @@ import { hashPassword, MIN_PASSWORD_LENGTH, revocarRefreshesDe } from './auth.mo
 // acá — el listado admin necesita activo/ultimo_login/fecha_creacion,
 // pero jamás password_hash, intentos_fallidos, bloqueado_hasta ni
 // token_version (whitelist explícita, no exclusión).
-export const ROLES = ['ADMIN', 'GERENTE', 'APROBADOR', 'SERVICIO'];
+export const ROLES = ['ADMIN', 'GERENTE', 'APROBADOR', 'SERVICIO', 'BUYER'];
 const CAMPOS =
   'id, email, nombre, rol, avatar_url, activo, ultimo_login, fecha_creacion';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

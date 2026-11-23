@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../auth-middleware.js';
+import { bloquearBuyer, requireAuth, requireRole } from '../auth-middleware.js';
 import { create, list, patch, remove } from '../controllers/usuarios.controller.js';
 
 const router = Router();
-router.use(requireAuth, requireRole('ADMIN'));
+router.use(requireAuth, bloquearBuyer, requireRole('ADMIN'));
 
 router.get('/', list);
 router.post('/', create);

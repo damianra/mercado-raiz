@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../auth-middleware.js';
+import { bloquearBuyer, requireAuth, requireRole } from '../auth-middleware.js';
 import {
   create,
   detail,
@@ -9,7 +9,7 @@ import {
 } from '../controllers/proveedores.controller.js';
 
 const router = Router();
-router.use(requireAuth, requireRole('ADMIN'));
+router.use(requireAuth, bloquearBuyer, requireRole('ADMIN'));
 
 router.get('/', list);
 router.get('/:id', detail);
