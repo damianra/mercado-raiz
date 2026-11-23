@@ -1650,6 +1650,225 @@ sin rol no ve la sección. Review por sub-agente del PR.
 
 ---
 
+## SPEC-25 · Migración de persistencia a PostgreSQL (`mercadoraiz-db`)
+
+- **Fecha:** 2026-11-23
+- **Origen:** pedido del usuario — migrar la base SQLite a
+  PostgreSQL; la base se llama `mercadoraiz-db`. Es la primera
+  tarea del roadmap nuevo: SPEC-26 (demanda real + proveedores) y
+  todo desarrollo posterior se implementan **ya sobre Postgres**.
+- **Estado global:** ⏳ planificada
+
+### Decisiones
+
+- **Base única canónica**: `mercadoraiz-db` en Postgres ≥16 (el
+  nombre con guion exige comillas en psql — `"mercadoraiz-db"` — pero
+  viaja tal cual en `DATABASE_URL`). Los tests corren contra una base
+  hermana `mercadoraiz-db-test` en la misma instancia; CI usa un
+  service container `postgres:16`.
+- **SQLite deja de ser driver de runtime**: no se mantiene modo
+  dual. Queda solo como origen del script de migración de datos
+  (T25.4) y del historial del repo. Mantener dos dialectos duplica
+  superficie sin beneficio — la suite corre directo contra PG.
+- **Sync → async**: `better-sqlite3` es síncrono y los drivers PG
+  (`pg`/`postgres.js`) son async — la capa de datos pasa a interfaz
+  `await` (`all/get/run/tx`) y modelos/controllers se convierten.
+  Es el cambio estructural mayor del spec.
+- **`timestamptz` canónico**: las columnas `TEXT` de fecha pasan a
+  `timestamptz`. El JSON serializa ISO-8601 con `Z` (no el
+  `YYYY-MM-DD HH:MM:SS` de SQLite) — el front y el harness comparan
+  fechas y deben auditarse (`ordenes.model.js` documenta una
+  comparación sensible al formato).
+- **Schema**: `AUTOINCREMENT` → `GENERATED ALWAYS AS IDENTITY`;
+  `datetime('now', '+N units')` → `now() + interval 'N units'`;
+  `LIKE` → `ILIKE` (SQLite LIKE es case-insensitive en ASCII y PG no);
+  placeholders `?` → `$1..$n`; `CHECK (estado IN ...)` se conserva;
+  defaults `datetime('now')` → `now()`.
+- **Harness**: `SqliteSaver` → `PostgresSaver`
+  (`@langchain/langgraph-checkpoint-postgres`) contra `mercadoraiz-db`
+  o schema separado; el cache de análisis migra a tabla PG.
+- **Driver elegido**: `pg` (node-postgres) con `Pool` — maduro,
+  estable, API estándar. Sin ORM: las queries viven en los modelos
+  (convención MVC vigente).
+
+### Requisitos
+
+- **R25.1** `server/db.js` deja de exponer el objeto
+  `better-sqlite3`: pasa a exponer una interfaz async
+  (`get/all/run/query` + `tx(fn)` con `BEGIN/COMMIT`) implementada
+  sobre `pg.Pool`. `DATABASE_URL`/`PG*` en `.env` + `.env.example`;
+  `DB_HOST` default `localhost`, base `mercadoraiz-db`.
+- **R25.2** Schema portado: `server/schema.pg.sql` (o `schema.sql`
+  ya en dialecto PG si SQLite queda retirado) — idempotente
+  (`CREATE TABLE IF NOT EXISTS`), índices equivalentes, FKs igual.
+- **R25.3** Toda query de los modelos traducida: `$n` params,
+  funciones de fecha PG, `ILIKE`, `INSERT ... RETURNING id` donde
+  el caller usaba `lastInsertRowid`, `ON CONFLICT` conservado.
+- **R25.4** Modelos y controllers async; `seed-data.js`/`seed.js`
+  insertan en transacciones `tx()`. `seedIfEmpty` conserva su
+  semántica (solo si tabla vacía).
+- **R25.5** Infra: `docker-compose.yml` con servicio `postgres:16`
+  (db `mercadoraiz-db`, volumen persistente, healthcheck); README
+  con `docker compose up` como prerequisito de dev. El servicio del
+  compose se llama `mercadoraiz-db`.
+- **R25.6** Suite completa contra PG: Vitest con `PG*_TEST` o
+  `DATABASE_URL_TEST` → `mercadoraiz-db-test` (truncate/reset entre
+  tests); Playwright y smokes levantan contra la misma instancia.
+  CI agrega service `postgres` + envs.
+- **R25.7** Script de migración `server/migrate-sqlite-to-pg.js`:
+  lee `server/app.sqlite` existente y vuelca productos, proveedores,
+  órdenes, historial y usuarios (password hashes migran tal cual —
+  scrypt es agnóstico al motor). **No** migra `refresh_tokens` ni
+  datos volátiles; los usuarios re-loguean.
+- **R25.8** Auditoría de fechas: front (`src/lib/api.js`, páginas)
+  y harness dejan de asumir formato SQLite; cualquier comparación
+  `fecha < ahora` usa `Date` parseado, no strings.
+- **R25.9** Harness: checkpointer `PostgresSaver` +
+  `analisis-cache`/métricas persistidas en PG; `checkpoints.sqlite`
+  y `app.sqlite` quedan fuera de uso (gitignored, borrables tras
+  migración exitosa).
+- **R25.10** Contrato HTTP inmutable: ningún endpoint cambia shape
+  salvo el formato de fechas (ISO-8601 `timestamptz`) — documentado
+  como divergencia en Anexo B si el front requería el formato viejo.
+
+### Tareas
+
+- **T25.1** Capa de datos async: interfaz `get/all/run/tx` en
+  `db.js` sobre `pg`, conversión de los 6 modelos + controllers +
+  seed a `await`; schema PG; suite verde contra `mercadoraiz-db-test`.
+- **T25.2** Infra de dev/CI: `docker-compose.yml` (servicio
+  `mercadoraiz-db`), `.env.example` (`DATABASE_URL`), service
+  container en CI, README actualizado.
+- **T25.3** Harness a PG: `PostgresSaver`, cache de análisis y
+  métricas sobre la misma base; `.env.example` del harness.
+- **T25.4** Migración de datos: script sqlite→pg + validación
+  (counts por tabla, muestras) + doc de corte en README.
+- **T25.5** Auditoría de fechas front+harness y limpieza:
+  retirar `better-sqlite3` del backend, `checkpoints.sqlite`,
+  `app.sqlite` y doc de obsoleto en `AGENTS.md`/`SPEC.md`.
+
+### Verificado por
+
+Pendiente — por tarea: suite Vitest+E2E contra PG en CI, smoke
+manual de la migración (counts y muestras coinciden con
+`app.sqlite`), corrida del agente end-to-end sobre PG.
+
+---
+
+## SPEC-26 · Demanda real y proveedores enriquecidos (sobre PostgreSQL)
+
+- **Fecha:** 2026-11-23
+- **Origen:** pedido del usuario — que la "demanda estimada" que
+  redacta el LLM en `analisis_ia` salga de datos reales y no de un
+  historial vacío, y que el tiempo de entrega del proveedor venga
+  de una tabla administrable. Depende de SPEC-25 (las tablas
+  nuevas se crean directo en Postgres).
+- **Estado global:** ⏳ planificada
+- **Contexto:** hoy `historial_stock` seedea ~7 movimientos para
+  ~10 productos → ~1.460 SKUs sin ventas → `demanda_diaria = 0` →
+  la prosa del LLM es correcta pero vacía. El `tiempo_entrega_dias`
+  del proveedor ya es dato real (join `ordenes→proveedores`), pero
+  la tabla no es administrable ni tiene variabilidad.
+
+### Decisiones
+
+- **Tabla `ventas` separada** (opción B evaluada):
+  `historial_stock` modela *posición* de stock
+  (`cantidad_anterior→cantidad_nueva`); sembrar cadenas coherentes
+  de posición para 60–90 días × 1.471 SKUs es artificial y frágil.
+  `ventas(producto_id, fecha, unidades, canal)` modela el hecho de
+  negocio directo; `historial_stock` queda para movimientos
+  operativos reales. El agente y el backend leen `/api/ventas`.
+- **Seed determinístico**: mismo hash FNV-1a por EAN que los precios
+  (SPEC-22) → seeds reproducibles; velocidad base por categoría +
+  ruido + efecto fin de semana + tendencias leves; ~10–15% de SKUs
+  sin ventas (productos nuevos) para que "demanda 0" siga siendo un
+  camino honesto.
+- **Ventana**: últimos 90 días, 1 fila/día por producto con unidades
+  >0 (~40–80k filas — trivial para PG).
+- **Consistencia con stock**: las ventas sembradas no re-descuentan
+  `stock_actual` (es historial para estimar demanda, no replay);
+  documentado en `seed-articulos`.
+- **Proveedores enriquecidos**: la tabla existe (SPEC-02); se
+  agregan lead time mín/máx y atributos de negocio, y se expone
+  CRUD admin — hoy no hay forma de editar proveedores por API/UI.
+- **Una sola fuente de verdad**: la estimación de demanda vive en
+  el backend (`/api/estadisticas/demanda`); el agente la consume y
+  el dashboard muestra las mismas métricas — no se duplica la
+  lógica en el harness.
+
+### Requisitos
+
+- **R26.1** `CREATE TABLE ventas` (PG): `id`, `producto_id` FK,
+  `fecha` date, `unidades` int >0, `canal` ('POS'|'WEB'|'MAYOR'),
+  `referencia`. Índices `(producto_id, fecha)` y `(fecha)`.
+- **R26.2** `GET /api/ventas` autenticado: filtros `producto_id`,
+  `desde`, `hasta`, paginado estándar. El harness cambia
+  `historial.client` → `ventas.client` (mismo contrato de items:
+  fecha + unidades).
+- **R26.3** Seed de ventas: `server/seed-ventas.js` genera 90 días
+  por SKU con perfil por categoría (rotación alta en Frescos,
+  media en Almacén/Bebidas, baja en Perfumería/Limpieza), ruido
+  determinístico, ±fin de semana, tendencia leve aleatoria
+  (crece/cae/estable), `canal` ponderado. ~10–15% SKUs sin ventas.
+  Inserta en `tx()` por lotes.
+- **R26.4** Proveedores: columnas nuevas `tiempo_entrega_min_dias`,
+  `tiempo_entrega_max_dias`, `confiabilidad_pct`, `pedido_minimo_monto`,
+  `costo_envio`, `categorias_cubiertas` (texto/JSONB). El lead de
+  cálculo pasa a usar el valor esperado (`min`+`max`)/2 o
+  `tiempo_entrega_dias` si no hay rango — documentado.
+- **R26.5** CRUD `GET/POST/PATCH/DELETE /api/proveedores` solo
+  ADMIN: soft delete (`activo=0`) igual que usuarios; `409` si se
+  intenta borrar un proveedor con productos u órdenes referenciadas
+  (o desactivar — decisión de controller: no borrar con referencias,
+  solo `activo=0`).
+- **R26.6** Pantalla admin `/proveedores` (solo ADMIN en sidebar):
+  tabla, alta/edición con `FormShell` gateado, activar/desactivar,
+  `EmptyState`/`ErrorState` — mismas reglas UI que `/usuarios`.
+- **R26.7** `GET /api/estadisticas/demanda?producto_id=&dias=90`:
+  `demanda_diaria` (media móvil ponderada por recencia), `tendencia`
+  (pendiente regresión lineal sobre agregado diario), `cv`, `dias_con_venta`,
+  `dias_en_quiebre` (días con stock 0 en el período — no cuentan como
+  demanda 0 en el denominador), `ultima_venta`. Consumida por el agente
+  y por el front.
+- **R26.8** Agente: `analizar-demanda` usa la nueva fuente; con
+  `dias_con_venta ≥ 3` y CV bajo → heurístico backend; si no → LLM
+  con los agregados reales en el prompt. `calcular-cantidad` suma
+  stock de seguridad por variabilidad del lead
+  (`z·σ_demanda·√lead_esperado`, `z=1.65` ~95% service level) —
+  fórmula y constantes en `config`.
+- **R26.9** Superficie: `analisis_ia` cita demanda/tendencia reales
+  (ya lo hace el prompt — con datos no triviales); el dashboard
+  agrega columna "demanda/día" y "días de cobertura" en productos o
+  detalle de orden (datos de `/api/estadisticas/demanda`); el modal
+  sigue mostrando lead real del proveedor.
+- **R26.10** Sin regresión: productos sin ventas siguen generando
+  `demanda_diaria = 0` y orden de reposición mínima (comportamiento
+  actual del fallback), documentado en tests.
+
+### Tareas
+
+- **T26.1** `ventas` + `GET /api/ventas` + `seed-ventas.js`
+  (determinístico, 90d, perfiles por categoría) + tests.
+- **T26.2** Enriquecer `proveedores` (R26.4) + seed actualizado.
+- **T26.3** CRUD `/api/proveedores` admin + tests.
+- **T26.4** Pantalla `/proveedores` front + e2e.
+- **T26.5** `/api/estadisticas/demanda` (R26.7) + tests.
+- **T26.6** Harness: `ventas.client`, `analizar-demanda` y
+  `calcular-cantidad` sobre la nueva fuente + stock de seguridad
+  (R26.8) + tests de nodos.
+- **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e.
+
+### Verificado por
+
+Pendiente — por tarea: tests de `seed-ventas` (determinismo por EAN,
+perfiles, % sin ventas), CRUD proveedores (409 con referencias,
+whitelist), endpoint demanda (ponderación, quiebres, tendencia),
+suite e2e, corrida del agente mostrando `demanda_diaria > 0` real
+en `analisis_ia` para SKUs con historial.
+
+---
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
@@ -1671,6 +1890,8 @@ sin rol no ve la sección. Review por sub-agente del PR.
 | (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
 | (post-gen) | SPEC-16 ✅ | `harness/analisis-cache.js`, `utils/{concurrencia,llm-json}.js`, `langgraph/nodes/*`, `server/models|controllers|routes/ordenes*` | `analisis-cache`, `concurrencia`, `crear-orden`, `ordenes-batch` (22 tests) + benchmark |
 | (post-gen) | SPEC-22 ✅ | `server/seed-articulos.js`, `server/seed-data.js`, `server/schema.sql`, `server/models/{productos,ordenes}.model.js` | `seed-articulos.test.js` (8) + `api.test.js`, `ordenes-batch.test.js`, e2e actualizados |
+| (post-gen) | SPEC-25 ⏳ | `server/db.js`, `server/schema.sql`→PG, `docker-compose.yml`, `server/migrate-sqlite-to-pg.js`, `harness-langgraph` (PostgresSaver) | suite Vitest+E2E contra PG, smoke de migración |
+| (post-gen) | SPEC-26 ⏳ | `server/seed-ventas.js`, `server/{routes,models,controllers}/{ventas,proveedores,estadisticas}.*`, `src/pages/Proveedores.jsx`, `harness-langgraph` nodos demanda | tests seed/CRUD/demanda + e2e + corrida agente |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
