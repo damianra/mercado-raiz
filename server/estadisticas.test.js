@@ -97,7 +97,7 @@ describe('GET /api/estadisticas/demanda — cálculo', () => {
     });
   });
 
-  it('serie conocida: dias_con_venta, ultima_venta y cv ≈ 0 con demanda constante', async () => {
+  it('serie conocida: dias_con_venta, ultima_venta y demanda ponderada', async () => {
     const p = prodSinMovs();
     // 10 unidades por día durante los últimos 10 días → serie
     // constante al final de la ventana.

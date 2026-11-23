@@ -19,7 +19,7 @@ export async function estadisticaDemanda(productoId, dias) {
   const ventas = await db.all(
     `SELECT fecha::text AS fecha, SUM(unidades)::int AS unidades
      FROM ventas
-     WHERE producto_id = ? AND fecha > CURRENT_DATE - ?::int
+     WHERE producto_id = ? AND fecha > CURRENT_DATE - ?::int AND fecha <= CURRENT_DATE
      GROUP BY fecha ORDER BY fecha`,
     [productoId, dias],
   );
@@ -62,17 +62,29 @@ export async function estadisticaDemanda(productoId, dias) {
       ? Math.sqrt(elegibles.reduce((s, v) => s + (v - media) ** 2, 0) / n) / media
       : null;
 
-  // Pendiente OLS sobre índice de día (u/día²) — signo = dirección.
+  // Pendiente OLS sobre el índice de día REAL de la ventana (no el
+  // comprimido): con quiebres, el tiempo entre días elegibles se
+  // conserva y la pendiente no se infla.
   let tendencia = 0;
   if (n > 1) {
-    const xs = elegibles.map((_, i) => i);
+    const xs = [];
+    const ys = [];
+    for (let i = 0; i < serie.length; i++) {
+      if (quiebre.indices.has(i)) continue;
+      xs.push(i);
+      ys.push(serie[i]);
+    }
     const xMean = xs.reduce((a, b) => a + b, 0) / n;
-    const num = xs.reduce((s, x, i) => s + (x - xMean) * (elegibles[i] - media), 0);
+    const num = xs.reduce((s, x, i) => s + (x - xMean) * (ys[i] - media), 0);
     const den = xs.reduce((s, x) => s + (x - xMean) ** 2, 0);
     tendencia = den > 0 ? num / den : 0;
   }
 
   const conVenta = ventas.filter((v) => v.unidades > 0);
+  const { ultima } = await db.get(
+    'SELECT MAX(fecha)::text AS ultima FROM ventas WHERE producto_id = ?',
+    [productoId],
+  );
   return {
     producto_id: productoId,
     dias,
@@ -81,7 +93,9 @@ export async function estadisticaDemanda(productoId, dias) {
     cv: cv == null ? null : Number(cv.toFixed(4)),
     dias_con_venta: conVenta.length,
     dias_en_quiebre: quiebre.dias,
-    ultima_venta: conVenta.length ? conVenta[conVenta.length - 1].fecha : null,
+    // MAX global (no acotado a la ventana): distingue venta
+    // reciente de producto dormido.
+    ultima_venta: ultima,
   };
 }
 
