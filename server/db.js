@@ -85,7 +85,7 @@ const wrap = (queryFn) => ({
  * aislado dentro de mercadoraiz-db-test — el equivalente al viejo
  * ':memory:' por archivo. `closeDb(true)` lo dropea.
  */
-export async function openDb({ searchPath, connString } = {}) {
+export async function openDb({ searchPath, connString, sembrar = true } = {}) {
   if (state) return state;
   opening ??= (async () => {
     if (searchPath && !IDENT_RE.test(searchPath)) {
@@ -115,8 +115,10 @@ export async function openDb({ searchPath, connString } = {}) {
         client.release();
       }
     };
-    for (const [table, rows] of Object.entries(seedData)) {
-      await seedIfEmpty(db, table, rows);
+    if (sembrar) {
+      for (const [table, rows] of Object.entries(seedData)) {
+        await seedIfEmpty(db, table, rows);
+      }
     }
     state = db;
     return state;

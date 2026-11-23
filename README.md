@@ -43,7 +43,9 @@ El proxy de Vite redirige `/api` al puerto 4000 en dev.
 > `scripts/init-test-db.sql` en el primer boot) con un schema
 > aislado por archivo de test. Para migrar datos de una
 > `app.sqlite` anterior: `node server/migrate-sqlite-to-pg.js`
-> (script pendiente — T25.4).
+> (corte único — destino debe estar vacío; preserva ids y
+> password_hash, no migra refresh_tokens: re-login requerido).
+> Reporta counts por tabla + muestras al terminar.
 
 ### Agente de reposición (opcional)
 
