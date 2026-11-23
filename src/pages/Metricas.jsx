@@ -109,7 +109,7 @@ export default function Metricas({ usuario }) {
                 <Stat
                   icon={Boxes}
                   label="Inventario a costo"
-                  valor={formatMoney(inv.valor_costo)}
+                  valor={inv.valor_costo != null ? formatMoney(inv.valor_costo) : '—'}
                   detalle={`${formatMoney(inv.valor_venta)} a precio de venta`}
                 />
                 <Stat
