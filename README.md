@@ -45,7 +45,8 @@ El proxy de Vite redirige `/api` al puerto 4000 en dev.
 > `app.sqlite` anterior: `node server/migrate-sqlite-to-pg.js`
 > (corte único — destino debe estar vacío; preserva ids y
 > password_hash, no migra refresh_tokens: re-login requerido).
-> Reporta counts por tabla + muestras al terminar.
+> Reporta counts por tabla + muestras al terminar. Requiere
+> Node >= 22.13 (`node:sqlite` nativo).
 
 ### Agente de reposición (opcional)
 
@@ -63,7 +64,7 @@ El agente lee productos con stock bajo, estima demanda con el LLM, crea órdenes
 | `npm run dev` | Frontend Vite en :5173 |
 | `npm run api` | API Express en :4000 |
 | `npm run dev:api` | API con `--watch` |
-| `npm run seed` | Puebla la DB (idempotente, solo si está vacía) |
+| `npm run seed` | Puebla la DB (TRUNCATE + repuebla — reseteo completo) |
 | `npm run build` | Build de producción a `dist/` |
 | `npm test` / `npx vitest run` | Suite Vitest (unit + integración) |
 | `npm run test:e2e` | E2E Playwright (Chromium) |

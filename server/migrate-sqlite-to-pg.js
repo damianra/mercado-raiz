@@ -60,14 +60,19 @@ const colsPg = async (t) => new Set(
   )).map((r) => r.c),
 );
 
+async function main() {
 try {
   // Guard de corte único: el destino debe estar vacío.
   for (const t of TABLAS) {
     const { c } = await db.get(`SELECT COUNT(*)::int AS c FROM ${t}`);
     if (c > 0) {
+      // exitCode + return (no process.exit): stderr hacia pipes es
+      // async y process.exit podría truncar el mensaje; el finally
+      // cierra sqlite y el pool igual.
       console.error(`ABORTA: la tabla ${t} ya tiene ${c} filas — la migración es un corte único. ` +
         `Vacía el destino (npm run seed corre TRUNCATE+seed, o hacelo a mano) y reintentá.`);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   }
 
@@ -77,8 +82,14 @@ try {
     await t.query(`SET LOCAL TIME ZONE 'UTC'`);
     const out = [];
     for (const tabla of TABLAS) {
+      // Una base vieja puede no tener alguna tabla (p.ej. anterior
+      // a usuarios) — se saltea con warning, no aborta.
+      const existe = sqlite.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      ).get(tabla);
+      if (!existe) { console.warn(`  aviso: ${tabla} no existe en el sqlite — salteada`); out.push([tabla, 0]); continue; }
       const filas = filasDe(tabla);
-      if (!filas.length) { out.push([tabla, 0, 0]); continue; }
+      if (!filas.length) { out.push([tabla, 0]); continue; }
       const colsDestino = await colsPg(tabla);
       const cols = Object.keys(filas[0]).filter((c) => colsDestino.has(c));
       const stmt = t.prepare(
@@ -90,7 +101,7 @@ try {
           `SELECT setval(pg_get_serial_sequence('${tabla}', 'id'), MAX(id)) FROM ${tabla}`,
         );
       }
-      out.push([tabla, filas.length, null]);
+      out.push([tabla, filas.length]);
     }
     return out;
   });
@@ -114,9 +125,12 @@ try {
   if (!ok) { console.error('\nFALLO: counts no coinciden — revisar.'); process.exitCode = 1; }
   else console.log('\nCorte listo: apuntar la app a DATABASE_URL y borrar el .sqlite viejo.');
 } catch (e) {
-  console.error(`\nMigración abortada (rollback — destino intacto): ${e.message}`);
+  console.error(`\nMigración abortada: ${e.message}`);
   process.exitCode = 1;
 } finally {
   sqlite.close();
   await closeDb();
 }
+}
+
+await main();
