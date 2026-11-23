@@ -51,6 +51,8 @@ export default function Alertas({ usuario }) {
   const [tipo, setTipo] = useState('');
   const [soloNoLeidas, setSoloNoLeidas] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [marcandoId, setMarcandoId] = useState(null);
+  const [marcandoTodas, setMarcandoTodas] = useState(false);
   const [toasts, setToasts] = useState([]);
   const timers = useRef([]);
 
@@ -62,44 +64,56 @@ export default function Alertas({ usuario }) {
     );
   }, []);
 
+  // generación de fetch: un cambio de filtro mid-request no pisa
+  // los datos con la respuesta vieja (la lazy-eval puede tardar)
+  const gen = useRef(0);
   const cargar = useCallback(async () => {
+    const g = ++gen.current;
     setCargando(true);
     setError(null);
     try {
-      setData(
-        await getAlertas({
-          tipo: tipo || undefined,
-          ...(soloNoLeidas ? { leida: 0 } : {}),
-        }),
-      );
+      const res = await getAlertas({
+        tipo: tipo || undefined,
+        ...(soloNoLeidas ? { leida: 0 } : {}),
+      });
+      if (g === gen.current) setData(res);
     } catch (e) {
-      setError(e);
+      if (g === gen.current) setError(e);
     } finally {
-      setCargando(false);
+      if (g === gen.current) setCargando(false);
     }
   }, [tipo, soloNoLeidas]);
 
   useEffect(() => {
     cargar();
-    return () => timers.current.forEach(clearTimeout);
   }, [cargar]);
+  // los timers de los toasts se limpian solo al desmontar — atarlos
+  // al effect de cargar los cancelaba en cada cambio de filtro y el
+  // toast quedaba clavado en pantalla
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const marcar = async (id) => {
+    setMarcandoId(id);
     try {
       await marcarAlertaLeida(id);
       await cargar();
     } catch (e) {
       pushToast(`No se pudo marcar la alerta: ${e.message}`, 'error');
+    } finally {
+      setMarcandoId(null);
     }
   };
 
   const marcarTodas = async () => {
+    setMarcandoTodas(true);
     try {
       const { marcadas } = await leerTodasAlertas();
       pushToast(`${marcadas} alertas marcadas como leídas`);
       await cargar();
     } catch (e) {
       pushToast(`No se pudieron marcar: ${e.message}`, 'error');
+    } finally {
+      setMarcandoTodas(false);
     }
   };
 
@@ -121,6 +135,7 @@ export default function Alertas({ usuario }) {
           onLogout={logout}
           titulo="Alertas operativas"
           subtitulo="Quiebres, riesgos y pendientes que necesitan tu atención"
+          sinNotificaciones
         />
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
           <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -153,7 +168,7 @@ export default function Alertas({ usuario }) {
             </label>
             <button
               onClick={marcarTodas}
-              disabled={!r?.no_leidas}
+              disabled={!r?.no_leidas || marcandoTodas}
               className="ml-auto inline-flex items-center gap-2 rounded-lg bg-root px-4 py-2 text-sm font-semibold text-white transition hover:bg-root-dark disabled:cursor-not-allowed disabled:opacity-40"
             >
               <CheckCheck size={16} strokeWidth={1.5} />
@@ -229,7 +244,8 @@ export default function Alertas({ usuario }) {
                     {!a.leida && (
                       <button
                         onClick={() => marcar(a.id)}
-                        className="shrink-0 rounded-lg border border-root/20 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10"
+                        disabled={marcandoId === a.id}
+                        className="shrink-0 rounded-lg border border-root/20 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10 disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label={`Marcar leída la alerta ${a.id}`}
                       >
                         Marcar leída

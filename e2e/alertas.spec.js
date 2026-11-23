@@ -47,8 +47,12 @@ test('lista alertas reales con severidad y permite marcar leída', async ({
 
   // severidad visible + la primera es ALTA (orden del backend)
   await expect(items.first()).toContainText('Alta');
-  // mensaje de quiebre con margen real
-  await expect(items.first()).toContainText('$');
+  // el mensaje de quiebre trae el margen perdido real ('$…/día') —
+  // se aserta sobre un ítem de quiebre: el primer ALTA puede ser de
+  // otro tipo según el seed
+  await expect(
+    items.filter({ hasText: 'Quiebre' }).first(),
+  ).toContainText('$');
 
   // marcar una leída: el ítem sale de la lista (filtro no-leídas)
   const total = await items.count();

@@ -28,6 +28,10 @@ export default function Topbar({
   // BUYER no habla de órdenes.
   titulo = 'Órdenes Pendientes de Aprobación',
   subtitulo = 'Revisá y aprobá las órdenes de compra sugeridas por la IA',
+  // La campana lista órdenes urgentes — en vistas sin órdenes
+  // (p.ej. /alertas del BUYER) quedaría diciendo "sin
+  // notificaciones" sobre una página llena de alertas: se oculta.
+  sinNotificaciones = false,
   onLogout,
 }) {
   const [open, setOpen] = useState(false);
@@ -69,6 +73,7 @@ export default function Topbar({
         </div>
 
         <div className="ml-auto flex items-center gap-4">
+          {!sinNotificaciones && (
           <div className="relative" ref={panelRef}>
             <button
               onClick={() => setOpen((o) => !o)}
@@ -137,6 +142,7 @@ export default function Topbar({
               </div>
             )}
           </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-root text-sm font-bold text-white">
               {iniciales(usuario?.nombre)}

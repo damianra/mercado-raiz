@@ -50,7 +50,7 @@ function Root() {
   // SPEC-29 (R29.1): el BUYER solo ve su dashboard de alertas —
   // home propia (/ o /alertas) y 404 en todo lo demás.
   if (sesion.usuario.rol === 'BUYER') {
-    return segmento === '' || segmento === 'index.html' || segmento === 'alertas' ? (
+    return ['', 'index.html', 'alertas', 'login'].includes(segmento) ? (
       <Alertas usuario={sesion.usuario} />
     ) : (
       <NotFound />
