@@ -3,7 +3,7 @@
  *
  *  - inicializar(): compila el grafo (langgraph/graph.js) y, si hay
  *    un thread_id guardado en .last-thread con una pausa pendiente
- *    en checkpoints.sqlite, la recupera como corrida activa.
+ *    en Postgres (checkpoints), la recupera como corrida activa.
  *  - iniciar(): dispara una corrida nueva (POST /run o index.js).
  *  - ejecutar(threadId, input): corre el grafo en modo stream,
  *    deja que el monitor imprima cada nodo, y al terminar detecta
@@ -23,7 +23,7 @@ import { costTracker } from './cost-tracker.js';
 import { log, seccion } from '../utils/logger.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// El checkpoint del grafo está en SQLite — sobrevive a reinicios
+// El checkpoint del grafo está en Postgres — sobrevive a reinicios
 // del proceso. Guardamos el último thread_id para que POST /resume
 // siga funcionando aunque el harness se haya caído y vuelto.
 // .last-thread es estado de runtime local — está en .gitignore

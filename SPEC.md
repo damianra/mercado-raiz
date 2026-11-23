@@ -1758,6 +1758,13 @@ sin rol no ve la sección. Review por sub-agente del PR.
   excepción compose-dev.
 - **T25.3** Harness a PG: `PostgresSaver`, cache de análisis y
   métricas sobre la misma base; `.env.example` del harness.
+  ✅ implementada — `PostgresSaver` + `setup()` crea tablas
+  `checkpoint_*` en `mercadoraiz-db`; `src/harness/pg.js` (pool
+  compartido, `DATABASE_URL_TEST` en vitest); `analisis_cache`
+  pasó de JSON local a tabla PG (async, fail-soft: read caído =
+  miss, write caído = log y sigue); comparación de análisis
+  canónica (JSONB reordena claves); métricas quedan en memoria
+  por diseño; `@langchain/langgraph-checkpoint-sqlite` retirada.
 - **T25.4** Migración de datos: script sqlite→pg + validación
   (counts por tabla, muestras) + doc de corte en README.
 - **T25.5** Auditoría de fechas front+harness y limpieza:

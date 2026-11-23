@@ -6,7 +6,7 @@
  * Lo alimentan el monitor (tiempo por nodo), los nodos con LLM y el
  * orchestrator, que vuelca el estado final del grafo tras cada
  * ejecutar() — así los contadores de negocio no se duplican en el
- * estado serializado a checkpoints.sqlite.
+ * estado serializado a los checkpoints PG.
  * Lo leen GET /metrics (harness/server.js) y el resumen final que
  * imprime el orchestrator al terminar la corrida.
  */

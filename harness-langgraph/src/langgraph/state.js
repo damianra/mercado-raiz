@@ -5,7 +5,7 @@
  * fusiona cada campo según su `reducer` ("el último gana", merge de
  * objetos, o concatenar).
  *
- * El objeto completo es lo que se serializa a checkpoints.sqlite en
+ * El objeto completo es lo que se serializa a los checkpoints PG en
  * cada paso — y lo que se restaura cuando el grafo se reanuda tras
  * una pausa humana.
  *

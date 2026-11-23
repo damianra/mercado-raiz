@@ -24,14 +24,14 @@ vi.mock('../../src/integrations/historial.client.js', () => ({
   ventasDeProducto: (...a) => ventasDeProducto(...a),
 }));
 
-// Sin el mock, guardarDemanda escribiría data/analisis-cache.json
-// real y una segunda corrida del suite haría hit (suite flaky +
-// contamina el cache del dev).
+// Sin el mock, buscarDemanda/guardarDemanda irían contra la tabla
+// analisis_cache de Postgres — los callers hacen await/.catch(),
+// así que el mock devuelve Promises como la impl real.
 const cacheFns = {
-  buscarDemanda: vi.fn(() => null),
-  buscarJustificacion: vi.fn(() => null),
-  guardarDemanda: vi.fn(),
-  guardarJustificacion: vi.fn(),
+  buscarDemanda: vi.fn(async () => null),
+  buscarJustificacion: vi.fn(async () => null),
+  guardarDemanda: vi.fn(async () => {}),
+  guardarJustificacion: vi.fn(async () => {}),
   hashAnalisis: vi.fn(() => 'hash-fake'),
 };
 vi.mock('../../src/harness/analisis-cache.js', () => cacheFns);

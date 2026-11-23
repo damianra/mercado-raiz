@@ -8,57 +8,78 @@
  * derivan de los mismos inputs (ventas → demanda → cantidad →
  * monto, todo determinista).
  *
- * Persistencia: JSON local en data/analisis-cache.json — es
- * descartable, no fuente de verdad (si se borra solo hay más
- * llamadas LLM la próxima corrida). Está en .gitignore.
+ * Persistencia (SPEC-25, T25.3): tabla `analisis_cache` en el mismo
+ * Postgres que el backend — antes era un JSON local que se perdía
+ * si el proceso corría en otra máquina/contenedor. Sigue siendo
+ * descartable, no fuente de verdad: si se trunca solo hay más
+ * llamadas LLM la próxima corrida.
  *
  * El hash cubre TODO lo que entra a los prompts: ventas de la
  * ventana, campos del producto (sku, nombre, stock, precio, lead
  * time — un movimiento AJUSTE cambia stock sin tocar ventas) y la
  * config que afecta el resultado (modelo, umbrales).
  *
- * `analisis_llm` marca que `entrada.analisis` la produjo el LLM
- * (no el fallback heurístico): buscarDemanda lo exige, así si ayer
- * el LLM falló y la justificación salió sobre el fallback, ese
+ * `analisis_llm` marca que `analisis` la produjo el LLM (no el
+ * fallback heurístico): buscarDemanda lo exige, así si ayer el
+ * LLM falló y la justificación salió sobre el fallback, ese
  * fallback no se presenta hoy como demanda cacheada — se reintenta.
  * Las justificaciones sí pueden reusarse sobre análisis
  * heurísticos: son deterministas, mismo input → misma prosa.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { config } from '../config/env.js';
+import { poolPg } from './pg.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-// ANALISIS_CACHE_PATH sobreescribe la ubicación (tests, corridas
-// aisladas). Sin ella: data/analisis-cache.json del harness.
-const ARCHIVO = process.env.ANALISIS_CACHE_PATH
-  || join(here, '../../data/analisis-cache.json');
+let tablaLista = null; // promise memoizada — CREATE idempotente
 
-let cache = null; // lazy-load una vez por proceso
-
-function cargar() {
-  if (cache) return cache;
-  try {
-    cache = existsSync(ARCHIVO)
-      ? JSON.parse(readFileSync(ARCHIVO, 'utf8'))
-      : {};
-  } catch {
-    cache = {}; // archivo corrupto → cache vacío, no aborta la corrida
+function ensureTabla() {
+  if (!tablaLista) {
+    tablaLista = poolPg().query(`
+      CREATE TABLE IF NOT EXISTS analisis_cache (
+        producto_id   INTEGER PRIMARY KEY,
+        hash          TEXT NOT NULL,
+        analisis      JSONB,
+        analisis_llm  BOOLEAN NOT NULL DEFAULT FALSE,
+        analisis_ia   TEXT,
+        actualizado   TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+    // Si el CREATE falla (Postgres caído), no memorizar el rechazo:
+    // el próximo acceso reintenta en vez de propagar el error viejo.
+    tablaLista.catch(() => { tablaLista = null; });
   }
-  return cache;
+  return tablaLista;
 }
 
-function persistir() {
-  mkdirSync(dirname(ARCHIVO), { recursive: true });
-  writeFileSync(ARCHIVO, JSON.stringify(cache));
+async function entradaDe(productoId) {
+  await ensureTabla();
+  const { rows } = await poolPg().query(
+    'SELECT hash, analisis, analisis_llm, analisis_ia FROM analisis_cache WHERE producto_id = $1',
+    [productoId],
+  );
+  return rows[0];
 }
+
+/**
+ * Stringify canónico (claves ordenadas, recursivo). JSONB reordena
+ * las claves al persistir — un JSON.stringify directo del row vs el
+ * objeto original daría "distinto" aunque el contenido sea idéntico.
+ */
+function canonico(valor) {
+  if (Array.isArray(valor)) return `[${valor.map(canonico).join(',')}]`;
+  if (valor && typeof valor === 'object') {
+    return `{${Object.keys(valor).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonico(valor[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(valor);
+}
+
+const mismoAnalisis = (a, b) => canonico(a) === canonico(b);
 
 /**
  * Hash del input completo del LLM para un producto. Cualquier
  * diferencia en ventas, campos del producto o config → otra clave →
  * cache miss (invalidación implícita, no hay TTL que mantener).
+ * Función pura — sync a propósito.
  */
 export function hashAnalisis(producto, ventas) {
   const input = {
@@ -85,8 +106,8 @@ export function hashAnalisis(producto, ventas) {
  * input cambió, o si la entrada solo tiene justificación (producto
  * estable — su demanda nunca pasó por el LLM).
  */
-export function buscarDemanda(productoId, hash) {
-  const entrada = cargar()[productoId];
+export async function buscarDemanda(productoId, hash) {
+  const entrada = await entradaDe(productoId);
   return entrada?.hash === hash && entrada.analisis_llm === true
     ? entrada.analisis
     : null;
@@ -99,12 +120,10 @@ export function buscarDemanda(productoId, hash) {
  * cayó a fallback y hoy respondió distinto) el texto es inválido.
  * Los análisis heurísticos son deterministas → comparar basta.
  */
-export function buscarJustificacion(productoId, hash, analisis) {
-  const entrada = cargar()[productoId];
+export async function buscarJustificacion(productoId, hash, analisis) {
+  const entrada = await entradaDe(productoId);
   if (entrada?.hash !== hash || !entrada.analisis_ia) return null;
-  return JSON.stringify(entrada.analisis) === JSON.stringify(analisis)
-    ? entrada.analisis_ia
-    : null;
+  return mismoAnalisis(entrada.analisis, analisis) ? entrada.analisis_ia : null;
 }
 
 /**
@@ -113,10 +132,16 @@ export function buscarJustificacion(productoId, hash, analisis) {
  * No se cachea el analisis del fallback heurístico: si el LLM
  * falló queremos reintentarlo en la próxima corrida.
  */
-export function guardarDemanda(productoId, hash, analisis) {
-  cargar();
-  cache[productoId] = { hash, analisis, analisis_llm: true, analisis_ia: null };
-  persistir();
+export async function guardarDemanda(productoId, hash, analisis) {
+  await ensureTabla();
+  await poolPg().query(
+    `INSERT INTO analisis_cache (producto_id, hash, analisis, analisis_llm, analisis_ia, actualizado)
+     VALUES ($1, $2, $3, TRUE, NULL, now())
+     ON CONFLICT (producto_id) DO UPDATE
+       SET hash = $2, analisis = $3, analisis_llm = TRUE,
+           analisis_ia = NULL, actualizado = now()`,
+    [productoId, hash, JSON.stringify(analisis)],
+  );
 }
 
 /**
@@ -128,12 +153,17 @@ export function guardarDemanda(productoId, hash, analisis) {
  * se generó sobre el fallback heurístico, el flag se pierde y el
  * LLM de demanda se reintenta en la próxima corrida.
  */
-export function guardarJustificacion(productoId, hash, analisis, analisis_ia) {
-  cargar();
-  const entrada = cache[productoId];
+export async function guardarJustificacion(productoId, hash, analisis, analisis_ia) {
+  const entrada = await entradaDe(productoId);
   const analisisEsDeLlm = entrada?.hash === hash
     && entrada.analisis_llm === true
-    && JSON.stringify(entrada.analisis) === JSON.stringify(analisis);
-  cache[productoId] = { hash, analisis, analisis_llm: analisisEsDeLlm, analisis_ia };
-  persistir();
+    && mismoAnalisis(entrada.analisis, analisis);
+  await poolPg().query(
+    `INSERT INTO analisis_cache (producto_id, hash, analisis, analisis_llm, analisis_ia, actualizado)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (producto_id) DO UPDATE
+       SET hash = $2, analisis = $3, analisis_llm = $4,
+           analisis_ia = $5, actualizado = now()`,
+    [productoId, hash, JSON.stringify(analisis), analisisEsDeLlm, analisis_ia],
+  );
 }

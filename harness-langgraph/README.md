@@ -92,8 +92,9 @@ paralelismo casi no gana tiempo. Con el modelo actual
   no muere.
 - **Aprobación desacoplada** (SPEC-12): el grafo es atómico — las
   pendientes esperan en la DB y se resuelven por REST. El
-  checkpointer sigue escribiendo `checkpoints.sqlite` tras cada
-  nodo (infra disponible, sin uso por el flujo actual).
+  checkpointer sigue persistiendo tras cada nodo (tablas
+  `checkpoint_*` en `mercadoraiz-db` — infra disponible, sin uso
+  por el flujo actual).
 - **Umbral duplicado a propósito**: el agente decide
   `requiere_aprobacion` (demo del agente decidiendo) y el backend
   re-deriva la misma regla como red de seguridad
