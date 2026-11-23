@@ -172,3 +172,32 @@ describe('R29.3/R29.4 — motor de reglas y endpoints', () => {
     expect(mia.mensaje).toContain('$');
   });
 });
+
+describe('lazy eval — throttle de 60min', () => {
+  it('meta vieja → re-evalúa; meta reciente → no; basura → re-evalúa y cura', async () => {
+    // meta reciente → el GET no evalúa (nada cambia)
+    await post('/alertas/evaluar'); // fija ultima_eval
+    const a = await (await get('/alertas')).json();
+    const { nuevas: n1 } = await (await post('/alertas/evaluar')).json();
+    expect(n1).toBe(0); // dedup — nada nuevo que crear
+
+    // meta vieja (2h atrás) → el GET re-evalúa
+    await db.run(
+      `UPDATE alertas_meta SET valor = (EXTRACT(EPOCH FROM now()) - 7200)::text
+       WHERE clave = 'ultima_eval'`,
+    );
+    await get('/alertas');
+    const meta = await db.get(
+      "SELECT valor FROM alertas_meta WHERE clave = 'ultima_eval'",
+    );
+    expect(Date.now() / 1000 - Number(meta.valor)).toBeLessThan(120);
+
+    // meta basura → re-evalúa y auto-cura
+    await db.run("UPDATE alertas_meta SET valor = 'basura' WHERE clave = 'ultima_eval'");
+    await get('/alertas');
+    const meta2 = await db.get(
+      "SELECT valor FROM alertas_meta WHERE clave = 'ultima_eval'",
+    );
+    expect(Number.isFinite(Number(meta2.valor))).toBe(true);
+  });
+});

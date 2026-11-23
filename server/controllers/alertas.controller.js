@@ -31,10 +31,11 @@ export async function evaluar(req, res) {
 }
 
 export async function leida(req, res) {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id < 1) {
+  // dígitos puros — Number() acepta '1e3'/'0x10' y marcaría otra alerta
+  if (!/^\d+$/.test(req.params.id)) {
     return res.status(400).json({ error: 'id debe ser un entero positivo' });
   }
+  const id = Number(req.params.id);
   if (!(await marcarLeida(id))) {
     return res.status(404).json({ error: 'alerta no encontrada' });
   }

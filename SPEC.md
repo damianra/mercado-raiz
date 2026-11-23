@@ -2091,7 +2091,8 @@ throttle del evaluador.
   tiene >60min (lazy, sin cron); `POST /api/alertas/evaluar` fuerza.
 
 **R29.4** API (BUYER+ADMIN): `GET /api/alertas?leida=&tipo=` →
-`{data, resumen:{total,no_leidas,por_severidad}}`;
+`{data, resumen:{total,no_leidas,altas,medias,bajas}}`
+(severidades solo sobre no leídas);
 `PATCH /api/alertas/:id/leida`; `PATCH /api/alertas/leer-todas`;
 `POST /api/alertas/evaluar`.
 
@@ -2101,7 +2102,7 @@ Topbar parametrizable (título/subtítulo por props — hoy está
 hardcodeado "Órdenes Pendientes").
 
 - **T29.1** Backend: schema + rol BUYER + seed + lockdown + modelo
-  de reglas + endpoints + tests.
+  de reglas + endpoints + tests. ✅
 - **T29.2** Frontend: vista `/alertas` + guards por rol + e2e.
 
 ---

@@ -218,8 +218,15 @@ CREATE TABLE IF NOT EXISTS alertas_meta (
 -- SPEC-29 (R29.1): el rol BUYER entra al CHECK de usuarios. Drop
 -- idempotente del constraint viejo (nombre auto-generado por PG).
 DO $$ BEGIN
-  ALTER TABLE usuarios DROP CONSTRAINT usuarios_rol_check;
-EXCEPTION WHEN undefined_object THEN NULL;
+  -- solo re-crea si la definición vieja no incluye BUYER — evita DDL
+  -- en cada openDb() una vez migrada la base.
+  IF EXISTS (SELECT 1 FROM pg_constraint c
+             JOIN pg_namespace n ON n.oid = c.connamespace
+             WHERE c.conname = 'usuarios_rol_check'
+               AND n.nspname = current_schema()
+               AND pg_get_constraintdef(c.oid) NOT LIKE '%BUYER%') THEN
+    ALTER TABLE usuarios DROP CONSTRAINT usuarios_rol_check;
+  END IF;
 END $$;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint c

@@ -24,13 +24,14 @@ export function candidatas({ productos, stats, ordenes, corte }) {
     const demanda = s.demanda_diaria ?? 0;
     const etiqueta = `${p.nombre} (${p.sku})`;
 
-    if (p.stock_actual === 0) {
-      // En cero solo alerta si hay demanda real que se pierde; un
-      // dormido sin stock no tiene capital inmovilizado que avisar.
+    if (p.stock_actual <= 0) {
+      // En cero (o negativo por un ajuste mal cargado) solo alerta
+      // si hay demanda real que se pierde; un dormido sin stock no
+      // tiene capital inmovilizado que avisar.
       if (demanda > 0) {
         const margenDia =
           s.margen_unitario != null
-            ? ` — se pierden ~${money(demanda * s.margen_unitario)}/día de margen`
+            ? ` — se pierden ~${money(Math.max(0, demanda * s.margen_unitario))}/día de margen`
             : '';
         out.push({
           tipo: 'QUIEBRE',
@@ -82,7 +83,7 @@ export function candidatas({ productos, stats, ordenes, corte }) {
 async function insertarNuevas(db, cands) {
   const existentes = await db.all(
     `SELECT tipo, producto_id, orden_id FROM alertas
-     WHERE leida = 0 OR fecha_creacion > now() - interval '24 hours'`,
+     WHERE leida = 0 OR fecha_creacion > now() - interval '${DEDUP_HORAS} hours'`,
   );
   const clave = (a) => `${a.tipo}:${a.producto_id ?? ''}:${a.orden_id ?? ''}`;
   const vistas = new Set(existentes.map(clave));
@@ -100,13 +101,25 @@ async function insertarNuevas(db, cands) {
   return nuevas;
 }
 
-export async function evaluarAlertas() {
+// Mutex in-process (la app corre single-process): dos evaluaciones
+// concurrentes insertarían duplicados al leer `existentes` antes del
+// commit del otro — las llamadas se encolan en una sola promesa.
+let evalPromise = null;
+
+export function evaluarAlertas() {
+  evalPromise ??= evaluarAhora().finally(() => {
+    evalPromise = null;
+  });
+  return evalPromise;
+}
+
+async function evaluarAhora() {
   const db = await openDb();
   const [{ hoy }, stats, productos, ordenes] = await Promise.all([
     db.get('SELECT CURRENT_DATE::text AS hoy'),
     estadisticasDemandaBulk(DIAS_VENTANA),
     db.all(
-      `SELECT p.id, p.sku, p.nombre, p.stock_actual, p.precio_venta,
+      `SELECT p.id, p.sku, p.nombre, p.stock_actual,
               COALESCE((pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
                        pr.tiempo_entrega_dias)::double precision AS lead_esperado
        FROM productos p JOIN proveedores pr ON pr.id = p.proveedor_id`,
@@ -130,27 +143,30 @@ export async function evaluarAlertas() {
   });
   const nuevas = await insertarNuevas(db, cands);
   await db.run(
-    `INSERT INTO alertas_meta (clave, valor) VALUES ('ultima_eval', now()::text)
+    `INSERT INTO alertas_meta (clave, valor)
+     VALUES ('ultima_eval', EXTRACT(EPOCH FROM now())::text)
      ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor`,
   );
   return { evaluadas: cands.length, nuevas };
 }
 
 // Lazy eval (R29.3): corre las reglas si la última evaluación tiene
-// más de EVAL_THROTTLE_MIN — sin scheduler.
-async function evaluarSiToca(db) {
+// más de EVAL_THROTTLE_MIN — sin scheduler. Un valor no parseable
+// cuenta como vieja: peor caso re-evalúa y auto-cura la meta.
+async function evaluarSiToca() {
+  const db = await openDb();
   const meta = await db.get(
     "SELECT valor FROM alertas_meta WHERE clave = 'ultima_eval'",
   );
-  const vieja =
-    !meta || Date.now() - Date.parse(meta.valor) > EVAL_THROTTLE_MIN * 60000;
+  const t = Number(meta?.valor);
+  const vieja = !Number.isFinite(t) || Date.now() / 1000 - t > EVAL_THROTTLE_MIN * 60;
   if (vieja) return evaluarAlertas();
   return null;
 }
 
 export async function listarAlertas({ leida, tipo }) {
   const db = await openDb();
-  await evaluarSiToca(db);
+  await evaluarSiToca();
 
   const where = [];
   const params = [];
