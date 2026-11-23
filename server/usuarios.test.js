@@ -2,7 +2,7 @@
 // SPEC-24: CRUD /api/usuarios solo ADMIN. DB ':memory:' compartida
 // por archivo — los describes crean usuarios propios para no pisar
 // el seed (los guards self/último-admin usan al admin del seed).
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 import { closeDb, openDb } from './db.js';
 import { loginComo } from './test-auth.js';

@@ -37,6 +37,10 @@ const IDENT_RE = /^[a-z][a-z0-9_]*$/;
 // Traduce placeholders '?' (estilo SQLite, que usan los modelos) a
 // '$1..$n'. Respeta literales entre comillas simples — un '?' dentro
 // de un string SQL no es placeholder.
+// Limitación conocida: no reconoce '?' dentro de comentarios SQL,
+// identificadores "...", dollar-quoting ni el operador jsonb ? —
+// ninguna query del dominio usa esas formas; si apareciera una,
+// escribir el $n literal y no pasar por prepare/run/get.
 function aPostgres(sql) {
   let i = 0;
   let out = '';
@@ -115,6 +119,12 @@ export async function openDb({ searchPath, connString } = {}) {
     state = db;
     return state;
   })();
+  // Un openDb fallido no debe envenenar el singleton: sin el reset,
+  // los próximos llamados re-tiran la misma promesa rechazada para
+  // siempre y el pool parcial queda leaked.
+  opening.catch(() => {
+    opening = undefined;
+  });
   return opening;
 }
 

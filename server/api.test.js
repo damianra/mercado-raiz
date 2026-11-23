@@ -372,7 +372,7 @@ describe('estado de producto recalculado al leer', () => {
     // stock — la API debe reportar CRITICO recalculando, no el valor
     // viejo de la columna.
     const prod = seedData.productos.find((p) => p.estado === 'OK');
-    db.prepare('UPDATE productos SET stock_actual = 0 WHERE sku = ?').run(prod.sku);
+    await db.prepare('UPDATE productos SET stock_actual = 0 WHERE sku = ?').run(prod.sku);
     const res = await get(`/productos?search=${prod.sku}`);
     const body = await res.json();
     expect(body.data[0].estado).toBe('CRITICO');
