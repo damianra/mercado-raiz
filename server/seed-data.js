@@ -446,5 +446,21 @@ export const seedData = {
       token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
+    {
+      id: 5,
+      email: 'buyer@mercadorai.com',
+      nombre: 'Laura Fernández',
+      rol: 'BUYER',
+      // demo-buyer-2026 — vista exclusiva /alertas (SPEC-29).
+      password_hash:
+        '$scrypt$N=16384,r=8,p=1$3+O5esZMAg/RK5tX8WbCHg==$Xh2wfilbEvveqE/rCnCce4lMpJ2bEFZvPNpfsQgus7+tALAeC34DqoJStCdeeLbM5NhETzKDfZRpxu1jC6ee1w==',
+      avatar_url: null,
+      activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
+      fecha_creacion: '2026-10-20T09:00:00',
+    },
   ],
 };

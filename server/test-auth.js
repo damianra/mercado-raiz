@@ -9,6 +9,7 @@ export const USUARIOS_TEST = {
   APROBADOR: { email: 'maria.lopez@mercadorai.com', password: 'demo-aprobadora-2026' },
   ADMIN: { email: 'admin@mercadorai.com', password: 'demo-admin-2026' },
   SERVICIO: { email: 'agente@mercadorai.com', password: 'demo-agente-2026' },
+  BUYER: { email: 'buyer@mercadorai.com', password: 'demo-buyer-2026' },
 };
 
 export async function loginComo(base, rol = 'ADMIN') {
