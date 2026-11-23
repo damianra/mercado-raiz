@@ -91,11 +91,13 @@ try {
       const filas = filasDe(tabla);
       if (!filas.length) { out.push([tabla, 0]); continue; }
       const colsDestino = await colsPg(tabla);
-      // SPEC-27: el sqlite viejo trae precio_unitario; el destino lo
-      // renombró a precio_venta (era semánticamente el precio de venta).
+      // SPEC-27: el sqlite viejo trae productos.precio_unitario; el
+      // destino lo renombró a precio_venta. El rename solo aplica si
+      // el nombre ORIGINAL no existe en destino — ordenes_compra
+      // conserva precio_unitario (snapshot del costo) y se copia tal cual.
       const rename = { precio_unitario: 'precio_venta' };
       const pares = Object.keys(filas[0])
-        .map((c) => [c, rename[c] ?? c])
+        .map((c) => [c, colsDestino.has(c) ? c : (rename[c] ?? c)])
         .filter(([, d]) => colsDestino.has(d));
       const stmt = t.prepare(
         `INSERT INTO ${tabla} (${pares.map(([, d]) => d).join(', ')}) VALUES (${pares.map(() => '?').join(', ')})`,

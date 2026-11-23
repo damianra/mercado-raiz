@@ -156,7 +156,7 @@ export function generarArticulos() {
 // El margen_pct resultante sobre venta queda en ~14–33%. Rangos
 // realistas de supermercado argentino: perfumería/F&V márgenes altos,
 // frescos bajos (rotación + merma).
-const MARGEN_CATEGORIA = {
+const MARKUP_CATEGORIA = {
   'Almacén': 0.22,
   'Desayuno y Merienda': 0.28,
   Bebidas: 0.35,
@@ -179,7 +179,7 @@ const PROVEEDOR_MAYORISTA = 8; // Distribuidora Nacional SA (seed-data)
 export function generarPreciosProveedor(articulos) {
   const filas = [];
   for (const a of articulos) {
-    const margen = MARGEN_CATEGORIA[a.categoria];
+    const margen = MARKUP_CATEGORIA[a.categoria];
     if (!margen) throw new Error(`Categoría sin margen: "${a.categoria}"`);
     const jitter = 0.9 + rand(a.ean, 'costo') * 0.2;
     const costoPpal = round2(a.precio_venta / (1 + margen * jitter));
