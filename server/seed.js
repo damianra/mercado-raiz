@@ -12,6 +12,7 @@ const tablas = [
   'refresh_tokens',
   'historial_stock',
   'ordenes_compra',
+  'producto_proveedor',
   'productos',
   'usuarios',
   'proveedores',

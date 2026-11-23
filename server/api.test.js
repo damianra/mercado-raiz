@@ -213,7 +213,7 @@ describe('GET /api/productos', () => {
        VALUES ('Proveedor Sin Rango', 9) RETURNING id`,
     );
     await db.run(
-      `INSERT INTO productos (sku, nombre, categoria, stock_actual, stock_minimo, precio_unitario, proveedor_id)
+      `INSERT INTO productos (sku, nombre, categoria, stock_actual, stock_minimo, precio_venta, proveedor_id)
        VALUES ('MR-TEST-LEAD', 'Producto test lead', 'Almacén', 5, 10, 100, ?)`,
       [prov.id],
     );
@@ -304,11 +304,31 @@ describe('GET /api/dashboard/stats', () => {
 
 // --- Mutaciones: van después de las lecturas para no mover los totales ---
 
+describe('GET /api/productos — margen (SPEC-27)', () => {
+  it('expone precio_venta, costo_unitario y margen_pct del proveedor principal', async () => {
+    const res = await get('/productos?limit=1');
+    const { data } = await res.json();
+    const p = data[0];
+    expect(p.precio_venta).toBeGreaterThan(0);
+    expect(p.costo_unitario).toBeGreaterThan(0);
+    expect(p.costo_unitario).toBeLessThan(p.precio_venta);
+    expect(p.margen_pct).toBeCloseTo(
+      Math.round(((p.precio_venta - p.costo_unitario) / p.precio_venta) * 1000) / 10,
+      5,
+    );
+  });
+});
+
 describe('POST /api/ordenes', () => {
   // Precios reales ARS (SPEC-22): el umbral es $50.000 — 1 unidad de
   // cualquier artículo queda por debajo y auto-aprueba.
   const prod1 = seedData.productos.find((p) => p.id === 1);
-  const cantidadSobreUmbral = Math.ceil(UMBRAL_APROBACION / prod1.precio_unitario);
+  // SPEC-27: el monto sale del costo del proveedor, no del precio_venta.
+  const costo1 =
+    seedData.producto_proveedor.find(
+      (pp) => pp.producto_id === 1 && pp.proveedor_id === prod1.proveedor_id,
+    )?.costo_unitario ?? prod1.precio_venta;
+  const cantidadSobreUmbral = Math.ceil(UMBRAL_APROBACION / costo1);
 
   it('crea una orden bajo el umbral ($50.000) auto-aprobada con orden_id secuencial', async () => {
     const res = await post('/ordenes', { producto_id: 1, cantidad: 1 });
@@ -316,7 +336,7 @@ describe('POST /api/ordenes', () => {
     const { success, data } = await res.json();
     expect(success).toBe(true);
     expect(data.orden_id).toBe('OC-012'); // sigue al OC-011 del seed
-    expect(data.monto_total).toBeCloseTo(prod1.precio_unitario, 2);
+    expect(data.monto_total).toBeCloseTo(costo1, 2);
     expect(data.estado).toBe('APROBADA');
     expect(data.requiere_aprobacion).toBe(false);
     expect(data.aprobado_por).toBe('auto');
@@ -341,7 +361,7 @@ describe('POST /api/ordenes', () => {
   it('respeta el override explícito de requiere_aprobacion', async () => {
     const res = await post('/ordenes', { producto_id: 1, cantidad: 1, requiere_aprobacion: true });
     const { data } = await res.json();
-    expect(data.monto_total).toBeCloseTo(prod1.precio_unitario, 2);
+    expect(data.monto_total).toBeCloseTo(costo1, 2);
     expect(data.estado).toBe('PENDIENTE_APROBACION');
   });
 

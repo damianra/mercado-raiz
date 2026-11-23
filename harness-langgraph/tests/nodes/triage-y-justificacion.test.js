@@ -51,7 +51,7 @@ const producto = (id) => ({
   nombre: `Producto ${id}`,
   stock_actual: 5,
   stock_minimo: 20,
-  precio_unitario: 10,
+  costo_unitario: 10,
   proveedor: { nombre: 'Prov', tiempo_entrega_dias: 2 },
 });
 

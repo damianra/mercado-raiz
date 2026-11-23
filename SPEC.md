@@ -1949,6 +1949,35 @@ manual de la migración (counts y muestras coinciden con
   endpoint) y `calcular-cantidad` usa `lead_dias_esperado` +
   `z·σ·√lead` con `Z_SEGURIDAD`/`DEMANDA_DIAS` en config.
 - **T26.8** `POST /run` del harness acepta `{limite: N}` opcional: ✅
+
+## SPEC-27 · Precios por proveedor y margen — `producto_proveedor`
+
+El modelo actual usa `productos.precio_unitario` como precio de venta
+y a la vez como costo de compra → el margen no existe. Se divide en
+`precio_venta` (cliente) + `producto_proveedor.costo_unitario`
+(costo por proveedor; un producto puede tener varios proveedores).
+
+**R27.1** `producto_proveedor(producto_id, proveedor_id,
+costo_unitario, lead_dias?, es_principal, activo)` — UNIQUE
+(producto, proveedor). `productos.proveedor_id` queda como el
+principal (denormalizado). Upgrade: `precio_unitario`→`precio_venta`.
+
+**R27.2** Seed: márgenes realistas por categoría (18%–45%), costo
+principal = venta/(1+margen) con jitter determinístico; ~40% de los
+artículos con un proveedor alternativo (mayorista general nuevo,
+más barato pero más lento) → el agente tiene qué elegir.
+
+**R27.3** La orden se precia con el costo del proveedor elegido
+(`ordenes_compra.precio_unitario` queda como snapshot del costo
+pagado). El agente puede elegir proveedor por costo/lead.
+
+- **T27.1** Schema + seed + modelos (producto/orden exponen
+  precio_venta, costo y margen_pct) + tests. ✅
+- **T27.2** Endpoints/stats: precios por proveedor en el detalle del
+  producto + margen perdido en quiebres.
+- **T27.3** Agente: elige proveedor (costo vs lead) y lo envía en la
+  orden; `calcular-cantidad` usa ese costo.
+- **T27.4** Dashboard: margen en quiebres/listado.
   recorta `productosBajos` tras leer-inventario — corridas de
   validación acotadas sin tocar el pipeline ni la DB.
 - **T26.7** Dashboard: columna demanda/cobertura (R26.9) + e2e. ✅

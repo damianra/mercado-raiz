@@ -32,7 +32,7 @@ const SELECT_ORDEN = `SELECT o.id, o.orden_id, o.cantidad, o.precio_unitario, o.
     o.motivo_rechazo, o.fecha_aprobacion, o.fecha_creacion, o.fecha_actualizacion,
     p.id AS p_id, p.sku AS p_sku, p.nombre AS p_nombre, p.categoria AS p_categoria,
     p.stock_actual AS p_stock_actual, p.stock_minimo AS p_stock_minimo,
-    p.precio_unitario AS p_precio_unitario, p.ubicacion AS p_ubicacion,
+    p.precio_venta AS p_precio_venta, p.ubicacion AS p_ubicacion,
     pr.id AS pr_id, pr.nombre AS pr_nombre, pr.contacto AS pr_contacto,
     pr.telefono AS pr_telefono, pr.email AS pr_email,
     pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
@@ -74,7 +74,7 @@ function mapOrdenDetalle(row) {
     producto: {
       ...mapOrdenResumen(row).producto,
       categoria: row.p_categoria,
-      precio_unitario: row.p_precio_unitario,
+      precio_venta: row.p_precio_venta,
       ubicacion: row.p_ubicacion,
       estado: estadoProducto(row.p_stock_actual, row.p_stock_minimo),
     },
@@ -169,14 +169,19 @@ const INSERT_ORDEN = `INSERT INTO ordenes_compra
  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 async function insertarOrden(t, ordenId, producto, { cantidad, requiereAprobacion, analisisIa }, ts) {
-  const montoTotal = Math.round(cantidad * producto.precio_unitario * 100) / 100;
+  // SPEC-27: la orden se precia con el costo del proveedor
+  // (producto_proveedor), no con el precio de venta. Fallback al
+  // precio_venta si el producto no tiene fila de precios (insert
+  // manual en tests) — el margen queda en 0 pero la orden sale.
+  const costo = producto.costo_unitario ?? producto.precio_venta;
+  const montoTotal = Math.round(cantidad * costo * 100) / 100;
   const requiere = requiereAprobacion ?? montoTotal >= UMBRAL_APROBACION;
   await t.prepare(INSERT_ORDEN).run(
     ordenId,
     producto.id,
     producto.proveedor_id,
     cantidad,
-    producto.precio_unitario,
+    costo,
     montoTotal,
     requiere ? 'PENDIENTE_APROBACION' : 'APROBADA',
     requiere ? 1 : 0,
@@ -196,7 +201,13 @@ const PROXIMO_ID =
 // Devuelve null si el producto no existe (el controller → 404).
 export async function createOrden({ productoId, cantidad, requiereAprobacion, analisisIa }) {
   const db = await openDb();
-  const producto = await db.get('SELECT * FROM productos WHERE id = ?', [productoId]);
+  const producto = await db.get(
+    `SELECT p.*, pp.costo_unitario FROM productos p
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+     WHERE p.id = ?`,
+    [productoId],
+  );
   if (!producto) return null;
 
   // Transacción: el MAX(orden_id) y el INSERT deben ser atómicos o dos
@@ -221,7 +232,10 @@ export async function createOrden({ productoId, cantidad, requiereAprobacion, an
  */
 export async function createOrdenesBatch(items) {
   const db = await openDb();
-  const buscarProducto = db.prepare('SELECT * FROM productos WHERE id = ?');
+  const buscarProducto = db.prepare(`SELECT p.*, pp.costo_unitario FROM productos p
+    LEFT JOIN producto_proveedor pp
+      ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+    WHERE p.id = ?`);
 
   const faltantes = [];
   const resueltos = [];

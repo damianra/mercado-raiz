@@ -46,7 +46,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
   const prod = productos?.find((p) => p.id === Number(productoId)) ?? null;
   const cant = Number(cantidad);
   const valido = !!prod && Number.isInteger(cant) && cant > 0;
-  const montoEstimado = valido ? cant * prod.precio_unitario : null;
+  const montoEstimado = valido ? cant * (prod.costo_unitario ?? prod.precio_venta) : null;
 
   const submit = async () => {
     if (!valido || enviando) return;
@@ -152,7 +152,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
               {prod && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-xs text-warmgray">
                   <Truck size={12} />
-                  {prod.proveedor?.nombre} · {formatMoney(prod.precio_unitario)} /
+                  {prod.proveedor?.nombre} · {formatMoney(prod.costo_unitario ?? prod.precio_venta)} /
                   unidad · stock actual {prod.stock_actual}
                 </p>
               )}

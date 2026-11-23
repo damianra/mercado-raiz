@@ -34,7 +34,12 @@ function mapProducto(row) {
     categoria: row.categoria,
     stock_actual: row.stock_actual,
     stock_minimo: row.stock_minimo,
-    precio_unitario: row.precio_unitario,
+    precio_venta: row.precio_venta,
+    costo_unitario: row.pp_costo ?? null,
+    margen_pct:
+      row.pp_costo != null && row.precio_venta > 0
+        ? Math.round(((row.precio_venta - row.pp_costo) / row.precio_venta) * 1000) / 10
+        : null,
     proveedor: {
       id: row.pr_id,
       nombre: row.pr_nombre,
@@ -73,14 +78,18 @@ export async function listProductos({ estado, categoria, proveedorId, search, pa
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  const fromWhere = `FROM productos p JOIN proveedores pr ON pr.id = p.proveedor_id${
+  const fromWhere = `FROM productos p
+    JOIN proveedores pr ON pr.id = p.proveedor_id
+    LEFT JOIN producto_proveedor pp
+      ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1${
     where.length ? ` WHERE ${where.join(' AND ')}` : ''
   }`;
 
   const { c: total } = await db.get(`SELECT COUNT(*) AS c ${fromWhere}`, params);
   const rows = await db.all(
     `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
-            p.precio_unitario, p.ubicacion, p.fecha_actualizacion,
+            p.precio_venta, p.ubicacion, p.fecha_actualizacion,
+            pp.costo_unitario AS pp_costo,
             pr.id AS pr_id, pr.nombre AS pr_nombre,
             pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
             pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max

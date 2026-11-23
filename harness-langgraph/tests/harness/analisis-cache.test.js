@@ -19,7 +19,7 @@ const producto = {
   nombre: 'Fideos',
   stock_actual: 5,
   stock_minimo: 20,
-  precio_unitario: 10,
+  costo_unitario: 10,
   categoria: 'Almacén',
   proveedor: { nombre: 'Prov', tiempo_entrega_dias: 2 },
 };
@@ -63,7 +63,7 @@ describe('hashAnalisis', () => {
   });
 
   it('cambia si cambia el precio o el lead time (cantidad/monto → justificación)', () => {
-    expect(cache.hashAnalisis({ ...producto, precio_unitario: 12 }, stats))
+    expect(cache.hashAnalisis({ ...producto, costo_unitario: 12 }, stats))
       .not.toBe(cache.hashAnalisis(producto, stats));
     const otroProveedor = { ...producto, proveedor: { ...producto.proveedor, tiempo_entrega_dias: 5 } };
     expect(cache.hashAnalisis(otroProveedor, stats)).not.toBe(cache.hashAnalisis(producto, stats));

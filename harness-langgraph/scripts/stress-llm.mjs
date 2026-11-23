@@ -75,7 +75,7 @@ function articulo() {
     categoria,
     stock_actual: seq % 9,
     stock_minimo: 10 + (seq % 15),
-    precio_unitario: 1 + (seq % 40) * 0.37,
+    costo_unitario: 1 + (seq % 40) * 0.37,
     proveedor: { nombre: `Proveedor ${(seq % 6) + 1}`, tiempo_entrega_dias: 1 + (seq % 5) },
     ventas: Array.from({ length: 4 + (seq % 6) }, (_, i) => ({
       fecha: `2026-11-${String(1 + ((seq + i) % 9)).padStart(2, '0')}`,
@@ -176,7 +176,7 @@ async function procesarArticulo(p) {
     const ss = config.zSeguridad * (p.stats.desvio_demanda ?? 0) * Math.sqrt(lead);
     const objetivo = Math.ceil(analisis.demanda_diaria * (lead + 7) + ss);
     const cantidad = Math.max(objetivo - p.stock_actual, p.stock_minimo * 2 - p.stock_actual, 1);
-    const monto = Math.round(cantidad * p.precio_unitario * 100) / 100;
+    const monto = Math.round(cantidad * p.costo_unitario * 100) / 100;
     try {
       const { r, reg } = await llamada('justificacion', llm, promptGenerarAnalisis(p, analisis, cantidad, monto));
       salida.llamadas.push(reg);

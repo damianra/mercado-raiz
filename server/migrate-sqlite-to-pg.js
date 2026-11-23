@@ -91,12 +91,19 @@ try {
       const filas = filasDe(tabla);
       if (!filas.length) { out.push([tabla, 0]); continue; }
       const colsDestino = await colsPg(tabla);
-      const cols = Object.keys(filas[0]).filter((c) => colsDestino.has(c));
+      // SPEC-27: el sqlite viejo trae productos.precio_unitario; el
+      // destino lo renombró a precio_venta. El rename solo aplica si
+      // el nombre ORIGINAL no existe en destino — ordenes_compra
+      // conserva precio_unitario (snapshot del costo) y se copia tal cual.
+      const rename = { precio_unitario: 'precio_venta' };
+      const pares = Object.keys(filas[0])
+        .map((c) => [c, colsDestino.has(c) ? c : (rename[c] ?? c)])
+        .filter(([, d]) => colsDestino.has(d));
       const stmt = t.prepare(
-        `INSERT INTO ${tabla} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+        `INSERT INTO ${tabla} (${pares.map(([, d]) => d).join(', ')}) VALUES (${pares.map(() => '?').join(', ')})`,
       );
-      for (const fila of filas) await stmt.run(...cols.map((c) => fila[c]));
-      if (cols.includes('id')) {
+      for (const fila of filas) await stmt.run(...pares.map(([c]) => fila[c]));
+      if (pares.some(([, d]) => d === 'id')) {
         await t.query(
           `SELECT setval(pg_get_serial_sequence('${tabla}', 'id'), MAX(id)) FROM ${tabla}`,
         );
@@ -116,7 +123,7 @@ try {
     console.log(`  ${marca} ${tabla}: sqlite=${origen} → pg=${destino}`);
   }
   // Muestras: primer producto y primer usuario, campos clave.
-  const p = await db.get(`SELECT sku, ean, precio_unitario FROM productos ORDER BY id LIMIT 1`);
+  const p = await db.get(`SELECT sku, ean, precio_venta FROM productos ORDER BY id LIMIT 1`);
   const u = await db.get(`SELECT email, rol, password_hash IS NOT NULL AS tiene_hash FROM usuarios ORDER BY id LIMIT 1`);
   console.log(`  muestra producto: ${JSON.stringify(p)}`);
   console.log(`  muestra usuario : ${JSON.stringify(u)}`);
