@@ -18,6 +18,15 @@ export const config = {
   /** URL base del backend MVC (Express + SQLite). */
   backendUrl: required('BACKEND_URL', 'http://localhost:4000'),
 
+  /**
+   * Cuenta de servicio del agente (SPEC-23): el backend exige JWT
+   * desde T23.1 — backend-client hace login con estas credenciales
+   * y re-login ante 401/expiración. El usuario `agente@` viene en
+   * el seed con rol SERVICIO (sin permisos de aprobación).
+   */
+  agenteEmail: required('AGENTE_EMAIL', 'agente@mercadorai.com'),
+  agentePassword: required('AGENTE_PASSWORD', 'demo-agente-2026'),
+
   /** Servidor Ollama local. */
   ollamaBaseUrl: required('OLLAMA_BASE_URL', 'http://localhost:11434'),
   ollamaModel: required('OLLAMA_MODEL', 'qwen3:8b'),

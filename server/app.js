@@ -20,7 +20,12 @@ export async function createApp() {
   // El logger va antes del rate limit: los 429 también quedan
   // registrados (útil para ver abuso, no solo tráfico exitoso).
   app.use(requestLogger);
-  app.use('/api', rateLimit({ windowMs: 60_000, max: 20 }));
+  // Escrituras: 20/min por IP en dev/prod. API_RATE_LIMIT lo sube en
+  // CI — los e2e comparten IP y acumulan login/refresh/POSTs.
+  app.use(
+    '/api',
+    rateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT ?? 20) }),
+  );
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 

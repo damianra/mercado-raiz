@@ -8,6 +8,31 @@ import { join } from 'node:path';
 
 const ENDPOINTS = [
   {
+    "method": "post",
+    "path": "/api/auth/login",
+    "file": "auth.js"
+  },
+  {
+    "method": "post",
+    "path": "/api/auth/refresh",
+    "file": "auth.js"
+  },
+  {
+    "method": "post",
+    "path": "/api/auth/logout",
+    "file": "auth.js"
+  },
+  {
+    "method": "get",
+    "path": "/api/auth/me",
+    "file": "auth.js"
+  },
+  {
+    "method": "post",
+    "path": "/api/auth/cambiar-password",
+    "file": "auth.js"
+  },
+  {
     "method": "get",
     "path": "/api/dashboard/stats",
     "file": "dashboard.js"

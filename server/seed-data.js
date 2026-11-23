@@ -305,14 +305,24 @@ export const seedData = {
 
   historial_stock,
 
+  // SPEC-23: password_hash scrypt nativo de passwords dev
+  // documentadas en README → "Usuarios demo". El formato lleva
+  // sus params (N,r,p), así el hash sigue verificando si cambian.
+  // `agente` es la cuenta de servicio del harness (rol SERVICIO).
   usuarios: [
     {
       id: 1,
       email: 'carlos.martinez@mercadorai.com',
       nombre: 'Carlos Martínez',
       rol: 'GERENTE',
+      password_hash:
+        '$scrypt$N=16384,r=8,p=1$hIDogQ5SFYqpjEIZSEau+Q==$MXmP4qfye7YHFAQcRlWi/ygd76WFCgSHKIadL9rvL/UKu6L1YCd2zebmMHDyEbt8YCTeJw8cNnVR9VdniBoZ9Q==',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
     {
@@ -320,8 +330,14 @@ export const seedData = {
       email: 'maria.lopez@mercadorai.com',
       nombre: 'María López',
       rol: 'APROBADOR',
+      password_hash:
+        '$scrypt$N=16384,r=8,p=1$ad5XO4iCEJL4tCsGeZMSXA==$24xdPDqU7JO3FI+tHOIGOfG3bPg5wEWNqMaEWU5lqhRkMEx3hracSoDEewCkFSDVAS4m+rlqf+ekiiZMpCWAzg==',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
     {
@@ -329,8 +345,29 @@ export const seedData = {
       email: 'admin@mercadorai.com',
       nombre: 'Administrador',
       rol: 'ADMIN',
+      password_hash:
+        '$scrypt$N=16384,r=8,p=1$FneysqBZf3M12xvZr+IOzg==$E0rLpYS0FSfje1+VcRFEFONTWCOK08J86kEuxc44/dWmmc4ajxLDGhZNy1U+2I/IPEY8ahQ2ln5KNjon92ocoQ==',
       avatar_url: null,
       activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
+      fecha_creacion: '2026-10-20T09:00:00',
+    },
+    {
+      id: 4,
+      email: 'agente@mercadorai.com',
+      nombre: 'Agente de reposición',
+      rol: 'SERVICIO',
+      password_hash:
+        '$scrypt$N=16384,r=8,p=1$iDD/WUQrG0+zE93CDo2hBA==$uObwlPoXoUXRrDocEp6xhVyXtKm3ygEPgHr4yseKYx4twiYiJ1LEXFB1FJGdYsxspUexotqsyZoLbV8ZBxpLrg==',
+      avatar_url: null,
+      activo: 1,
+      intentos_fallidos: 0,
+      bloqueado_hasta: null,
+      ultimo_login: null,
+      token_version: 0,
       fecha_creacion: '2026-10-20T09:00:00',
     },
   ],

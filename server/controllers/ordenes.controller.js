@@ -165,7 +165,8 @@ function ordenPendienteOError(req, res) {
 
 export function aprobar(req, res) {
   if (!ordenPendienteOError(req, res)) return;
-  const aprobadoPor = capString(req.body?.aprobado_por, 200) || 'sistema';
+  // aprobado_por sale del token (SPEC-23) — el body ya no lo setea.
+  const aprobadoPor = req.usuario.email;
   const orden = aprobarOrden(req.params.orden_id, aprobadoPor);
   res.json({
     success: true,
@@ -183,7 +184,7 @@ export function rechazar(req, res) {
   const motivo = typeof req.body?.motivo === 'string' ? req.body.motivo.trim() : '';
   if (!motivo) return badRequest(res, 'motivo es requerido para rechazar una orden');
   if (!ordenPendienteOError(req, res)) return;
-  const rechazadoPor = capString(req.body?.rechazado_por, 200) || 'sistema';
+  const rechazadoPor = req.usuario.email; // del token (SPEC-23)
   const orden = rechazarOrden(req.params.orden_id, rechazadoPor, capString(motivo, 500));
   res.json({
     success: true,

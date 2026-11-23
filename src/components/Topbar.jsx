@@ -1,8 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Menu, TriangleAlert } from 'lucide-react';
+import { Bell, LogOut, Menu, TriangleAlert } from 'lucide-react';
 import { formatMoney } from '../data/orders.js';
 
-export default function Topbar({ urgentes = 0, alertas = [], onMenu, onSelectOrden }) {
+const ROL_LABEL = {
+  ADMIN: 'Administración',
+  GERENTE: 'Gerencia',
+  APROBADOR: 'Aprobación',
+  SERVICIO: 'Servicio',
+};
+
+const iniciales = (nombre = '') =>
+  nombre
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('') || '?';
+
+export default function Topbar({
+  urgentes = 0,
+  alertas = [],
+  onMenu,
+  onSelectOrden,
+  usuario,
+  onLogout,
+}) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef(null);
 
@@ -112,12 +134,24 @@ export default function Topbar({ urgentes = 0, alertas = [], onMenu, onSelectOrd
           </div>
           <div className="flex items-center gap-2">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-root text-sm font-bold text-white">
-              CM
+              {iniciales(usuario?.nombre)}
             </span>
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-grafito">Carlos M.</p>
-              <p className="text-xs text-warmgray">Compras</p>
+              <p className="text-sm font-semibold text-grafito">
+                {usuario?.nombre ?? '—'}
+              </p>
+              <p className="text-xs text-warmgray">
+                {ROL_LABEL[usuario?.rol] ?? usuario?.rol ?? '—'}
+              </p>
             </div>
+            <button
+              onClick={onLogout}
+              className="rounded-lg p-2 text-grafito transition-colors hover:bg-root/10"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+            >
+              <LogOut size={18} strokeWidth={1.5} />
+            </button>
           </div>
         </div>
       </div>
