@@ -69,7 +69,7 @@ necesita variante, extenderlo con `className` antes que duplicar markup.
 - **Backend**: cada `server/routes/<name>.js` que exporte un `Router` default se monta solo en `/api/<name>` — no tocar `server/app.js` ni `server/db.js`.
 - **Secretos/config**: API keys y config sensible van en `.env` (gitignored), leídas via `process.env.NOMBRE` — `server/index.js` ya carga `dotenv/config`. Toda variable que la app use debe declararse en `.env.example` (commiteado, con valor placeholder o vacío) para que otro dev sepa qué configurar. Nunca hardcodear secretos ni commitear `.env`.
 - **Docker**: `Dockerfile`, `.dockerignore` (y `nginx.conf` si aplica) los provee el orquestador — no modificarlos ni crear otros. El backend ya sirve `dist/` si existe, así que el contenedor fullstack corre solo `node server/index.js`. Excepción (SPEC-25): `docker-compose.yml` es infra de dev (Postgres local), no build de la app — sí es del repo.
-- **Capa de datos**: schema en `server/schema.sql` (idempotente), seed en `server/seed-data.js` (se inserta si la tabla está vacía); queries con `q()` prepared statements de `server/db.js` (despacha por `DB_DRIVER`).
+- **Capa de datos**: schema en `server/schema.sql` (idempotente), seed en `server/seed-data.js` (se inserta si la tabla está vacía); queries async `get`/`all`/`run`/`prepare`/`tx` de `server/db.js` (placeholders `?` → `$n`).
 
 ## Arquitectura backend
 
