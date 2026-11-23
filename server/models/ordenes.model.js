@@ -35,8 +35,15 @@ const SELECT_ORDEN = `SELECT o.id, o.orden_id, o.cantidad, o.precio_unitario, o.
     p.precio_unitario AS p_precio_unitario, p.ubicacion AS p_ubicacion,
     pr.id AS pr_id, pr.nombre AS pr_nombre, pr.contacto AS pr_contacto,
     pr.telefono AS pr_telefono, pr.email AS pr_email,
-    pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias
+    pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
+    pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max
   ${FROM_ORDEN}`;
+
+function leadEsperado(row) {
+  return row.pr_min != null && row.pr_max != null
+    ? (row.pr_min + row.pr_max) / 2
+    : row.pr_tiempo_entrega_dias;
+}
 
 function mapOrdenResumen(row) {
   return {
@@ -53,6 +60,9 @@ function mapOrdenResumen(row) {
       id: row.pr_id,
       nombre: row.pr_nombre,
       tiempo_entrega_dias: row.pr_tiempo_entrega_dias,
+      tiempo_entrega_min_dias: row.pr_min,
+      tiempo_entrega_max_dias: row.pr_max,
+      lead_dias_esperado: leadEsperado(row),
     },
     cantidad: row.cantidad,
     precio_unitario: row.precio_unitario,
@@ -81,6 +91,9 @@ function mapOrdenDetalle(row) {
       telefono: row.pr_telefono,
       email: row.pr_email,
       tiempo_entrega_dias: row.pr_tiempo_entrega_dias,
+      tiempo_entrega_min_dias: row.pr_min,
+      tiempo_entrega_max_dias: row.pr_max,
+      lead_dias_esperado: leadEsperado(row),
     },
     aprobado_por: row.aprobado_por,
     motivo_rechazo: row.motivo_rechazo,

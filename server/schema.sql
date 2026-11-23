@@ -14,6 +14,15 @@ CREATE TABLE IF NOT EXISTS proveedores (
   telefono TEXT,
   email TEXT,
   tiempo_entrega_dias INTEGER NOT NULL DEFAULT 1,
+  -- SPEC-26 (R26.4): lead como rango + datos comerciales. El lead
+  -- esperado de cálculo es (min+max)/2 cuando hay rango, si no
+  -- tiempo_entrega_dias (convención documentada en SPEC-26).
+  tiempo_entrega_min_dias INTEGER,
+  tiempo_entrega_max_dias INTEGER,
+  confiabilidad_pct INTEGER CHECK (confiabilidad_pct BETWEEN 0 AND 100),
+  pedido_minimo_monto DOUBLE PRECISION NOT NULL DEFAULT 0,
+  costo_envio DOUBLE PRECISION NOT NULL DEFAULT 0,
+  categorias_cubiertas TEXT[] NOT NULL DEFAULT '{}',
   activo INTEGER NOT NULL DEFAULT 1,
   fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -137,3 +146,13 @@ CREATE TABLE IF NOT EXISTS ventas (
 
 CREATE INDEX IF NOT EXISTS idx_ventas_producto_fecha ON ventas(producto_id, fecha);
 CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
+
+-- SPEC-26 (R26.4) — upgrades para bases ya creadas (CREATE IF NOT
+-- EXISTS no altera tablas existentes; idempotente).
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tiempo_entrega_min_dias INTEGER;
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tiempo_entrega_max_dias INTEGER;
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS confiabilidad_pct INTEGER
+  CHECK (confiabilidad_pct BETWEEN 0 AND 100);
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS pedido_minimo_monto DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS costo_envio DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS categorias_cubiertas TEXT[] NOT NULL DEFAULT '{}';

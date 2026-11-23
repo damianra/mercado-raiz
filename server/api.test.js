@@ -150,6 +150,11 @@ describe('GET /api/ordenes/:orden_id', () => {
     expect(orden.proveedor).toMatchObject({
       nombre: provOc2.nombre,
       tiempo_entrega_dias: provOc2.tiempo_entrega_dias,
+      tiempo_entrega_min_dias: provOc2.tiempo_entrega_min_dias,
+      tiempo_entrega_max_dias: provOc2.tiempo_entrega_max_dias,
+      // R26.4: lead esperado = (min+max)/2 cuando hay rango.
+      lead_dias_esperado:
+        (provOc2.tiempo_entrega_min_dias + provOc2.tiempo_entrega_max_dias) / 2,
     });
     expect(orden.monto_total).toBe(oc2.monto_total);
     expect(orden.analisis_ia).toBeTruthy();
@@ -172,6 +177,31 @@ describe('GET /api/productos', () => {
         p.stock_actual === 0 ? 'CRITICO' : p.stock_actual < p.stock_minimo ? 'STOCK_BAJO' : 'OK';
       expect(p.estado).toBe(esperado);
       expect(p.proveedor.nombre).toBeTruthy();
+      // SPEC-26 T26.2: el producto expone el lead del proveedor con
+      // su valor esperado — es el dato que usa el agente (T26.6).
+      expect(p.proveedor.lead_dias_esperado).toBeGreaterThan(0);
+    }
+  });
+
+  it('los proveedores del seed traen los campos comerciales de R26.4', async () => {
+    // Sin endpoint de proveedores todavía (T26.3) — se verifica el
+    // schema+seed directo y el fallback del lead esperado.
+    for (const p of seedData.proveedores) {
+      expect(p.tiempo_entrega_min_dias).toBeLessThanOrEqual(p.tiempo_entrega_max_dias);
+      expect(p.confiabilidad_pct).toBeGreaterThanOrEqual(0);
+      expect(p.confiabilidad_pct).toBeLessThanOrEqual(100);
+      expect(Array.isArray(p.categorias_cubiertas)).toBe(true);
+      expect(p.pedido_minimo_monto).toBeGreaterThanOrEqual(0);
+      expect(p.costo_envio).toBeGreaterThanOrEqual(0);
+    }
+    const rows = await db.all('SELECT * FROM proveedores');
+    for (const p of rows) {
+      expect(p.tiempo_entrega_min_dias).not.toBeNull();
+      expect(p.tiempo_entrega_max_dias).not.toBeNull();
+      expect(Array.isArray(p.categorias_cubiertas)).toBe(true);
+      // El rango incluye el lead nominal del seed.
+      expect(p.tiempo_entrega_dias).toBeGreaterThanOrEqual(p.tiempo_entrega_min_dias);
+      expect(p.tiempo_entrega_dias).toBeLessThanOrEqual(p.tiempo_entrega_max_dias);
     }
   });
 

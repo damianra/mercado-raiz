@@ -26,7 +26,17 @@ function mapProducto(row) {
     stock_actual: row.stock_actual,
     stock_minimo: row.stock_minimo,
     precio_unitario: row.precio_unitario,
-    proveedor: { id: row.pr_id, nombre: row.pr_nombre },
+    proveedor: {
+      id: row.pr_id,
+      nombre: row.pr_nombre,
+      tiempo_entrega_dias: row.pr_tiempo_entrega_dias,
+      tiempo_entrega_min_dias: row.pr_min,
+      tiempo_entrega_max_dias: row.pr_max,
+      lead_dias_esperado:
+        row.pr_min != null && row.pr_max != null
+          ? (row.pr_min + row.pr_max) / 2
+          : row.pr_tiempo_entrega_dias,
+    },
     ubicacion: row.ubicacion,
     estado: estadoProducto(row.stock_actual, row.stock_minimo),
     fecha_actualizacion: row.fecha_actualizacion,
@@ -65,7 +75,9 @@ export async function listProductos({ estado, categoria, proveedorId, search, pa
   const rows = await db.all(
     `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
             p.precio_unitario, p.ubicacion, p.fecha_actualizacion,
-            pr.id AS pr_id, pr.nombre AS pr_nombre
+            pr.id AS pr_id, pr.nombre AS pr_nombre,
+            pr.tiempo_entrega_dias AS pr_tiempo_entrega_dias,
+            pr.tiempo_entrega_min_dias AS pr_min, pr.tiempo_entrega_max_dias AS pr_max
      ${fromWhere}
      ORDER BY p.nombre ASC
      LIMIT ? OFFSET ?`,
