@@ -1893,6 +1893,14 @@ manual de la migración (counts y muestras coinciden con
 
 - **T26.1** `ventas` + `GET /api/ventas` + `seed-ventas.js`
   (determinístico, 90d, perfiles por categoría) + tests.
+  ✅ implementada — tabla con checks e índices (R26.1); endpoint
+  autenticado con filtros producto_id/desde/hasta/canal + `fecha`
+  servida como texto `YYYY-MM-DD` (un DATE serializado por node-pg
+  llegaba con la hora corrida por la TZ del host); `seed-ventas.js`
+  con FNV-1a por EAN, perfiles por categoría, finde, tendencias y
+  ~13% SKUs sin ventas → 114.822 filas/1.281 SKUs en seed real;
+  inserta por lotes de 400 en tx; opt-out en schemas de test.
+  10 tests nuevos (endpoint + determinismo del generador).
 - **T26.2** Enriquecer `proveedores` (R26.4) + seed actualizado.
 - **T26.3** CRUD `/api/proveedores` admin + tests.
 - **T26.4** Pantalla `/proveedores` front + e2e.

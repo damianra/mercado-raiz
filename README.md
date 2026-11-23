@@ -82,6 +82,7 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
+- `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
 - `GET|POST /api/usuarios` · `PATCH|DELETE /api/usuarios/:id` — CRUD de usuarios, solo rol `ADMIN` (SPEC-24; soft delete, revoca sesiones del afectado)
 
 Contrato completo en `SPEC.md` → SPEC-03.
