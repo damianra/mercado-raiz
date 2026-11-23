@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Leaf } from 'lucide-react';
+import Alertas from './pages/Alertas.jsx';
 import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
@@ -45,6 +46,21 @@ function Root() {
   // Guard de rutas (SPEC-23 R23.10): sin sesión → login, cualquiera
   // sea el path protegido pedido.
   if (!sesion) return <Login />;
+
+  // SPEC-29 (R29.1): el BUYER solo ve su dashboard de alertas —
+  // home propia (/ o /alertas) y 404 en todo lo demás.
+  if (sesion.usuario.rol === 'BUYER') {
+    return segmento === '' || segmento === 'index.html' || segmento === 'alertas' ? (
+      <Alertas usuario={sesion.usuario} />
+    ) : (
+      <NotFound />
+    );
+  }
+
+  // Y a la inversa: /alertas no existe para el resto de los roles
+  // (la API además deja pasar a ADMIN para auditoría — la vista es
+  // exclusiva del buyer).
+  if (segmento === 'alertas') return <NotFound />;
 
   if (segmento === 'usuarios') {
     // SPEC-24: la sección solo existe para ADMIN — al resto se le

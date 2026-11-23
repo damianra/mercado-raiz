@@ -7,6 +7,7 @@ const ROL_LABEL = {
   GERENTE: 'Gerencia',
   APROBADOR: 'Aprobación',
   SERVICIO: 'Servicio',
+  BUYER: 'Compras',
 };
 
 const iniciales = (nombre = '') =>
@@ -23,6 +24,10 @@ export default function Topbar({
   onMenu,
   onSelectOrden,
   usuario,
+  // SPEC-29: título/subtítulo por props — la vista /alertas del
+  // BUYER no habla de órdenes.
+  titulo = 'Órdenes Pendientes de Aprobación',
+  subtitulo = 'Revisá y aprobá las órdenes de compra sugeridas por la IA',
   onLogout,
 }) {
   const [open, setOpen] = useState(false);
@@ -56,10 +61,10 @@ export default function Topbar({
         </button>
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight text-grafito sm:text-2xl">
-            Órdenes Pendientes de Aprobación
+            {titulo}
           </h1>
           <p className="hidden text-sm text-warmgray sm:block">
-            Revisá y aprobá las órdenes de compra sugeridas por la IA
+            {subtitulo}
           </p>
         </div>
 
