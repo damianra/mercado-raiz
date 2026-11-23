@@ -305,9 +305,9 @@ export const seedData = {
 
   historial_stock,
 
-  // SPEC-23: password_hash argon2id (PHC) de passwords dev
-  // documentadas en README → "Usuarios demo". El PHC lleva sus
-  // params, así el hash sigue verificando aunque cambie ARGON.
+  // SPEC-23: password_hash scrypt nativo de passwords dev
+  // documentadas en README → "Usuarios demo". El formato lleva
+  // sus params (N,r,p), así el hash sigue verificando si cambian.
   // `agente` es la cuenta de servicio del harness (rol SERVICIO).
   usuarios: [
     {
@@ -316,7 +316,7 @@ export const seedData = {
       nombre: 'Carlos Martínez',
       rol: 'GERENTE',
       password_hash:
-        '$argon2id$m=65536,t=3,p=4$rgFQ+9ynIlgnKVE24YVAEA==$JHgF3nsX9JjVZnDDkKgah/XYdRIxaaQfSVIb9tAQmzg=',
+        '$scrypt$N=16384,r=8,p=1$hIDogQ5SFYqpjEIZSEau+Q==$MXmP4qfye7YHFAQcRlWi/ygd76WFCgSHKIadL9rvL/UKu6L1YCd2zebmMHDyEbt8YCTeJw8cNnVR9VdniBoZ9Q==',
       avatar_url: null,
       activo: 1,
       intentos_fallidos: 0,
@@ -331,7 +331,7 @@ export const seedData = {
       nombre: 'María López',
       rol: 'APROBADOR',
       password_hash:
-        '$argon2id$m=65536,t=3,p=4$gXSvr7G8bMNxG4Kt7YxYoQ==$OiDoFUJPrEZODo6OEJrhhC6RdMA2q0DFhgKki7LMWoQ=',
+        '$scrypt$N=16384,r=8,p=1$ad5XO4iCEJL4tCsGeZMSXA==$24xdPDqU7JO3FI+tHOIGOfG3bPg5wEWNqMaEWU5lqhRkMEx3hracSoDEewCkFSDVAS4m+rlqf+ekiiZMpCWAzg==',
       avatar_url: null,
       activo: 1,
       intentos_fallidos: 0,
@@ -346,7 +346,7 @@ export const seedData = {
       nombre: 'Administrador',
       rol: 'ADMIN',
       password_hash:
-        '$argon2id$m=65536,t=3,p=4$T2QftSWy8xpaUIQ8jvcC1w==$3He/Tg1LbaeEmasRG2B+4lua5/4/4thr9PkLk+Atdfo=',
+        '$scrypt$N=16384,r=8,p=1$FneysqBZf3M12xvZr+IOzg==$E0rLpYS0FSfje1+VcRFEFONTWCOK08J86kEuxc44/dWmmc4ajxLDGhZNy1U+2I/IPEY8ahQ2ln5KNjon92ocoQ==',
       avatar_url: null,
       activo: 1,
       intentos_fallidos: 0,
@@ -361,7 +361,7 @@ export const seedData = {
       nombre: 'Agente de reposición',
       rol: 'SERVICIO',
       password_hash:
-        '$argon2id$m=65536,t=3,p=4$zfPJIJyQ/xGQD9zL3NI8Uw==$Uxl8KfFkXxckCNjEOWUFW6jG6aU6nt6bm5jCfHtef/M=',
+        '$scrypt$N=16384,r=8,p=1$iDD/WUQrG0+zE93CDo2hBA==$uObwlPoXoUXRrDocEp6xhVyXtKm3ygEPgHr4yseKYx4twiYiJ1LEXFB1FJGdYsxspUexotqsyZoLbV8ZBxpLrg==',
       avatar_url: null,
       activo: 1,
       intentos_fallidos: 0,

@@ -1442,10 +1442,14 @@ nulos solo `coto_price`×5 y `carrefour_price`×4; sin precios 0).
   httpOnly.** No localStorage (exfiltrable por XSS); no sesiones
   opacas para el access (un solo backend, lookup innecesario). El
   refresh sí persiste hasheado porque la revocación importa.
-- **Hashing argon2id** — *ajuste de implementación*: Node 24 expone
-  `crypto.argon2Sync` nativo (`m=64MB, t=3, p=4`, formato PHC) →
-  cero deps de hashing; el fallback `crypto.scrypt` documentado
-  quedó sin necesidad de usarse.
+- **Hashing `crypto.scrypt` nativo** (N=2¹⁴, r=8, p=1, formato
+  `$scrypt$N,r,p$salt$hash`) — *ajuste de implementación*: CI y el
+  Dockerfile corren Node 22 donde `crypto.argon2Sync` aún no existe;
+  scrypt nativo cubre el mismo requisito sin deps. `verifyPassword`
+  también acepta hashes `$argon2id$` legacy (Node ≥24.7).
+  Anti oráculo de timing: un intento sobre email inexistente,
+  inactivo o bloqueado verifica contra un hash dummy → misma
+  latencia que un intento real.
 - **CSRF double-submit por cookie legible** — *ajuste*: el valor
   CSRF viaja en cookie `mr_csrf` (legible, `SameSite=Strict,
   Path=/`) cuyo SHA-256 se persiste en `refresh_tokens`; el front

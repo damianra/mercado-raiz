@@ -25,13 +25,17 @@ prompt front - back Qwen 3.7
 
 ```bash
 npm install
-cp .env.example .env   # opcional: PORT
+cp .env.example .env   # completar JWT_SECRET (ver archivo)
 npm run seed           # puebla la DB: catálogo real de 1.471 artículos + demo del flujo
 npm run dev            # frontend en http://localhost:5173
 npm run api            # API Express en http://localhost:4000
 ```
 
 El proxy de Vite redirige `/api` al puerto 4000 en dev.
+
+> **DBs existentes de antes de SPEC-23**: el schema de `usuarios`
+> cambió (columnas de auth) — `npm run seed` recrea `server/app.sqlite`
+> desde cero; sin re-seed ningún login funcionará.
 
 ### Agente de reposición (opcional)
 

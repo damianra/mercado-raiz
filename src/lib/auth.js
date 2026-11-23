@@ -1,8 +1,8 @@
 // Sesión del usuario (SPEC-23): access JWT y usuario viven SOLO en
 // memoria — nunca localStorage/sessionStorage (exfiltrable por XSS).
-// El refresh token viaja en cookie httpOnly mr_csrf/mr_refresh y el
-// CSRF en cookie legible mr_csrf (double-submit: el front la lee y
-// la reenvía como X-CSRF-Token en refresh/logout).
+// El refresh viaja en cookie httpOnly mr_refresh y el CSRF en la
+// cookie legible mr_csrf (double-submit: el front la lee y la
+// reenvía como X-CSRF-Token en refresh/logout).
 //
 // Los componentes se suscriben con onSesion(fn) — cuando la sesión
 // cae (refresh vencido, logout) el Root vuelve a renderizar Login

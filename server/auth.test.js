@@ -180,8 +180,17 @@ describe('POST /api/auth/refresh', () => {
 describe('POST /api/auth/logout', () => {
   it('revoca el refresh token — la sesión muere ahí', async () => {
     const ses = await loginComo(base, 'GERENTE');
+    // Con sesión viva el double-submit CSRF también aplica (R23.7).
     expect(
       (await postAuth('/logout', undefined, { cookie: ses.cookie })).status,
+    ).toBe(403);
+    expect(
+      (
+        await postAuth('/logout', undefined, {
+          cookie: ses.cookie,
+          'x-csrf-token': ses.csrf,
+        })
+      ).status,
     ).toBe(200);
     expect(
       (
@@ -191,6 +200,11 @@ describe('POST /api/auth/logout', () => {
         })
       ).status,
     ).toBe(401);
+  });
+
+  it('es idempotente sin sesión — limpia cookies y 200', async () => {
+    const res = await postAuth('/logout', undefined, { cookie: 'mr_refresh=zzz' });
+    expect(res.status).toBe(200);
   });
 });
 

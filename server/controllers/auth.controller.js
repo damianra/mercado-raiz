@@ -1,11 +1,13 @@
 // Controller de /api/auth (SPEC-23): login emite access JWT + cookie
 // de refresh opaca; refresh rota con CSRF double-submit; logout
 // revoca; me devuelve la sesión actual.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   autenticar,
   cambiarPassword,
   emitirRefresh,
   firmarAccessToken,
+  getRefreshVigente,
   publico,
   revocarRefresh,
   rotarRefresh,
@@ -37,7 +39,12 @@ const leerCookie = (req, nombre) => {
   const raw = req.headers.cookie ?? '';
   for (const par of raw.split(';')) {
     const [k, ...v] = par.trim().split('=');
-    if (k === nombre) return decodeURIComponent(v.join('='));
+    if (k !== nombre) continue;
+    try {
+      return decodeURIComponent(v.join('='));
+    } catch {
+      return null; // valor malformado (%XX inválido) — como si no hubiera cookie
+    }
   }
   return null;
 };
@@ -46,9 +53,10 @@ const badRequest = (res, msg) => res.status(400).json({ error: msg });
 const generica401 = (res) =>
   res.status(401).json({ error: 'credenciales inválidas' });
 
-// POST /api/auth/login {email, password} → {access_token, usuario, csrf}
-// + Set-Cookie refresh. 401 genérica idéntica ante cualquier fallo
-// (email inexistente, password malo, usuario inactivo, bloqueado).
+// POST /api/auth/login {email, password} → {access_token, usuario}
+// + Set-Cookie refresh (httpOnly) y csrf (legible). 401 genérica
+// idéntica ante cualquier fallo (email inexistente, password malo,
+// usuario inactivo, bloqueado).
 export async function login(req, res) {
   const { email, password } = req.body ?? {};
   if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
@@ -92,9 +100,21 @@ export async function refresh(req, res) {
   }
 }
 
-// POST /api/auth/logout — revoca el refresh actual y borra cookies.
+// POST /api/auth/logout — si el refresh está vigente exige el
+// X-CSRF-Token correspondiente (double-submit, igual que /refresh);
+// sesión ya muerta → idempotente: limpia cookies y 200.
 export function logout(req, res) {
-  revocarRefresh(leerCookie(req, COOKIE_REFRESH));
+  const cookieToken = leerCookie(req, COOKIE_REFRESH);
+  const vigente = getRefreshVigente(cookieToken);
+  if (vigente) {
+    const csrf = req.headers['x-csrf-token'];
+    const hash = createHash('sha256').update(String(csrf ?? '')).digest('hex');
+    const ok =
+      csrf && hash.length === vigente.csrf_hash.length &&
+      timingSafeEqual(Buffer.from(hash), Buffer.from(vigente.csrf_hash));
+    if (!ok) return res.status(403).json({ error: 'csrf token inválido' });
+  }
+  revocarRefresh(cookieToken);
   res.setHeader('Set-Cookie', [cookieRefresh('', 0), cookieCsrf('', 0)]);
   res.json({ ok: true });
 }

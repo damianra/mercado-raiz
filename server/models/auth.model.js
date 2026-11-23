@@ -1,48 +1,68 @@
-// Autenticación (SPEC-23): passwords argon2id nativos (node:crypto —
-// sin dep externa), JWT HS256 de 15 min para el access y refresh
+// Autenticación (SPEC-23): passwords con crypto.scrypt nativo
+// (node:crypto — CI/prod corren Node 22 donde crypto.argon2Sync
+// aún no existe), JWT HS256 de 15 min para el access y refresh
 // tokens opacos rotativos persistidos como SHA-256 con reuse
 // detection por familia.
 
 import {
-  argon2Sync,
   createHash,
   randomBytes,
+  scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
+import crypto from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { openDb } from '../db.js';
 
-// --- Passwords (argon2id, formato PHC: $argon2id$m,t,p$salt$hash) ---
+// --- Passwords (scrypt, formato $scrypt$N,r,p$salt$hash) ---
 
-const ARGON = { parallelism: 4, tagLength: 32, memory: 65536, passes: 3 };
+const SCRYPT = { N: 16384, r: 8, p: 1 };
+const KEY_LEN = 64;
+// argon2id solo se verifica para hashes legacy generados con
+// Node ≥24.7 (argon2Sync nativo) — en Node 22 es undefined y esos
+// hashes devuelven false sin romper el proceso.
+const argon2Sync = crypto.argon2Sync;
+
 export const MIN_PASSWORD_LENGTH = 12;
 
 export function hashPassword(password) {
-  const nonce = randomBytes(16);
-  const key = argon2Sync('argon2id', { message: password, nonce, ...ARGON });
-  const params = `m=${ARGON.memory},t=${ARGON.passes},p=${ARGON.parallelism}`;
-  return `$argon2id$${params}$${nonce.toString('base64')}$${key.toString('base64')}`;
+  const salt = randomBytes(16);
+  const key = scryptSync(password, salt, KEY_LEN, SCRYPT);
+  const params = `N=${SCRYPT.N},r=${SCRYPT.r},p=${SCRYPT.p}`;
+  return `$scrypt$${params}$${salt.toString('base64')}$${key.toString('base64')}`;
 }
 
-// Verifica en tiempo constante. Un hash mal formado → false (no throw
-// — el atacante no distingue entre "usuario sin hash" y "password malo").
+// Verifica en tiempo constante. Soporta $scrypt$ (nativo, emite
+// hashPassword) y $argon2id$ (legacy Node ≥24.7). Un hash mal
+// formado → false, nunca throw — el atacante no distingue entre
+// "usuario sin hash" y "password malo".
 export function verifyPassword(password, stored) {
   const partes = String(stored ?? '').split('$');
-  // ['', 'argon2id', 'm=…,t=…,p=…', saltB64, keyB64]
-  if (partes.length !== 5 || partes[1] !== 'argon2id') return false;
+  // ['', 'scrypt', 'N=…,r=…,p=…', saltB64, keyB64]
+  if (partes.length !== 5) return false;
   const params = Object.fromEntries(partes[2].split(',').map((kv) => kv.split('=')));
-  const nonce = Buffer.from(partes[3], 'base64');
+  const salt = Buffer.from(partes[3], 'base64');
   const esperado = Buffer.from(partes[4], 'base64');
   let key;
   try {
-    key = argon2Sync('argon2id', {
-      message: password,
-      nonce,
-      parallelism: Number(params.p),
-      tagLength: esperado.length,
-      memory: Number(params.m),
-      passes: Number(params.t),
-    });
+    if (partes[1] === 'scrypt') {
+      key = scryptSync(password, salt, esperado.length, {
+        N: Number(params.N),
+        r: Number(params.r),
+        p: Number(params.p),
+      });
+    } else if (partes[1] === 'argon2id' && argon2Sync) {
+      key = argon2Sync('argon2id', {
+        message: password,
+        nonce: salt,
+        parallelism: Number(params.p),
+        tagLength: esperado.length,
+        memory: Number(params.m),
+        passes: Number(params.t),
+      });
+    } else {
+      return false;
+    }
   } catch {
     return false;
   }
@@ -51,10 +71,15 @@ export function verifyPassword(password, stored) {
 
 // --- JWT (access token, 15 min) ---
 
-const secret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || 'dev-only-jwt-secret-do-not-use-in-prod',
-  );
+let warnSinSecret = false;
+const secret = () => {
+  const s = process.env.JWT_SECRET || 'dev-only-jwt-secret-do-not-use-in-prod';
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET && !warnSinSecret) {
+    warnSinSecret = true;
+    console.warn('JWT_SECRET no configurado — usando secreto dev inseguro');
+  }
+  return new TextEncoder().encode(s);
+};
 
 export async function firmarAccessToken(usuario) {
   return new SignJWT({ rol: usuario.rol, token_version: usuario.token_version })
@@ -75,6 +100,8 @@ export async function verificarAccessToken(token) {
 const REFRESH_TTL_DIAS = 7;
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const nuevoSecreto = () => randomBytes(32).toString('base64url');
+const hashEq = (a, b) =>
+  a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 function insertarRefresh(usuarioId, familia, csrf, req) {
   const secreto = nuevoSecreto();
@@ -105,8 +132,9 @@ export function emitirRefresh(usuarioId, req) {
 }
 
 // Rota el refresh de la cookie. Devuelve {usuario, refresh, csrf} o
-// lanza {status:401}. Reuse detection: token de familia conocida pero
-// no vigente → revoca TODA la familia (alguien re-usó un token viejo).
+// lanza {status:401|403}. Reuse detection: token de familia conocida
+// pero no vigente → revoca TODA la familia (alguien re-usó un token
+// viejo).
 export function rotarRefresh(cookieToken, csrfHeader, req) {
   const db = openDb();
   const [familia] = String(cookieToken ?? '').split('.');
@@ -132,7 +160,7 @@ export function rotarRefresh(cookieToken, csrfHeader, req) {
   }
 
   // CSRF double-submit: el header debe matchear el hash persistido.
-  if (!csrfHeader || sha256(csrfHeader) !== row.csrf_hash) {
+  if (!csrfHeader || !hashEq(sha256(csrfHeader), row.csrf_hash)) {
     throw { status: 403, error: 'csrf token inválido' };
   }
 
@@ -155,6 +183,18 @@ export function revocarRefresh(cookieToken) {
     .run(sha256(String(cookieToken).split('.')[1] ?? ''));
 }
 
+// Para logout con CSRF (SPEC-23): devuelve la fila vigente del
+// refresh de la cookie, o null si ya murió/nunca existió.
+export function getRefreshVigente(cookieToken) {
+  if (!cookieToken) return null;
+  return openDb()
+    .prepare(
+      `SELECT * FROM refresh_tokens
+       WHERE token_hash = ? AND revocado = 0 AND expira_en > datetime('now')`,
+    )
+    .get(sha256(String(cookieToken).split('.')[1] ?? ''));
+}
+
 export function revocarRefreshesDe(usuarioId) {
   openDb()
     .prepare('UPDATE refresh_tokens SET revocado = 1 WHERE usuario_id = ?')
@@ -165,6 +205,12 @@ export function revocarRefreshesDe(usuarioId) {
 
 const MAX_INTENTOS = 5;
 const BLOQUEO_MIN = 15;
+// Hash precalculado de un string aleatorio — se verifica cuando el
+// email no existe o el usuario está inactivo para que la latencia
+// del 401 no delate si el usuario existe (anti oráculo de timing).
+const DUMMY_HASH =
+  '$scrypt$N=16384,r=8,p=1$hxmrVMe2rTyjhj4OWFzMnA==$' +
+  '+3p62UBKA+A6n4MUoIhpi72wziJkNrNPUqH96D9VrlIcmjYq4QZoVhV5EgtMKIELXyNGskHSACCVYuJNROWF6g==';
 
 export function getUsuarioPorEmail(email) {
   return openDb().prepare('SELECT * FROM usuarios WHERE email = ?').get(email);
@@ -175,24 +221,33 @@ export function getUsuarioPorEmail(email) {
 export function autenticar(email, password) {
   const db = openDb();
   const usuario = getUsuarioPorEmail(email);
+  const ahora = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-  // Lockout activo → misma respuesta genérica (el front no distingue).
-  if (
-    usuario?.bloqueado_hasta &&
-    usuario.bloqueado_hasta > new Date().toISOString().replace('T', ' ').slice(0, 19)
-  ) {
+  // Bloqueo vencido → se re-arma el contador en 0 (sino un solo
+  // fallo posterior re-bloquearía 15 min indefinidamente).
+  if (usuario?.bloqueado_hasta && usuario.bloqueado_hasta <= ahora) {
+    db.prepare(
+      'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = ?',
+    ).run(usuario.id);
+    usuario.intentos_fallidos = 0;
+    usuario.bloqueado_hasta = null;
+  }
+
+  // Lockout activo → misma respuesta genérica (el front no distingue),
+  // pero el verify dummy iguala la latencia con un intento real.
+  const bloqueado = usuario?.bloqueado_hasta && usuario.bloqueado_hasta > ahora;
+  if (!usuario || !usuario.activo || bloqueado) {
+    verifyPassword(password, DUMMY_HASH);
     return null;
   }
 
-  if (!usuario || !usuario.activo || !verifyPassword(password, usuario.password_hash)) {
-    if (usuario?.activo) {
-      const intentos = usuario.intentos_fallidos + 1;
-      db.prepare(
-        `UPDATE usuarios SET intentos_fallidos = ?,
-         bloqueado_hasta = CASE WHEN ? >= ? THEN datetime('now', '+${BLOQUEO_MIN} minutes') ELSE bloqueado_hasta END
-         WHERE id = ?`,
-      ).run(intentos, intentos, MAX_INTENTOS, usuario.id);
-    }
+  if (!verifyPassword(password, usuario.password_hash)) {
+    const intentos = usuario.intentos_fallidos + 1;
+    db.prepare(
+      `UPDATE usuarios SET intentos_fallidos = ?,
+       bloqueado_hasta = CASE WHEN ? >= ? THEN datetime('now', '+${BLOQUEO_MIN} minutes') ELSE bloqueado_hasta END
+       WHERE id = ?`,
+    ).run(intentos, intentos, MAX_INTENTOS, usuario.id);
     return null;
   }
 

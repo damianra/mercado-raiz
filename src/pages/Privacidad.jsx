@@ -4,7 +4,7 @@ import { Link } from '../lib/router.jsx';
 const SECCIONES = [
   {
     title: 'Qué datos recolectamos',
-    body: 'MERCADO RAÍZ procesa datos operativos del sistema de aprovisionamiento: órdenes de compra, productos, proveedores y movimientos de stock. De los usuarios del panel solo se registra nombre, dirección de email corporativa y rol (APROBADOR, GERENTE o ADMIN) para identificar quién aprueba o rechaza cada orden.',
+    body: 'MERCADO RAÍZ procesa datos operativos del sistema de aprovisionamiento: órdenes de compra, productos, proveedores y movimientos de stock. De los usuarios del panel solo se registra nombre, dirección de email corporativa y rol (APROBADOR, GERENTE, ADMIN o SERVICIO) para identificar quién aprueba o rechaza cada orden. Las credenciales se almacenan exclusivamente como hash criptográfico (scrypt) — nunca la contraseña en sí — junto a la fecha de último acceso.',
   },
   {
     title: 'Finalidad del tratamiento',
@@ -12,7 +12,7 @@ const SECCIONES = [
   },
   {
     title: 'Retención',
-    body: 'Los registros de órdenes y del historial de stock se conservan mientras la cuenta esté activa, por su valor de auditoría operativa. Los usuarios dados de baja quedan marcados como inactivos y sus datos de identificación se mantienen solo en los registros históricos que ya autorizaron.',
+    body: 'Los registros de órdenes y del historial de stock se conservan mientras la cuenta esté activa, por su valor de auditoría operativa. Los usuarios dados de baja quedan marcados como inactivos y sus datos de identificación se mantienen solo en los registros históricos que ya autorizaron. Los tokens de sesión (refresh) se retienen hasheados por un máximo de 7 días y se revocan al cerrar sesión o cambiar la contraseña.',
   },
   {
     title: 'Derechos ARCO',
@@ -20,7 +20,7 @@ const SECCIONES = [
   },
   {
     title: 'Cookies y terceros',
-    body: 'Esta aplicación no utiliza cookies de seguimiento, píxeles ni scripts de analítica de terceros. Solo se cargan fuentes tipográficas (Google Fonts) para la interfaz, sin captura de datos personales.',
+    body: 'Esta aplicación no utiliza cookies de seguimiento, píxeles ni scripts de analítica de terceros. Las únicas cookies son técnicas de sesión: una cookie httpOnly con el token de actualización (7 días, SameSite=Strict) y una cookie anti-CSRF; ambas se eliminan al cerrar sesión. Solo se cargan fuentes tipográficas (Google Fonts) para la interfaz, sin captura de datos personales.',
   },
   {
     title: 'Responsable y contacto',
