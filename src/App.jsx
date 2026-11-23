@@ -131,6 +131,7 @@ export default function App({ usuario }) {
         urgentes={stats.urgentes}
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
+        usuario={usuario}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

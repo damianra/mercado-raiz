@@ -2,17 +2,23 @@ import {
   LayoutDashboard,
   ClipboardCheck,
   Leaf,
+  Users,
   X,
 } from 'lucide-react';
+import { Link } from '../lib/router.jsx';
 
 // Solo entradas con destino real en la página — un ítem sin sección
 // detrás es un control muerto (regla UI n°2) y no debe renderizarse.
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck, active: true },
+  { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck },
+  // SPEC-24: gestión de usuarios — solo visible para ADMIN; `to`
+  // navega a otra página, los demás son anchors de la home.
+  { id: 'usuarios', label: 'Usuarios', icon: Users, to: '/usuarios', roles: ['ADMIN'] },
 ];
 
-export default function Sidebar({ urgentes = 0, open, onClose }) {
+export default function Sidebar({ urgentes = 0, open, onClose, usuario, activeId = 'ordenes', base = '' }) {
+  const items = NAV.filter((item) => !item.roles || item.roles.includes(usuario?.rol));
   return (
     <>
       {/* Overlay mobile */}
@@ -55,27 +61,46 @@ export default function Sidebar({ urgentes = 0, open, onClose }) {
 
         {/* Menú */}
         <nav className="mt-8 flex flex-col gap-1">
-          {NAV.map(({ id, label, icon: Icon, active }) => (
-            <a
-              key={id}
-              href={`#${id}`}
-              onClick={onClose}
-              className={`relative flex h-12 items-center gap-3 rounded-lg px-4 text-sm font-medium transition-colors duration-200 ease-brand ${
-                active
-                  ? 'bg-root-light/40 text-white before:absolute before:left-0 before:top-1/2 before:h-8 before:w-1 before:-translate-y-1/2 before:rounded-r before:bg-ocre'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-              aria-current={active ? 'page' : undefined}
-            >
-              <Icon size={18} strokeWidth={1.5} />
-              {label}
-              {id === 'ordenes' && urgentes > 0 && (
-                <span className="ml-auto rounded-full bg-terra px-2 py-0.5 font-mono text-xs font-bold text-white">
-                  {urgentes}
-                </span>
-              )}
-            </a>
-          ))}
+          {items.map(({ id, label, icon: Icon, to }) => {
+            const active = id === activeId;
+            const cls = `relative flex h-12 items-center gap-3 rounded-lg px-4 text-sm font-medium transition-colors duration-200 ease-brand ${
+              active
+                ? 'bg-root-light/40 text-white before:absolute before:left-0 before:top-1/2 before:h-8 before:w-1 before:-translate-y-1/2 before:rounded-r before:bg-ocre'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
+            }`;
+            const inner = (
+              <>
+                <Icon size={18} strokeWidth={1.5} />
+                {label}
+                {id === 'ordenes' && urgentes > 0 && (
+                  <span className="ml-auto rounded-full bg-terra px-2 py-0.5 font-mono text-xs font-bold text-white">
+                    {urgentes}
+                  </span>
+                )}
+              </>
+            );
+            return to ? (
+              <Link
+                key={id}
+                to={to}
+                onClick={onClose}
+                className={cls}
+                aria-current={active ? 'page' : undefined}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <a
+                key={id}
+                href={`${base}#${id}`}
+                onClick={onClose}
+                className={cls}
+                aria-current={active ? 'page' : undefined}
+              >
+                {inner}
+              </a>
+            );
+          })}
         </nav>
 
         {/* Footer de marca */}

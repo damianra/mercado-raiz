@@ -25,13 +25,14 @@ export function navigate(to) {
   window.scrollTo(0, 0);
 }
 
-export function Link({ to, children, ...rest }) {
+export function Link({ to, children, onClick, ...rest }) {
   return (
     <a
       href={to}
       {...rest}
       onClick={(e) => {
         e.preventDefault();
+        onClick?.(e);
         navigate(to);
       }}
     >
