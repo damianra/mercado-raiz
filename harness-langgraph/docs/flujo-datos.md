@@ -26,7 +26,7 @@ cualquier nodo     → errores: [string]  (acumulativo)
 | Desde | Endpoint | Para qué |
 |---|---|---|
 | leer-inventario | `GET /api/productos?estado=STOCK_BAJO` `?estado=CRITICO` (paginado: todas las páginas, limit=100 — SPEC-14) | qué reponer |
-| analizar-demanda | `GET /api/historial?producto_id=N&tipo=VENTA` | materia prima del LLM |
+| analizar-demanda | `GET /api/estadisticas/demanda?producto_id=N&dias=D` (SPEC-26) | materia prima del LLM |
 | crear-orden | `POST /api/ordenes/batch` (SPEC-16: hasta 100 por request, una transacción; si el lote falla → `POST /api/ordenes` por producto) | `{producto_id, cantidad, requiere_aprobacion, analisis_ia}` |
 | fin | `GET /api/dashboard/stats` | KPIs de cierre |
 
@@ -64,4 +64,5 @@ en el dashboard como cualquier otra orden.
 | LLM devuelve texto corto en justificación | retry ×2 → template + error |
 | POST /ordenes/batch da 429/5xx | retry honrando `Retry-After` ×4 (backend-client, SPEC-13); si agota → fallback a POST individual por producto |
 | POST /ordenes/batch da 4xx | no reintenta (error nuestro) → lote cae a individuales; el item malo queda en `state.errores` |
-| ventas con CV bajo | triage: promedio histórico, `llm_evitadas+1` — no es error |
+| ventas con CV bajo | triage: demanda ponderada del backend, `llm_evitadas+1` — no es error |
+| sin ventas en la ventana | demanda 0 determinística, `llm_evitadas+1` — no es error |

@@ -23,10 +23,16 @@ const producto = {
   categoria: 'Almacén',
   proveedor: { nombre: 'Prov', tiempo_entrega_dias: 2 },
 };
-const ventas = [
-  { fecha: '2026-11-01', diferencia: -5 },
-  { fecha: '2026-11-02', diferencia: -9 },
-];
+// Stats de /api/estadisticas/demanda (SPEC-26) — el input del hash.
+const stats = {
+  demanda_diaria: 5.2,
+  tendencia: 0.01,
+  cv: 0.4,
+  desvio_demanda: 2.1,
+  dias_con_venta: 60,
+  dias_en_quiebre: 0,
+  ultima_venta: '2026-11-20',
+};
 const analisis = { demanda_diaria: 6, tendencia: 'subiendo', observacion: 'ok' };
 
 beforeEach(async () => {
@@ -43,44 +49,44 @@ afterAll(async () => {
 
 describe('hashAnalisis', () => {
   it('es determinista para el mismo input', () => {
-    expect(cache.hashAnalisis(producto, ventas)).toBe(cache.hashAnalisis(producto, ventas));
+    expect(cache.hashAnalisis(producto, stats)).toBe(cache.hashAnalisis(producto, stats));
   });
 
-  it('cambia si cambian las ventas', () => {
-    const otras = [...ventas, { fecha: '2026-11-03', diferencia: -3 }];
-    expect(cache.hashAnalisis(producto, otras)).not.toBe(cache.hashAnalisis(producto, ventas));
+  it('cambia si cambian las stats de demanda', () => {
+    const otras = { ...stats, demanda_diaria: 7.8 };
+    expect(cache.hashAnalisis(producto, otras)).not.toBe(cache.hashAnalisis(producto, stats));
   });
 
-  it('cambia si cambia un campo del producto (un AJUSTE no toca ventas)', () => {
+  it('cambia si cambia un campo del producto (un AJUSTE no toca stats)', () => {
     const ajustado = { ...producto, stock_actual: 8 };
-    expect(cache.hashAnalisis(ajustado, ventas)).not.toBe(cache.hashAnalisis(producto, ventas));
+    expect(cache.hashAnalisis(ajustado, stats)).not.toBe(cache.hashAnalisis(producto, stats));
   });
 
   it('cambia si cambia el precio o el lead time (cantidad/monto → justificación)', () => {
-    expect(cache.hashAnalisis({ ...producto, precio_unitario: 12 }, ventas))
-      .not.toBe(cache.hashAnalisis(producto, ventas));
+    expect(cache.hashAnalisis({ ...producto, precio_unitario: 12 }, stats))
+      .not.toBe(cache.hashAnalisis(producto, stats));
     const otroProveedor = { ...producto, proveedor: { ...producto.proveedor, tiempo_entrega_dias: 5 } };
-    expect(cache.hashAnalisis(otroProveedor, ventas)).not.toBe(cache.hashAnalisis(producto, ventas));
+    expect(cache.hashAnalisis(otroProveedor, stats)).not.toBe(cache.hashAnalisis(producto, stats));
   });
 });
 
 describe('buscar/guardar demanda', () => {
   it('miss sin entrada; hit tras guardarDemanda', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     expect(await cache.buscarDemanda(7, hash)).toBeNull();
     await cache.guardarDemanda(7, hash, analisis);
     expect(await cache.buscarDemanda(7, hash)).toEqual(analisis);
   });
 
   it('miss si el hash cambió (invalidación por input)', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     await cache.guardarDemanda(7, hash, analisis);
-    const otro = cache.hashAnalisis({ ...producto, stock_actual: 9 }, ventas);
+    const otro = cache.hashAnalisis({ ...producto, stock_actual: 9 }, stats);
     expect(await cache.buscarDemanda(7, otro)).toBeNull();
   });
 
   it('guardarDemanda marca analisis_llm — una justificación sola no habilita demanda', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     // justificación guardada sobre análisis heurístico (LLM de
     // demanda había fallado): la demanda NO queda cacheada.
     await cache.guardarJustificacion(7, hash, analisis, 'prosa sobre fallback');
@@ -90,7 +96,7 @@ describe('buscar/guardar demanda', () => {
 
 describe('buscar/guardar justificación', () => {
   it('hit solo con mismo hash Y mismo análisis (la prosa cita sus cifras)', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     await cache.guardarDemanda(7, hash, analisis);
     await cache.guardarJustificacion(7, hash, analisis, 'justificación X');
 
@@ -100,7 +106,7 @@ describe('buscar/guardar justificación', () => {
   });
 
   it('guardarDemanda invalida la justificación previa (input nuevo)', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     await cache.guardarDemanda(7, hash, analisis);
     await cache.guardarJustificacion(7, hash, analisis, 'vieja');
     await cache.guardarDemanda(7, hash, { ...analisis, tendencia: 'bajando' });
@@ -110,7 +116,7 @@ describe('buscar/guardar justificación', () => {
 
 describe('persistencia', () => {
   it('sobrevive a una importación fresca del módulo (tabla, no memoria)', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     await cache.guardarDemanda(7, hash, analisis);
 
     vi.resetModules();
@@ -124,7 +130,7 @@ describe('persistencia', () => {
   });
 
   it('los datos del análisis se guardan como JSONB (roundtrip de objetos)', async () => {
-    const hash = cache.hashAnalisis(producto, ventas);
+    const hash = cache.hashAnalisis(producto, stats);
     const anidado = { ...analisis, detalle: { dias: [1, 2], ok: true } };
     await cache.guardarDemanda(7, hash, anidado);
     const { rows } = await poolPg().query(

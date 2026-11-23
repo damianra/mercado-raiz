@@ -10,14 +10,14 @@ import { calcularCantidad } from '../../src/langgraph/nodes/calcular-cantidad.js
 import { decidirAprobacion } from '../../src/langgraph/nodes/decidir-aprobacion.js';
 import { config } from '../../src/config/env.js';
 
-const producto = (id, stock, minimo, precio, lead = 1) => ({
+const producto = (id, stock, minimo, precio, lead = 1, leadEsperado) => ({
   id,
   sku: `SKU${id}`,
   nombre: `Producto ${id}`,
   stock_actual: stock,
   stock_minimo: minimo,
   precio_unitario: precio,
-  proveedor: { nombre: 'Prov', tiempo_entrega_dias: lead },
+  proveedor: { nombre: 'Prov', tiempo_entrega_dias: lead, lead_dias_esperado: leadEsperado },
 });
 
 describe('calcular-cantidad', () => {
@@ -30,6 +30,39 @@ describe('calcular-cantidad', () => {
     // objetivo: ceil(5 * (1+7)) = 40 → 40 - 4 = 36; minimo: 40-4=36 → 36u
     expect(decisionPorProducto[1].cantidad).toBe(36);
     expect(decisionPorProducto[1].monto_total).toBeCloseTo(43.2);
+  });
+
+  it('usa lead_dias_esperado del rango cuando el proveedor lo trae (SPEC-26)', () => {
+    const state = {
+      productosBajos: [producto(1, 4, 20, 1, 1, 3)],
+      analisisPorProducto: { 1: { demanda_diaria: 5 } },
+    };
+    const { decisionPorProducto } = calcularCantidad(state);
+    // objetivo: ceil(5 * (3+7)) = 50 → 50 - 4 = 46 (con nominal 1d sería 36)
+    expect(decisionPorProducto[1].cantidad).toBe(46);
+  });
+
+  it('suma stock de seguridad z·σ·√lead sobre la variabilidad (SPEC-26/R26.8)', () => {
+    const state = {
+      productosBajos: [producto(1, 4, 20, 1)],
+      analisisPorProducto: { 1: { demanda_diaria: 5, desvio_demanda: 2 } },
+    };
+    const { decisionPorProducto } = calcularCantidad(state);
+    // SS = z * 2 * sqrt(1); objetivo = ceil(40 + SS) → 40 + ceil(SS)
+    // con z=1.65 → ceil(43.3) = 44 → 44 - 4 = 40
+    const esperado = Math.ceil(40 + config.zSeguridad * 2 * Math.sqrt(1)) - 4;
+    expect(decisionPorProducto[1].cantidad).toBe(esperado);
+    expect(esperado).toBeGreaterThan(36); // más que sin seguridad
+  });
+
+  it('demanda 0 (sin ventas): ordena el mínimo garantizado', () => {
+    const state = {
+      productosBajos: [producto(1, 0, 16, 10)],
+      analisisPorProducto: { 1: { demanda_diaria: 0, desvio_demanda: 0 } },
+    };
+    const { decisionPorProducto } = calcularCantidad(state);
+    // objetivo = SS = 0 → minimo 2*16 - 0 = 32 domina
+    expect(decisionPorProducto[1].cantidad).toBe(32);
   });
 
   it('nunca ordena menos que lo necesario para llegar a 2×mínimo', () => {

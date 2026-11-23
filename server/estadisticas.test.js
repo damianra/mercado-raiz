@@ -93,6 +93,7 @@ describe('GET /api/estadisticas/demanda — cálculo', () => {
       cv: null,
       dias_con_venta: 0,
       dias_en_quiebre: null, // sin movimientos → fuente no confiable
+      desvio_demanda: 0,
       ultima_venta: null,
     });
   });

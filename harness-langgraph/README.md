@@ -8,7 +8,7 @@ Mercado Raíz con un **LLM local** (Ollama + qwen3:8b).
 ## Qué hace el agente
 
 Detecta productos con stock bajo → analiza su demanda con el LLM
-(triage heurístico: las ventas estables se estiman sin LLM, SPEC-12)
+(triage heurístico: sin ventas → demanda 0, demanda estable → la del backend, sin LLM; SPEC-12/SPEC-26)
 → calcula cuánto reponer → crea las órdenes de compra en el backend
 → **termina**. Las que superan $50.000 quedan `PENDIENTE_APROBACION`:
 el humano las aprueba/rechaza desde el dashboard por REST del
@@ -88,7 +88,7 @@ paralelismo casi no gana tiempo. Con el modelo actual
 - **El LLM estima, el código decide**: la demanda la estima el
   modelo; la cantidad exacta la calcula una fórmula determinista.
 - **Fallbacks**: si el LLM responde mal, el nodo usa un plan B
-  (promedio histórico / template) y registra el error — la corrida
+  (demanda del backend / template) y registra el error — la corrida
   no muere.
 - **Aprobación desacoplada** (SPEC-12): el grafo es atómico — las
   pendientes esperan en la DB y se resuelven por REST. El

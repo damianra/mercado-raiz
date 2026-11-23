@@ -3,12 +3,15 @@
  *
  * Lee del estado: productosBajos. Corre en dos fases:
  *
- *  Fase A (paralela, `prepararUno`): por cada producto trae sus
- *  ventas del backend (historial.client → GET /api/historial),
- *  calcula el hash del input (cache, SPEC-16) y aplica el triage
- *  por CV (SPEC-12): demanda estable → promedio histórico directo;
- *  input ya visto → respuesta del cache. Los volátiles sin cache
- *  quedan `pendiente`.
+ *  Fase A (paralela, `prepararUno`): por cada producto trae las
+ *  estadísticas de demanda del backend (estadisticas.client →
+ *  GET /api/estadisticas/demanda, SPEC-26), calcula el hash del
+ *  input (cache, SPEC-16) y aplica el triage (SPEC-12/R26.8):
+ *   - sin ventas en la ventana → demanda 0 determinística, sin LLM;
+ *   - ≥3 días con venta y CV < umbral → estimado heurístico: la
+ *     demanda ponderada del backend se usa tal cual, sin LLM;
+ *   - resto (volátiles o pocos datos) → quedan `pendiente` para el
+ *     LLM — primero se prueba el cache (mismo input → misma clave).
  *
  *  Fase B (lotes, `analizarLote`): los pendientes se agrupan en
  *  lotes de `config.demandaBatch` (SPEC-16) y cada lote es UNA
@@ -18,20 +21,20 @@
  *  (llmJson + prompt por producto, el path pre-batch) en un solo
  *  pool que respeta `config.concurrencia`.
  *
- *  Si el LLM falla también en la llamada individual, usa un
- *  promedio de las ventas como fallback. Escribe:
- *  analisisPorProducto + hashPorProducto (y concatena en errores
- *  cuando hubo fallback).
+ *  Si el LLM falla también en la llamada individual, usa la
+ *  demanda del backend como fallback. Todos los caminos adjuntan
+ *  `desvio_demanda` al análisis — calcular-cantidad lo usa en el
+ *  stock de seguridad (z·σ·√lead). Escribe: analisisPorProducto +
+ *  hashPorProducto (y concatena en errores cuando hubo fallback).
  */
 import { z } from 'zod';
 import { config } from '../../config/env.js';
 import { llmJson, llmJsonBatch } from '../../config/ollama.js';
-import { ventasDeProducto } from '../../integrations/historial.client.js';
+import { estadisticaDemanda } from '../../integrations/estadisticas.client.js';
 import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
 import { buscarDemanda, guardarDemanda, hashAnalisis } from '../../harness/analisis-cache.js';
-import { diaUtc } from '../../utils/fecha.js';
 import { parseJsonArrayResponse, parseJsonResponse } from '../../utils/llm-json.js';
 import { conLimite } from '../../utils/concurrencia.js';
 import { promptAnalisisDemanda } from '../prompts/analisis-demanda.js';
@@ -51,57 +54,66 @@ const schemaAnalisisBatch = schemaAnalisis.extend({
 });
 
 /**
- * Coeficiente de variación (σ/μ) de las unidades vendidas por día.
- * Devuelve Infinity con menos de 3 días de datos — sin muestra
- * suficiente el CV no dice nada y el producto va al LLM.
+ * La pendiente de la regresión (u/día²) → etiqueta. ±0.05 u/día²
+ * es ruido frente a una demanda de unidades/día — debajo de eso
+ * se reporta 'estable'.
  */
-export function coeficienteVariacion(ventas) {
-  const porDia = new Map();
-  for (const v of ventas) {
-    const dia = diaUtc(v.fecha);
-    porDia.set(dia, (porDia.get(dia) ?? 0) + Math.abs(v.diferencia));
-  }
-  const valores = [...porDia.values()];
-  if (valores.length < 3) return Infinity;
-  const media = valores.reduce((a, x) => a + x, 0) / valores.length;
-  if (media === 0) return Infinity;
-  const varianza = valores.reduce((a, x) => a + (x - media) ** 2, 0) / valores.length;
-  return Math.sqrt(varianza) / media;
+function tendenciaDesdePendiente(pendiente) {
+  if (pendiente == null || Math.abs(pendiente) < 0.05) return 'estable';
+  return pendiente > 0 ? 'subiendo' : 'bajando';
 }
 
-/** Plan B sin LLM: promedio simple de unidades vendidas por día. */
-function fallbackDesdeVentas(ventas) {
-  const dias = new Set(ventas.map((v) => diaUtc(v.fecha))).size || 1;
-  const unidades = ventas.reduce((acc, v) => acc + Math.abs(v.diferencia), 0);
+/** Plan B sin LLM: la demanda del backend tal cual (ya es honesta). */
+function fallbackDesdeStats(stats) {
   return {
-    demanda_diaria: Math.max(0.5, Math.round((unidades / dias) * 10) / 10),
-    tendencia: 'estable',
-    observacion: 'Estimado por promedio histórico (análisis IA no disponible)',
+    demanda_diaria: Math.max(0, stats.demanda_diaria ?? 0),
+    tendencia: tendenciaDesdePendiente(stats.tendencia),
+    observacion: 'Estimado por estadísticas del backend (análisis IA no disponible)',
   };
 }
 
 /**
- * Fase A — por producto: trae ventas, calcula hash, aplica el
- * triage CV y el cache. Devuelve el análisis resuelto o marca
+ * Fase A — por producto: trae stats, calcula hash, aplica el
+ * triage y el cache. Devuelve el análisis resuelto o marca
  * `pendiente` con el contexto para la fase de LLM.
  */
 async function prepararUno(p) {
-  const ventas = await ventasDeProducto(p.id);
-  // SPEC-16: el hash cubre ventas + producto + config — generar-
+  const stats = await estadisticaDemanda(p.id);
+  // SPEC-16: el hash cubre stats + producto + config — generar-
   // analisis lo reusa para cachear la justificación (mismo input).
-  const hash = hashAnalisis(p, ventas);
-  // SPEC-12: demanda estable (CV < UMBRAL_CV) → promedio histórico
-  // directo; el LLM se reserva para los patrones volátiles.
-  const cv = coeficienteVariacion(ventas);
-  if (cv < config.umbralCv) {
+  const hash = hashAnalisis(p, stats);
+
+  // Sin ventas en la ventana: la demanda es 0 — el LLM no tiene
+  // nada que estimar. calcular-cantidad asegura el pedido mínimo.
+  if (stats.dias_con_venta === 0) {
     metrics.llmEvitada();
-    log(`  ${p.sku}: demanda estable (CV=${cv.toFixed(2)}) — estimado heurístico, sin LLM`);
+    log(`  ${p.sku}: sin ventas en ${config.demandaDias}d — demanda 0, sin LLM`);
     return {
       id: p.id,
       hash,
       analisis: {
-        ...fallbackDesdeVentas(ventas),
-        observacion: `Demanda estable (CV=${cv.toFixed(2)}), estimado por promedio histórico`,
+        demanda_diaria: 0,
+        tendencia: 'estable',
+        observacion: `Sin ventas en ${config.demandaDias} días`,
+        desvio_demanda: 0,
+      },
+    };
+  }
+
+  // SPEC-12/R26.8: muestra suficiente (≥3 días) y demanda estable
+  // (CV < umbral) → el estimado ponderado del backend se usa tal
+  // cual; el LLM se reserva para los patrones volátiles.
+  if (stats.dias_con_venta >= 3 && stats.cv != null && stats.cv < config.umbralCv) {
+    metrics.llmEvitada();
+    log(`  ${p.sku}: demanda estable (CV=${stats.cv.toFixed(2)}) — estimado heurístico, sin LLM`);
+    return {
+      id: p.id,
+      hash,
+      analisis: {
+        demanda_diaria: stats.demanda_diaria,
+        tendencia: tendenciaDesdePendiente(stats.tendencia),
+        observacion: `Demanda estable (CV=${stats.cv.toFixed(2)}), estimado por estadísticas del backend`,
+        desvio_demanda: stats.desvio_demanda ?? 0,
       },
     };
   }
@@ -112,18 +124,18 @@ async function prepararUno(p) {
   if (cacheada) {
     metrics.cacheHit();
     log(`  ${p.sku}: análisis reusado del cache (input sin cambios)`);
-    return { id: p.id, hash, analisis: cacheada };
+    return { id: p.id, hash, analisis: { ...cacheada, desvio_demanda: stats.desvio_demanda ?? 0 } };
   }
-  return { id: p.id, hash, p, ventas, pendiente: true };
+  return { id: p.id, hash, p, stats, pendiente: true };
 }
 
 /** Llamada individual al LLM — fallback de items del lote. */
-async function analisisIndividual({ p, ventas, hash }) {
+async function analisisIndividual({ p, stats, hash }) {
   try {
     metrics.llamadaLlm();
     const respuesta = await conReintentos(
       async () => {
-        const r = await llmJson.invoke(promptAnalisisDemanda(p, ventas));
+        const r = await llmJson.invoke(promptAnalisisDemanda(p, stats));
         costTracker.registrar(r);
         return parseJsonResponse(r.content, schemaAnalisis);
       },
@@ -134,14 +146,14 @@ async function analisisIndividual({ p, ventas, hash }) {
     await guardarDemanda(p.id, hash, respuesta).catch((e) =>
       log(`  ${p.sku}: cache write falló (${e.message}) — sigo sin cache`));
     log(`  ${p.sku}: ~${respuesta.demanda_diaria} u/día, ${respuesta.tendencia} — ${respuesta.observacion}`);
-    return { id: p.id, hash, analisis: respuesta };
+    return { id: p.id, hash, analisis: { ...respuesta, desvio_demanda: stats.desvio_demanda ?? 0 } };
   } catch (err) {
     metrics.fallback();
-    log(`  ${p.sku}: LLM falló, usando promedio histórico`);
+    log(`  ${p.sku}: LLM falló, usando estadísticas del backend`);
     return {
       id: p.id,
       hash,
-      analisis: fallbackDesdeVentas(ventas),
+      analisis: { ...fallbackDesdeStats(stats), desvio_demanda: stats.desvio_demanda ?? 0 },
       error: `analizar-demanda(${p.sku}): ${err.message} — se usó fallback heurístico`,
     };
   }
@@ -189,7 +201,9 @@ async function analizarLote(lote) {
     await guardarDemanda(e.id, e.hash, analisis).catch((err) =>
       log(`  ${e.p.sku}: cache write falló (${err.message}) — sigo sin cache`));
     log(`  ${e.p.sku}: ~${analisis.demanda_diaria} u/día, ${analisis.tendencia} — ${analisis.observacion} (lote)`);
-    resueltos.push({ id: e.id, hash: e.hash, analisis });
+    // σ no va al cache: es dato del backend, se adjunta fresco del
+    // stats de esta corrida (igual que en el cache hit de prepararUno).
+    resueltos.push({ id: e.id, hash: e.hash, analisis: { ...analisis, desvio_demanda: e.stats.desvio_demanda ?? 0 } });
   }
   if (faltantes.length) {
     log(`  lote: ${faltantes.length} item(s) faltantes/inválidos — llamadas individuales`);
