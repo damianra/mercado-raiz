@@ -10,7 +10,8 @@ const CAMPOS = `id, nombre, contacto, telefono, email, tiempo_entrega_dias,
   pedido_minimo_monto, costo_envio, categorias_cubiertas, activo, fecha_creacion`;
 
 // Estados que hacen "vivir" a una orden: desactivar al proveedor
-// rompería su flujo. RECIBIDA/RECHAZADA/CANCELADA ya están cerradas.
+// rompería su flujo. RECIBIDA/RECHAZADA ya están cerradas; APROBADA
+// queda fuera del guard por R26.5 (ya está aprobada, no la corta).
 const ESTADOS_VIVOS = ['PENDIENTE_APROBACION', 'ENVIADA'];
 
 export async function listProveedores({ activo, search, page, limit }) {
