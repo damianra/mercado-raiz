@@ -7,10 +7,10 @@ process.env.AUTH_RATE_LIMIT = '3';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { closeDb, openDb } from './db.js';
 import { USUARIOS_TEST } from './test-auth.js';
 
-openDb(':memory:');
+await openDb({ searchPath: 't_authrl' });
 
 let server;
 let base;
@@ -21,7 +21,10 @@ beforeAll(async () => {
   base = `http://localhost:${server.address().port}`;
 });
 
-afterAll(() => server?.close());
+afterAll(async () => {
+  server?.close();
+  await closeDb(true);
+});
 
 describe('rate limit de /api/auth/login', () => {
   it('permite AUTH_RATE_LIMIT intentos/min y devuelve 429 al exceder', async () => {

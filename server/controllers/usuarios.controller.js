@@ -12,7 +12,7 @@ const respond = (res, r) => {
   return res.status(r.status).json(r.data ?? { ok: true });
 };
 
-export function list(req, res) {
+export async function list(req, res) {
   const { rol, activo, search, page = '1', limit = '20' } = req.query;
 
   const p = Number(page);
@@ -32,7 +32,7 @@ export function list(req, res) {
   }
 
   res.json(
-    listUsuarios({
+    await listUsuarios({
       rol: rol || undefined,
       activo: activoFilter,
       search: search ? capString(search, 100) : undefined,
@@ -42,24 +42,24 @@ export function list(req, res) {
   );
 }
 
-export function create(req, res) {
+export async function create(req, res) {
   const { email, nombre, rol, password } = req.body ?? {};
-  respond(res, crearUsuario({ email, nombre, rol, password }));
+  respond(res, await crearUsuario({ email, nombre, rol, password }));
 }
 
-export function patch(req, res) {
+export async function patch(req, res) {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: 'id inválido' });
   }
   const { nombre, email, rol, activo } = req.body ?? {};
-  respond(res, patchearUsuario(id, { nombre, email, rol, activo }, req.usuario.id));
+  respond(res, await patchearUsuario(id, { nombre, email, rol, activo }, req.usuario.id));
 }
 
-export function remove(req, res) {
+export async function remove(req, res) {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: 'id inválido' });
   }
-  respond(res, borrarUsuario(id, req.usuario.id));
+  respond(res, await borrarUsuario(id, req.usuario.id));
 }

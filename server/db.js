@@ -1,41 +1,157 @@
-import Database from 'better-sqlite3';
+import pg from 'pg';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seedData } from './seed-data.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-let db;
+const { Pool } = pg;
 
-/**
- * Singleton SQLite: abre la base, aplica schema.sql (idempotente —
- * usar CREATE TABLE IF NOT EXISTS) y corre el seed de las tablas
- * vacías.
- *
- * Fallback documentado: si la compilación nativa de better-sqlite3
- * falla en el entorno, cambiar por `new DatabaseSync(path)` de
- * node:sqlite — la API es casi idéntica (prepare/run/get/all).
- */
-export function openDb(path = join(here, 'app.sqlite')) {
-  if (db) return db;
-  db = new Database(path);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  const schemaPath = join(here, 'schema.sql');
-  if (existsSync(schemaPath)) db.exec(readFileSync(schemaPath, 'utf8'));
-  for (const [table, rows] of Object.entries(seedData)) seedIfEmpty(table, rows);
-  return db;
+// COUNT(*) y SUM(int) vuelven como bigint → node-pg los devuelve
+// string. Los parseamos a number: el dominio nunca supera 2^53.
+pg.types.setTypeParser(20, (v) => parseInt(v, 10)); // int8
+
+const here = dirname(fileURLToPath(import.meta.url));
+let state; // { pool, prepare, get, all, run, tx }
+let opening; // promise memoizada — evita dobles pools en imports concurrentes
+
+const esTest = () => process.env.VITEST || process.env.NODE_ENV === 'test';
+
+// Conexión: en test gana DATABASE_URL_TEST y el default apunta a la
+// base hermana -test (nunca al dev DB); en runtime gana DATABASE_URL.
+export function connectionString() {
+  if (esTest()) {
+    return (
+      process.env.DATABASE_URL_TEST ??
+      'postgres://mercadoraiz:dev-local-2026@localhost:5432/mercadoraiz-db-test'
+    );
+  }
+  return (
+    process.env.DATABASE_URL ??
+    'postgres://mercadoraiz:dev-local-2026@localhost:5432/mercadoraiz-db'
+  );
 }
 
-export function seedIfEmpty(table, rows) {
+// Solo identificadores seguros como nombre de schema (tests).
+const IDENT_RE = /^[a-z][a-z0-9_]*$/;
+
+// Traduce placeholders '?' (estilo SQLite, que usan los modelos) a
+// '$1..$n'. Respeta literales entre comillas simples — un '?' dentro
+// de un string SQL no es placeholder.
+function aPostgres(sql) {
+  let i = 0;
+  let out = '';
+  let enComilla = false;
+  for (const ch of sql) {
+    if (ch === "'") enComilla = !enComilla;
+    out += ch === '?' && !enComilla ? `$${++i}` : ch;
+  }
+  return out;
+}
+
+const wrap = (queryFn) => ({
+  query: (sql, params = []) => queryFn(aPostgres(sql), params),
+  prepare: (sql) => {
+    const pgSql = aPostgres(sql);
+    return {
+      get: async (...params) => (await queryFn(pgSql, params)).rows[0],
+      all: async (...params) => (await queryFn(pgSql, params)).rows,
+      // INSERT con RETURNING devuelve sus filas en `rows`; `changes`
+      // es rowCount (equivalente al changes de better-sqlite3).
+      run: async (...params) => {
+        const r = await queryFn(pgSql, params);
+        return { changes: r.rowCount, rows: r.rows, lastInsertRowid: r.rows[0]?.id };
+      },
+    };
+  },
+  get: async (sql, params = []) => (await queryFn(aPostgres(sql), params)).rows[0],
+  all: async (sql, params = []) => (await queryFn(aPostgres(sql), params)).rows,
+  run: async (sql, params = []) => {
+    const r = await queryFn(aPostgres(sql), params);
+    return { changes: r.rowCount, rows: r.rows, lastInsertRowid: r.rows[0]?.id };
+  },
+});
+
+/**
+ * Pool singleton sobre Postgres. `openDb()` abre el pool, aplica
+ * schema.sql (idempotente) y corre el seed de las tablas vacías.
+ *
+ * Tests: `openDb({ searchPath: 't_xxx' })` crea/usa un schema
+ * aislado dentro de mercadoraiz-db-test — el equivalente al viejo
+ * ':memory:' por archivo. `closeDb(true)` lo dropea.
+ */
+export async function openDb({ searchPath, connString } = {}) {
+  if (state) return state;
+  opening ??= (async () => {
+    if (searchPath && !IDENT_RE.test(searchPath)) {
+      throw new Error(`searchPath inválido: ${searchPath}`);
+    }
+    const pool = new Pool({
+      connectionString: connString ?? connectionString(),
+      ...(searchPath ? { options: `-c search_path=${searchPath}` } : {}),
+    });
+    if (searchPath) await pool.query(`CREATE SCHEMA IF NOT EXISTS ${searchPath}`);
+    const schemaPath = join(here, 'schema.sql');
+    if (existsSync(schemaPath)) {
+      await pool.query(readFileSync(schemaPath, 'utf8'));
+    }
+    const db = { pool, ...wrap(pool.query.bind(pool)) };
+    db.tx = async (fn) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const r = await fn(wrap(client.query.bind(client)));
+        await client.query('COMMIT');
+        return r;
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    };
+    for (const [table, rows] of Object.entries(seedData)) {
+      await seedIfEmpty(db, table, rows);
+    }
+    state = db;
+    return state;
+  })();
+  return opening;
+}
+
+export async function seedIfEmpty(db, table, rows) {
   if (!rows?.length) return;
-  const { c } = db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get();
+  const { c } = await db.get(`SELECT COUNT(*) AS c FROM ${table}`);
   if (c > 0) return;
   const cols = Object.keys(rows[0]);
-  const stmt = db.prepare(
-    `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
-  );
-  db.transaction((list) => {
-    for (const row of list) stmt.run(...cols.map((col) => row[col]));
-  })(rows);
+  await db.tx(async (t) => {
+    // El stmt se crea sobre el CLIENTE de la tx — prepararlo con
+    // db.prepare correría por el pool, fuera del BEGIN/COMMIT.
+    const stmt = t.prepare(
+      `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+    );
+    for (const row of rows) await stmt.run(...cols.map((col) => row[col]));
+    // Los seeds traen ids explícitos — IDENTITY no avanza con
+    // valores manuales; hay que dejar la secuencia en MAX(id) o el
+    // próximo insert sin id choca con las filas sembradas.
+    if (cols.includes('id')) {
+      await t.query(
+        `SELECT setval(pg_get_serial_sequence('${table}', 'id'), MAX(id)) FROM ${table}`,
+      );
+    }
+  });
+}
+
+export async function closeDb(dropSchema = false) {
+  const db = state ?? (await opening);
+  if (!db) return;
+  const options = db.pool.options?.options ?? '';
+  state = undefined;
+  opening = undefined;
+  if (dropSchema) {
+    const schema = options.match(/search_path=(\S+)/)?.[1];
+    if (schema && IDENT_RE.test(schema)) {
+      await db.pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    }
+  }
+  await db.pool.end();
 }

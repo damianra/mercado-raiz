@@ -1,57 +1,46 @@
 import { openDb } from '../db.js';
 
-// Cutoffs calculados en JS con el mismo formato 'YYYY-MM-DDTHH:MM:SS'
-// que usan las filas — comparar contra datetime('now') de SQLite (con
-// espacio) daría bordes de día incorrectos por orden lexicográfico.
-const isoNow = () => new Date().toISOString().slice(0, 19);
-const isoDaysAgo = (d) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 19);
+// Cutoffs calculados en JS — se pasan como params ISO y PG los castea
+// a timestamptz al comparar contra la columna.
+const isoDaysAgo = (d) => new Date(Date.now() - d * 86_400_000).toISOString();
 const isoMonthStart = () => {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00`;
 };
 
-const count = (db, sql, ...params) => db.prepare(sql).get(...params).c;
+export async function getStats() {
+  const db = await openDb();
+  const count = (sql, ...params) => db.get(sql, params).then((r) => r.c);
 
-export function getStats() {
-  const db = openDb();
-
-  const ordenesPendientes = count(
-    db,
+  const ordenesPendientes = await count(
     "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION'",
   );
-  const aprobadasSemana = count(
-    db,
+  const aprobadasSemana = await count(
     "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'APROBADA' AND fecha_aprobacion >= ?",
     isoDaysAgo(7),
   );
-  const aprobadasSemanaAnterior = count(
-    db,
+  const aprobadasSemanaAnterior = await count(
     "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'APROBADA' AND fecha_aprobacion >= ? AND fecha_aprobacion < ?",
     isoDaysAgo(14),
     isoDaysAgo(7),
   );
-  const { v: valorTotalMes } = db
-    .prepare(
-      "SELECT COALESCE(SUM(monto_total), 0) AS v FROM ordenes_compra WHERE estado = 'APROBADA' AND fecha_aprobacion >= ?",
-    )
-    .get(isoMonthStart());
-  const productosStockBajo = count(
-    db,
+  const { v: valorTotalMes } = await db.get(
+    "SELECT COALESCE(SUM(monto_total), 0) AS v FROM ordenes_compra WHERE estado = 'APROBADA' AND fecha_aprobacion >= ?",
+    [isoMonthStart()],
+  );
+  const productosStockBajo = await count(
     'SELECT COUNT(*) AS c FROM productos WHERE stock_actual < stock_minimo AND stock_actual > 0',
   );
-  const productosCriticos = count(
-    db,
+  const productosCriticos = await count(
     'SELECT COUNT(*) AS c FROM productos WHERE stock_actual = 0',
   );
-  const hoy = isoNow().slice(0, 10);
+  const hoy = isoDaysAgo(0).slice(0, 10);
   const ayer = isoDaysAgo(1).slice(0, 10);
-  const pendientesHoy = count(
-    db,
+  const pendientesHoy = await count(
     "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion) = ?",
     hoy,
   );
-  const pendientesAyer = count(
-    db,
+  const pendientesAyer = await count(
     "SELECT COUNT(*) AS c FROM ordenes_compra WHERE estado = 'PENDIENTE_APROBACION' AND date(fecha_creacion) = ?",
     ayer,
   );

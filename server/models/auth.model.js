@@ -103,58 +103,58 @@ const nuevoSecreto = () => randomBytes(32).toString('base64url');
 const hashEq = (a, b) =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-function insertarRefresh(usuarioId, familia, csrf, req) {
+async function insertarRefresh(usuarioId, familia, csrf, req) {
   const secreto = nuevoSecreto();
-  openDb()
-    .prepare(
-      `INSERT INTO refresh_tokens
-       (usuario_id, token_hash, familia, csrf_hash, expira_en, user_agent, ip)
-       VALUES (?, ?, ?, ?, datetime('now', '+${REFRESH_TTL_DIAS} days'), ?, ?)`,
-    )
-    .run(
+  const db = await openDb();
+  await db.run(
+    `INSERT INTO refresh_tokens
+     (usuario_id, token_hash, familia, csrf_hash, expira_en, user_agent, ip)
+     VALUES (?, ?, ?, ?, now() + interval '${REFRESH_TTL_DIAS} days', ?, ?)`,
+    [
       usuarioId,
       sha256(secreto),
       familia,
       sha256(csrf),
       req?.headers?.['user-agent'] ?? null,
       req?.ip ?? null,
-    );
+    ],
+  );
   // El token viaja como familia.secreto — la familia en claro permite
   // detectar reutilización sin escanear la tabla.
   return `${familia}.${secreto}`;
 }
 
 // Emite par (refresh cookie value, csrf token) para una familia nueva.
-export function emitirRefresh(usuarioId, req) {
+export async function emitirRefresh(usuarioId, req) {
   const familia = randomBytes(16).toString('base64url');
   const csrf = nuevoSecreto();
-  return { refresh: insertarRefresh(usuarioId, familia, csrf, req), csrf };
+  return { refresh: await insertarRefresh(usuarioId, familia, csrf, req), csrf };
 }
 
 // Rota el refresh de la cookie. Devuelve {usuario, refresh, csrf} o
 // lanza {status:401|403}. Reuse detection: token de familia conocida
 // pero no vigente → revoca TODA la familia (alguien re-usó un token
 // viejo).
-export function rotarRefresh(cookieToken, csrfHeader, req) {
-  const db = openDb();
+export async function rotarRefresh(cookieToken, csrfHeader, req) {
+  const db = await openDb();
   const [familia] = String(cookieToken ?? '').split('.');
   if (!familia) throw { status: 401, error: 'sesión expirada' };
 
-  const row = db
-    .prepare(
-      `SELECT * FROM refresh_tokens
-       WHERE token_hash = ? AND revocado = 0 AND expira_en > datetime('now')`,
-    )
-    .get(sha256(cookieToken.split('.')[1] ?? ''));
+  const row = await db.get(
+    `SELECT * FROM refresh_tokens
+     WHERE token_hash = ? AND revocado = 0 AND expira_en > now()`,
+    [sha256(cookieToken.split('.')[1] ?? '')],
+  );
 
   if (!row) {
     // ¿La familia existe? → reutilización de un token ya rotado:
     // posible robo — se revoca la familia entera.
-    const { c } = db
-      .prepare('SELECT COUNT(*) AS c FROM refresh_tokens WHERE familia = ?')
-      .get(familia);
+    const { c } = await db.get(
+      'SELECT COUNT(*) AS c FROM refresh_tokens WHERE familia = ?',
+      [familia],
+    );
     if (c > 0) {
-      db.prepare('UPDATE refresh_tokens SET revocado = 1 WHERE familia = ?').run(familia);
+      await db.run('UPDATE refresh_tokens SET revocado = 1 WHERE familia = ?', [familia]);
     }
     throw { status: 401, error: 'sesión expirada' };
   }
@@ -164,41 +164,41 @@ export function rotarRefresh(cookieToken, csrfHeader, req) {
     throw { status: 403, error: 'csrf token inválido' };
   }
 
-  const usuario = db
-    .prepare('SELECT * FROM usuarios WHERE id = ? AND activo = 1')
-    .get(row.usuario_id);
+  const usuario = await db.get('SELECT * FROM usuarios WHERE id = ? AND activo = 1', [
+    row.usuario_id,
+  ]);
   if (!usuario) throw { status: 401, error: 'sesión expirada' };
 
   // Rotación: el viejo queda revocado, entra uno nuevo de la familia.
-  db.prepare('UPDATE refresh_tokens SET revocado = 1 WHERE id = ?').run(row.id);
+  await db.run('UPDATE refresh_tokens SET revocado = 1 WHERE id = ?', [row.id]);
   const csrf = nuevoSecreto();
-  const refresh = insertarRefresh(usuario.id, row.familia, csrf, req);
+  const refresh = await insertarRefresh(usuario.id, row.familia, csrf, req);
   return { usuario, refresh, csrf };
 }
 
-export function revocarRefresh(cookieToken) {
+export async function revocarRefresh(cookieToken) {
   if (!cookieToken) return;
-  openDb()
-    .prepare('UPDATE refresh_tokens SET revocado = 1 WHERE token_hash = ?')
-    .run(sha256(String(cookieToken).split('.')[1] ?? ''));
+  const db = await openDb();
+  await db.run('UPDATE refresh_tokens SET revocado = 1 WHERE token_hash = ?', [
+    sha256(String(cookieToken).split('.')[1] ?? ''),
+  ]);
 }
 
 // Para logout con CSRF (SPEC-23): devuelve la fila vigente del
 // refresh de la cookie, o null si ya murió/nunca existió.
-export function getRefreshVigente(cookieToken) {
+export async function getRefreshVigente(cookieToken) {
   if (!cookieToken) return null;
-  return openDb()
-    .prepare(
-      `SELECT * FROM refresh_tokens
-       WHERE token_hash = ? AND revocado = 0 AND expira_en > datetime('now')`,
-    )
-    .get(sha256(String(cookieToken).split('.')[1] ?? ''));
+  const db = await openDb();
+  return db.get(
+    `SELECT * FROM refresh_tokens
+     WHERE token_hash = ? AND revocado = 0 AND expira_en > now()`,
+    [sha256(String(cookieToken).split('.')[1] ?? '')],
+  );
 }
 
-export function revocarRefreshesDe(usuarioId) {
-  openDb()
-    .prepare('UPDATE refresh_tokens SET revocado = 1 WHERE usuario_id = ?')
-    .run(usuarioId);
+export async function revocarRefreshesDe(usuarioId) {
+  const db = await openDb();
+  await db.run('UPDATE refresh_tokens SET revocado = 1 WHERE usuario_id = ?', [usuarioId]);
 }
 
 // --- Login con lockout ---
@@ -212,30 +212,35 @@ const DUMMY_HASH =
   '$scrypt$N=16384,r=8,p=1$hxmrVMe2rTyjhj4OWFzMnA==$' +
   '+3p62UBKA+A6n4MUoIhpi72wziJkNrNPUqH96D9VrlIcmjYq4QZoVhV5EgtMKIELXyNGskHSACCVYuJNROWF6g==';
 
-export function getUsuarioPorEmail(email) {
-  return openDb().prepare('SELECT * FROM usuarios WHERE email = ?').get(email);
+export async function getUsuarioPorEmail(email) {
+  const db = await openDb();
+  return db.get('SELECT * FROM usuarios WHERE email = ?', [email]);
 }
 
 // Devuelve el usuario autenticado o null (401 genérica afuera — sin
 // oráculo de "el email existe pero la password no").
-export function autenticar(email, password) {
-  const db = openDb();
-  const usuario = getUsuarioPorEmail(email);
-  const ahora = new Date().toISOString().replace('T', ' ').slice(0, 19);
+export async function autenticar(email, password) {
+  const db = await openDb();
+  const usuario = await getUsuarioPorEmail(email);
+  // bloqueado_hasta vuelve como Date (timestamptz) — comparar fechas,
+  // no strings.
+  const ahora = Date.now();
 
   // Bloqueo vencido → se re-arma el contador en 0 (sino un solo
   // fallo posterior re-bloquearía 15 min indefinidamente).
-  if (usuario?.bloqueado_hasta && usuario.bloqueado_hasta <= ahora) {
-    db.prepare(
+  if (usuario?.bloqueado_hasta && new Date(usuario.bloqueado_hasta).getTime() <= ahora) {
+    await db.run(
       'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = ?',
-    ).run(usuario.id);
+      [usuario.id],
+    );
     usuario.intentos_fallidos = 0;
     usuario.bloqueado_hasta = null;
   }
 
   // Lockout activo → misma respuesta genérica (el front no distingue),
   // pero el verify dummy iguala la latencia con un intento real.
-  const bloqueado = usuario?.bloqueado_hasta && usuario.bloqueado_hasta > ahora;
+  const bloqueado =
+    usuario?.bloqueado_hasta && new Date(usuario.bloqueado_hasta).getTime() > ahora;
   if (!usuario || !usuario.activo || bloqueado) {
     verifyPassword(password, DUMMY_HASH);
     return null;
@@ -243,26 +248,27 @@ export function autenticar(email, password) {
 
   if (!verifyPassword(password, usuario.password_hash)) {
     const intentos = usuario.intentos_fallidos + 1;
-    db.prepare(
+    await db.run(
       `UPDATE usuarios SET intentos_fallidos = ?,
-       bloqueado_hasta = CASE WHEN ? >= ? THEN datetime('now', '+${BLOQUEO_MIN} minutes') ELSE bloqueado_hasta END
+       bloqueado_hasta = CASE WHEN ? >= ? THEN now() + interval '${BLOQUEO_MIN} minutes' ELSE bloqueado_hasta END
        WHERE id = ?`,
-    ).run(intentos, intentos, MAX_INTENTOS, usuario.id);
+      [intentos, intentos, MAX_INTENTOS, usuario.id],
+    );
     return null;
   }
 
-  db.prepare(
-    `UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL,
-     ultimo_login = datetime('now') WHERE id = ?`,
-  ).run(usuario.id);
+  await db.run(
+    'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL, ultimo_login = now() WHERE id = ?',
+    [usuario.id],
+  );
   return { ...usuario, intentos_fallidos: 0 };
 }
 
 // Cambio de password self-service: cierra TODAS las sesiones del
 // usuario (token_version++ invalida JWTs, revoca refreshes).
-export function cambiarPassword(usuarioId, actual, nueva) {
-  const db = openDb();
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuarioId);
+export async function cambiarPassword(usuarioId, actual, nueva) {
+  const db = await openDb();
+  const usuario = await db.get('SELECT * FROM usuarios WHERE id = ?', [usuarioId]);
   if (!usuario || !verifyPassword(actual, usuario.password_hash)) {
     return { status: 401, error: 'credenciales inválidas' };
   }
@@ -272,23 +278,24 @@ export function cambiarPassword(usuarioId, actual, nueva) {
       error: `la nueva contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
     };
   }
-  db.prepare(
+  await db.run(
     'UPDATE usuarios SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
-  ).run(hashPassword(nueva), usuarioId);
-  revocarRefreshesDe(usuarioId);
+    [hashPassword(nueva), usuarioId],
+  );
+  await revocarRefreshesDe(usuarioId);
   return { status: 200 };
 }
 
 // Usuario vigente para requireAuth: existe, activo y token_version
 // al día (un cambio de rol/password invalida JWTs emitidos antes).
-export function usuarioParaToken(payload) {
+export async function usuarioParaToken(payload) {
   if (!payload?.sub) return null;
-  const u = openDb()
-    .prepare(
-      `SELECT id, email, nombre, rol, avatar_url, token_version
-       FROM usuarios WHERE id = ? AND activo = 1`,
-    )
-    .get(Number(payload.sub));
+  const db = await openDb();
+  const u = await db.get(
+    `SELECT id, email, nombre, rol, avatar_url, token_version
+     FROM usuarios WHERE id = ? AND activo = 1`,
+    [Number(payload.sub)],
+  );
   if (!u || u.token_version !== payload.token_version) return null;
   return u;
 }

@@ -31,7 +31,7 @@ function parseRequiere(v) {
   return null;
 }
 
-export function list(req, res) {
+export async function list(req, res) {
   const pag = parsePaginacion(req, res);
   if (!pag) return;
 
@@ -49,7 +49,7 @@ export function list(req, res) {
   if (ord !== 'ASC' && ord !== 'DESC') return badRequest(res, 'order debe ser ASC o DESC');
 
   res.json(
-    listOrdenes({
+    await listOrdenes({
       estado: estado || undefined,
       requiereAprobacion: reqAp,
       fechaDesde: fecha_desde || undefined,
@@ -62,8 +62,8 @@ export function list(req, res) {
   );
 }
 
-export function detail(req, res) {
-  const orden = getOrden(req.params.orden_id);
+export async function detail(req, res) {
+  const orden = await getOrden(req.params.orden_id);
   if (!orden) return res.status(404).json({ error: 'orden no encontrada' });
   res.json(orden);
 }
@@ -88,11 +88,11 @@ function validarItemOrden({ producto_id, cantidad, requiere_aprobacion, analisis
   };
 }
 
-export function create(req, res) {
+export async function create(req, res) {
   const item = validarItemOrden(req.body ?? {});
   if (typeof item === 'string') return badRequest(res, item);
 
-  const orden = createOrden(item);
+  const orden = await createOrden(item);
   if (!orden) return res.status(404).json({ error: 'producto no encontrado' });
 
   res.status(201).json({
@@ -111,7 +111,7 @@ export function create(req, res) {
  */
 const MAX_LOTE_ORDENES = 200;
 
-export function createBatch(req, res) {
+export async function createBatch(req, res) {
   const items = req.body;
   if (!Array.isArray(items) || items.length === 0) {
     return badRequest(res, 'el body debe ser un array de órdenes no vacío');
@@ -130,7 +130,7 @@ export function createBatch(req, res) {
     return res.status(400).json({ error: 'items inválidos en el lote', detalle: errores });
   }
 
-  const resultado = createOrdenesBatch(validados);
+  const resultado = await createOrdenesBatch(validados);
   if (resultado.faltantes) {
     return res.status(400).json({
       error: 'productos inexistentes en el lote — no se creó ninguna orden',
@@ -147,8 +147,8 @@ export function createBatch(req, res) {
 
 // Solo se puede aprobar/rechazar desde PENDIENTE_APROBACION — otro
 // estado es una transición inválida (409), no un error de validación.
-function ordenPendienteOError(req, res) {
-  const orden = getOrden(req.params.orden_id);
+async function ordenPendienteOError(req, res) {
+  const orden = await getOrden(req.params.orden_id);
   if (!orden) {
     res.status(404).json({ error: 'orden no encontrada' });
     return null;
@@ -163,11 +163,11 @@ function ordenPendienteOError(req, res) {
   return orden;
 }
 
-export function aprobar(req, res) {
-  if (!ordenPendienteOError(req, res)) return;
+export async function aprobar(req, res) {
+  if (!(await ordenPendienteOError(req, res))) return;
   // aprobado_por sale del token (SPEC-23) — el body ya no lo setea.
   const aprobadoPor = req.usuario.email;
-  const orden = aprobarOrden(req.params.orden_id, aprobadoPor);
+  const orden = await aprobarOrden(req.params.orden_id, aprobadoPor);
   res.json({
     success: true,
     message: `Orden ${orden.orden_id} aprobada exitosamente`,
@@ -180,12 +180,12 @@ export function aprobar(req, res) {
   });
 }
 
-export function rechazar(req, res) {
+export async function rechazar(req, res) {
   const motivo = typeof req.body?.motivo === 'string' ? req.body.motivo.trim() : '';
   if (!motivo) return badRequest(res, 'motivo es requerido para rechazar una orden');
-  if (!ordenPendienteOError(req, res)) return;
+  if (!(await ordenPendienteOError(req, res))) return;
   const rechazadoPor = req.usuario.email; // del token (SPEC-23)
-  const orden = rechazarOrden(req.params.orden_id, rechazadoPor, capString(motivo, 500));
+  const orden = await rechazarOrden(req.params.orden_id, rechazadoPor, capString(motivo, 500));
   res.json({
     success: true,
     message: `Orden ${orden.orden_id} rechazada`,

@@ -2,6 +2,7 @@ import express from 'express';
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openDb } from './db.js';
 import { requestLogger } from './log.js';
 import { rateLimit, securityHeaders } from './security.js';
 
@@ -14,6 +15,9 @@ const here = dirname(fileURLToPath(import.meta.url));
  * nada que registrar.
  */
 export async function createApp() {
+  // El pool es singleton: si index.js/tests ya hicieron openDb()
+  // esto es un no-op memoizado; si no, inicializa schema + seed.
+  await openDb();
   const app = express();
   app.use(express.json({ limit: '2mb' }));
   app.use(securityHeaders);

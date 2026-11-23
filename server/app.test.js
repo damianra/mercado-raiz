@@ -1,6 +1,12 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
+import { closeDb, openDb } from './db.js';
+
+// Schema propio para que el openDb() interno de createApp no
+// escriba en public de mercadoraiz-db-test.
+await openDb({ searchPath: 't_app' });
+afterAll(() => closeDb(true));
 
 const withServer = async (fn) => {
   const app = await createApp();

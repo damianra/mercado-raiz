@@ -1,7 +1,7 @@
 import { TIPOS_MOVIMIENTO, listHistorial } from '../models/historial.model.js';
 import { capString } from '../security.js';
 
-export function list(req, res) {
+export async function list(req, res) {
   const { producto_id, tipo, desde, hasta, page = '1', limit = '50' } = req.query;
 
   const p = Number(page);
@@ -21,7 +21,7 @@ export function list(req, res) {
   }
 
   res.json(
-    listHistorial({
+    await listHistorial({
       productoId,
       tipo: tipo || undefined,
       desde: desde ? capString(desde, 30) : undefined,

@@ -33,8 +33,8 @@ function mapProducto(row) {
   };
 }
 
-export function listProductos({ estado, categoria, proveedorId, search, page, limit }) {
-  const db = openDb();
+export async function listProductos({ estado, categoria, proveedorId, search, page, limit }) {
+  const db = await openDb();
   const where = [];
   const params = [];
 
@@ -51,7 +51,9 @@ export function listProductos({ estado, categoria, proveedorId, search, page, li
     params.push(proveedorId);
   }
   if (search) {
-    where.push('(p.nombre LIKE ? OR p.sku LIKE ?)');
+    // ILIKE: el LIKE de SQLite era case-insensitive (ASCII) — PG es
+    // case-sensitive, ILIKE conserva el comportamiento del search.
+    where.push('(p.nombre ILIKE ? OR p.sku ILIKE ?)');
     params.push(`%${search}%`, `%${search}%`);
   }
 
@@ -59,17 +61,16 @@ export function listProductos({ estado, categoria, proveedorId, search, page, li
     where.length ? ` WHERE ${where.join(' AND ')}` : ''
   }`;
 
-  const { c: total } = db.prepare(`SELECT COUNT(*) AS c ${fromWhere}`).get(...params);
-  const rows = db
-    .prepare(
-      `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
-              p.precio_unitario, p.ubicacion, p.fecha_actualizacion,
-              pr.id AS pr_id, pr.nombre AS pr_nombre
-       ${fromWhere}
-       ORDER BY p.nombre ASC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(...params, limit, (page - 1) * limit);
+  const { c: total } = await db.get(`SELECT COUNT(*) AS c ${fromWhere}`, params);
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.marca, p.ean, p.categoria, p.stock_actual, p.stock_minimo,
+            p.precio_unitario, p.ubicacion, p.fecha_actualizacion,
+            pr.id AS pr_id, pr.nombre AS pr_nombre
+     ${fromWhere}
+     ORDER BY p.nombre ASC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, (page - 1) * limit],
+  );
 
   return {
     data: rows.map(mapProducto),

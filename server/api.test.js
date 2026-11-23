@@ -1,13 +1,14 @@
 // @vitest-environment node
-// Tests de la API del dominio contra una DB SQLite en memoria — el
-// singleton de db.js seedea schema.sql + seed-data.js en ':memory:'.
+// Tests de la API del dominio contra un schema aislado de
+// mercadoraiz-db-test (SPEC-25) — el equivalente al viejo ':memory:'.
+// El singleton de db.js seedea schema.sql + seed-data.js en t_api.
 // Server fresco por test: el rate limit de POSTs (20/min por IP, en
 // una closure por instancia de app) no se comparte entre tests; la DB
 // sí persiste (singleton), así que los describes están ordenados:
 // primero lecturas, después mutaciones.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { closeDb, openDb } from './db.js';
 import { seedData } from './seed-data.js';
 import { UMBRAL_APROBACION } from './models/ordenes.model.js';
 import { loginComo } from './test-auth.js';
@@ -15,7 +16,7 @@ import { loginComo } from './test-auth.js';
 let server;
 let base;
 let sesion; // 1 login por archivo — el JWT es stateless (SPEC-23)
-const db = openDb(':memory:');
+const db = await openDb({ searchPath: 't_api' });
 
 beforeEach(async () => {
   const app = await createApp();
@@ -26,6 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => server?.close());
+afterAll(() => closeDb(true));
 
 const get = (path) => fetch(`${base}/api${path}`, { headers: sesion.headers });
 const post = (path, body) =>

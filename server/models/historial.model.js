@@ -28,8 +28,8 @@ function mapMovimiento(row) {
   };
 }
 
-export function listHistorial({ productoId, tipo, desde, hasta, page, limit }) {
-  const db = openDb();
+export async function listHistorial({ productoId, tipo, desde, hasta, page, limit }) {
+  const db = await openDb();
   const where = [];
   const params = [];
 
@@ -52,12 +52,13 @@ export function listHistorial({ productoId, tipo, desde, hasta, page, limit }) {
 
   const fromWhere = `${FROM_HISTORIAL}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`;
 
-  const { c: total } = db.prepare(`SELECT COUNT(*) AS c ${fromWhere}`).get(...params);
-  const rows = db
-    .prepare(`${SELECT_HISTORIAL}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY h.fecha DESC
-       LIMIT ? OFFSET ?`)
-    .all(...params, limit, (page - 1) * limit);
+  const { c: total } = await db.get(`SELECT COUNT(*) AS c ${fromWhere}`, params);
+  const rows = await db.all(
+    `${SELECT_HISTORIAL}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+     ORDER BY h.fecha DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, (page - 1) * limit],
+  );
 
   return {
     data: rows.map(mapMovimiento),

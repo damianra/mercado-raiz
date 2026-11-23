@@ -8,14 +8,14 @@
 // (módulo aislado por archivo → contador limpio).
 process.env.AUTH_RATE_LIMIT = '500';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { closeDb, openDb } from './db.js';
 import { USUARIOS_TEST, loginComo } from './test-auth.js';
 
 let server;
 let base;
-const db = openDb(':memory:');
+const db = await openDb({ searchPath: 't_auth' });
 
 beforeEach(async () => {
   const app = await createApp();
@@ -24,6 +24,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => server?.close());
+afterAll(() => closeDb(true));
 
 const postAuth = (path, body, headers = {}) =>
   fetch(`${base}/api/auth${path}`, {
@@ -93,7 +94,7 @@ describe('POST /api/auth/login', () => {
         .status,
     ).toBe(401);
     // Limpieza: la suite comparte DB — desbloquear para otros tests.
-    db.prepare(
+    await db.prepare(
       'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE email = ?',
     ).run(email);
   });

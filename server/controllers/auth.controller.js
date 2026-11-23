@@ -62,10 +62,10 @@ export async function login(req, res) {
   if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     return badRequest(res, 'email y password son requeridos');
   }
-  const usuario = autenticar(email.trim().toLowerCase(), password);
+  const usuario = await autenticar(email.trim().toLowerCase(), password);
   if (!usuario) return generica401(res);
 
-  const { refresh, csrf } = emitirRefresh(usuario.id, req);
+  const { refresh, csrf } = await emitirRefresh(usuario.id, req);
   res.setHeader('Set-Cookie', [
     cookieRefresh(refresh, 7 * 86_400),
     cookieCsrf(csrf, 7 * 86_400),
@@ -80,7 +80,7 @@ export async function login(req, res) {
 // la lee de la cookie mr_csrf) → nuevo par rotado.
 export async function refresh(req, res) {
   try {
-    const { usuario, refresh: nuevo, csrf } = rotarRefresh(
+    const { usuario, refresh: nuevo, csrf } = await rotarRefresh(
       leerCookie(req, COOKIE_REFRESH),
       req.headers['x-csrf-token'],
       req,
@@ -103,9 +103,9 @@ export async function refresh(req, res) {
 // POST /api/auth/logout — si el refresh está vigente exige el
 // X-CSRF-Token correspondiente (double-submit, igual que /refresh);
 // sesión ya muerta → idempotente: limpia cookies y 200.
-export function logout(req, res) {
+export async function logout(req, res) {
   const cookieToken = leerCookie(req, COOKIE_REFRESH);
-  const vigente = getRefreshVigente(cookieToken);
+  const vigente = await getRefreshVigente(cookieToken);
   if (vigente) {
     const csrf = req.headers['x-csrf-token'];
     const hash = createHash('sha256').update(String(csrf ?? '')).digest('hex');
@@ -114,7 +114,7 @@ export function logout(req, res) {
       timingSafeEqual(Buffer.from(hash), Buffer.from(vigente.csrf_hash));
     if (!ok) return res.status(403).json({ error: 'csrf token inválido' });
   }
-  revocarRefresh(cookieToken);
+  await revocarRefresh(cookieToken);
   res.setHeader('Set-Cookie', [cookieRefresh('', 0), cookieCsrf('', 0)]);
   res.json({ ok: true });
 }
@@ -126,12 +126,12 @@ export function me(req, res) {
 
 // POST /api/auth/cambiar-password — cierra todas las sesiones del
 // usuario (incluida la actual): el front vuelve a /login.
-export function cambiarPasswordController(req, res) {
+export async function cambiarPasswordController(req, res) {
   const { actual, nueva } = req.body ?? {};
   if (typeof actual !== 'string' || typeof nueva !== 'string') {
     return badRequest(res, 'actual y nueva son requeridas');
   }
-  const r = cambiarPassword(req.usuario.id, actual, nueva);
+  const r = await cambiarPassword(req.usuario.id, actual, nueva);
   if (r.status !== 200) return res.status(r.status).json({ error: r.error });
   res.json({ ok: true });
 }
