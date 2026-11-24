@@ -177,7 +177,7 @@ sort, 400/404/409, umbral, recálculo), `test/api-contract.test.js`
   `APROBADA` + `!requiere_aprobacion` → badge `APROBADO_AUTO`
   ("Aprobado auto"); estado desconocido → `PENDIENTE_APROBACION`;
   `producto`/`proveedor` ausentes → `'—'`; `urgente` = pendiente con
-  `stock_actual === 0`.
+  `stock_actual <= 0` (era `=== 0` — T30.2 permite negativos).
 - **R4.3** Carga inicial: `getOrdenes()` + `getDashboardStats()` en
   `Promise.allSettled` — las órdenes son contenido crítico (fallo →
   `ErrorState`); stats es secundario (fallo → KPIs calculados local).
@@ -211,9 +211,10 @@ del seed, búsqueda/filtro, modal + aprobar, skeleton, vacío, error).
 ### Requisitos
 
 - **R5.1** Estado de producto **derivado al leer** (la columna puede
-  quedar vieja): `stock_actual === 0` → `CRITICO`; `< stock_minimo`
+  quedar vieja): `stock_actual <= 0` → `CRITICO`; `< stock_minimo`
   → `STOCK_BAJO`; resto → `OK`. Un UPDATE de stock se refleja sin
-  tocar `estado`.
+  tocar `estado`. (`<= 0` desde T30.2 — una venta puede dejar el
+  stock negativo y sigue siendo quiebre.)
 - **R5.2** `monto_total = round(cantidad × precio_unitario, 2)` —
   calculado server-side al crear, nunca confiado al body.
 - **R5.3** Umbral de aprobación: `UMBRAL_APROBACION = 100`
@@ -2171,12 +2172,51 @@ Estas tareas convierten el sistema en herramienta diaria.
   pre-cargado en la pedida (parcial → muestra el faltante);
   filtros Enviadas/Recibidas nuevos.
 
-- **T30.2** Ventas y ajustes que mueven stock: `POST /api/ventas`
+- **T30.2** ✅ Ventas y ajustes que mueven stock: `POST /api/ventas`
   (punto de integración POS real) — descuenta `stock_actual` +
   `historial_stock` en tx. `POST /api/stock/ajuste` (merma,
   roturas, conteo físico en góndola/depósito) con motivo
   estructurado — el conteo manual de góndola vive acá, no en la
   OC.
+  Diseño:
+  - `POST /api/ventas` (`requireAuth`+`bloquearBuyer`, sin rol
+    extra — evento de integración como `POST /ordenes`):
+    `{producto_id, unidades, canal:POS|WEB|MAYOR, fecha?,
+    referencia?}`. Tx con `FOR UPDATE`: descuenta
+    `stock_actual`, inserta la venta y `historial_stock` VENTA
+    (`diferencia=-unidades`, referencia `VTA-<id>` si no viene).
+    **Stock negativo permitido**: la venta es hecho físico — si
+    el teórico dice 0 el dato ya divergía; la corrección es el
+    conteo, no rechazar la venta. 404 producto, 400 payload.
+  - `POST /api/stock/ajuste` (`GERENTE`+`ADMIN`): `{producto_id,
+    motivo:MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?,
+    referencia?}` — exactamente uno de `cantidad_nueva`
+    (absoluta, el conteo) o `delta` (signado, la merma); delta
+    que deje negativo → 400 (usar CONTEO). Misma tx:
+    `UPDATE productos` + `historial_stock` AJUSTE.
+  - Schema: `historial_stock.motivo TEXT` (ALTER idempotente) —
+    motivo estructurado como columna, no parseado del
+    `referencia`. `tipo_movimiento` queda AJUSTE (CONTEO es
+    motivo, no tipo — el CHECK no incluye CONTEO y no hace
+    falta migrarlo).
+  - `productos.fecha_actualizacion` se actualiza en ambos writes
+    (y se agrega a `recibirOrden` — write de stock omitido).
+  - `POST /api/ventas/batch` — lote del cierre de turno en UNA
+    request (rate limiter), todo-o-nada con detalle por índice
+    como `/ordenes/batch` (máx 500).
+  - **Stock negativo = CRITICO** (`<= 0`, no `= 0`) en
+    `estadoProducto`/`ESTADO_PRODUCTO_EXPR`, KPIs del dashboard,
+    `estadisticas` (skus_sin_stock, quiebre_seguro,
+    dias_en_quiebre) y `/quiebres` — la convención que
+    `alertas` ya usaba.
+  - Validación sin coercion (`Number.isInteger` sobre el valor
+    crudo — `null`/`''`/`true`/`'3'` → 400; `null` en campo
+    opcional = ausente) + cota int4.
+  - Front: acciones por fila en `/quiebres` — modal "Ajustar
+    stock" (motivo + conteo absoluto o delta + nota + preview
+    del stock resultante) y "Registrar venta" (unidades+canal,
+    para operación manual sin POS); la fila sale de la lista
+    cuando el conteo la restaura sobre el mínimo.
 
 - **T30.3** `historial_stock` poblado desde las ventas del seed
   (reconstruir stock por día para todo el catálogo) — fill rate,

@@ -66,3 +66,80 @@ export async function listVentas({ productoId, canal, desde, hasta, page, limit 
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }
+
+// SPEC-30 (T30.2): la venta es un hecho físico (la caja ya vendió).
+// Si el stock teórico no alcanza, el dato ya divergía — la corrección
+// es el conteo físico (POST /stock/ajuste), no rechazar la venta.
+// Por eso stock_actual puede quedar negativo: señal de divergencia.
+// En la misma tx: descuento + fila ventas + historial_stock VENTA.
+// `p` viene ya lockeada (FOR UPDATE) por el caller.
+async function aplicarVentaEnTx(t, p, { productoId, unidades, canal, fecha, referencia, usuario }, ts) {
+  const anterior = p.stock_actual;
+  const nuevo = anterior - unidades;
+  await t.run(
+    `UPDATE productos SET stock_actual = ?, fecha_actualizacion = ? WHERE id = ?`,
+    [nuevo, ts, productoId],
+  );
+  const v = await t.get(
+    `INSERT INTO ventas (producto_id, fecha, unidades, canal, referencia)
+     VALUES (?, ?::date, ?, ?, ?) RETURNING id`,
+    [productoId, fecha ?? ts.slice(0, 10), unidades, canal, referencia ?? null],
+  );
+  await t.run(
+    `INSERT INTO historial_stock
+       (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
+     VALUES (?, 'VENTA', ?, ?, ?, ?, ?)`,
+    [productoId, anterior, nuevo, -unidades, referencia ?? `VTA-${v.id}`, usuario],
+  );
+  return { venta_id: v.id, stock_anterior: anterior, stock_nuevo: nuevo };
+}
+
+export async function registrarVenta(item) {
+  const db = await openDb();
+  const ts = new Date().toISOString();
+  return db.tx(async (t) => {
+    const p = await t.get(
+      `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
+      [item.productoId],
+    );
+    if (!p) return { status: 404, error: 'producto no encontrado' };
+    return { status: 201, data: await aplicarVentaEnTx(t, p, item, ts) };
+  });
+}
+
+// POST /ventas/batch (T30.2): lote POS en una sola request — todo o
+// nada. Fase 1: se lockean los productos distintos EN ORDEN (dos
+// lotes concurrentes con el mismo set no pueden intercalar locks →
+// sin deadlock) y se verifica existencia — un faltante aborta antes
+// de escribir nada. Fase 2: cada item re-lee el stock dentro del
+// lock ya tomado — la tx ve sus propios writes, así que el mismo
+// producto repetido en el lote descuenta acumulado y la cadena
+// anterior→nueva del historial queda continua.
+export async function registrarVentasBatch(items, usuario) {
+  const db = await openDb();
+  const ts = new Date().toISOString();
+  return db.tx(async (t) => {
+    const ids = [...new Set(items.map((it) => it.productoId))].sort((a, b) => a - b);
+    const existentes = new Set();
+    for (const id of ids) {
+      const p = await t.get(`SELECT id FROM productos WHERE id = ? FOR UPDATE`, [id]);
+      if (p) existentes.add(id);
+    }
+    const faltantes = items.flatMap((it, indice) =>
+      existentes.has(it.productoId) ? [] : [{ indice, producto_id: it.productoId }],
+    );
+    if (faltantes.length) return { faltantes };
+    const ventas = [];
+    for (const it of items) {
+      const p = await t.get(
+        `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
+        [it.productoId],
+      );
+      ventas.push({
+        producto_id: it.productoId,
+        ...(await aplicarVentaEnTx(t, p, { ...it, usuario }, ts)),
+      });
+    }
+    return { ventas };
+  });
+}

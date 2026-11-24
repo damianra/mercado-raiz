@@ -32,7 +32,7 @@ export async function getStats() {
     'SELECT COUNT(*) AS c FROM productos WHERE stock_actual < stock_minimo AND stock_actual > 0',
   );
   const productosCriticos = await count(
-    'SELECT COUNT(*) AS c FROM productos WHERE stock_actual = 0',
+    'SELECT COUNT(*) AS c FROM productos WHERE stock_actual <= 0',
   );
   const hoy = isoDaysAgo(0).slice(0, 10);
   const ayer = isoDaysAgo(1).slice(0, 10);

@@ -44,7 +44,7 @@ function quiebreDesde(movs, fechas) {
       posicion = movs[cursor].cantidad_nueva;
       cursor++;
     }
-    if (posicion === 0) {
+    if (posicion <= 0) {
       dias++;
       indices.add(i);
     }
@@ -275,7 +275,9 @@ export async function metricasScorecard(dias) {
     const margen = s.margen_unitario;
 
     // Quiebres: venta y margen que se dejan de facturar por día.
-    if (p.stock_actual === 0) {
+    // ≤ 0: T30.2 permite stock negativo (venta que supera el
+    // teórico) — sigue siendo quiebre, no "stock bajo".
+    if (p.stock_actual <= 0) {
       q.skus_sin_stock++;
       q.venta += demanda * p.precio_venta;
       if (margen != null) {
@@ -297,7 +299,7 @@ export async function metricasScorecard(dias) {
     } else {
       const cob = p.stock_actual / demanda;
       const lead = p.lead_esperado ?? 0;
-      if (p.stock_actual === 0 || cob < lead) riesgo.quiebre_seguro++;
+      if (p.stock_actual <= 0 || cob < lead) riesgo.quiebre_seguro++;
       else if (cob < lead * 1.5) riesgo.riesgo_alto++;
       else if (cob < lead * 2) riesgo.riesgo_medio++;
       else riesgo.cubierto++;

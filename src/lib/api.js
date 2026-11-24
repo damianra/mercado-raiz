@@ -72,7 +72,7 @@ export function mapOrden(o) {
     stockActual,
     stockMinimo: o.producto?.stock_minimo ?? 0,
     entregaDias: o.proveedor?.tiempo_entrega_dias ?? null,
-    urgente: o.estado === 'PENDIENTE_APROBACION' && stockActual === 0,
+    urgente: o.estado === 'PENDIENTE_APROBACION' && stockActual <= 0,
     analisisIA: o.analisis_ia ?? 'Sin análisis disponible.',
     cantidadRecibida: o.cantidad_recibida ?? null,
     enviadoPor: o.enviado_por ?? null,
@@ -196,6 +196,34 @@ export const recibirOrden = (ordenId, cantidadRecibida) =>
     body: JSON.stringify(
       cantidadRecibida != null ? { cantidad_recibida: cantidadRecibida } : {},
     ),
+  });
+
+// SPEC-30 (T30.2): venta POS — descuenta stock + historial en la
+// misma tx (la venta puede dejar el stock negativo: es un hecho
+// físico; la corrección es el ajuste/conteo).
+export const registrarVenta = ({ productoId, unidades, canal, referencia }) =>
+  apiFetch('/ventas', {
+    method: 'POST',
+    body: JSON.stringify({
+      producto_id: productoId,
+      unidades,
+      canal,
+      ...(referencia ? { referencia } : {}),
+    }),
+  });
+
+// Ajuste manual — cantidadNueva (conteo absoluto) o delta (merma/
+// rotura), motivo obligatorio MERMA|ROTURA|CONTEO|OTRO.
+export const ajustarStock = ({ productoId, motivo, cantidadNueva, delta, referencia }) =>
+  apiFetch('/stock/ajuste', {
+    method: 'POST',
+    body: JSON.stringify({
+      producto_id: productoId,
+      motivo,
+      ...(cantidadNueva !== undefined ? { cantidad_nueva: cantidadNueva } : {}),
+      ...(delta !== undefined ? { delta } : {}),
+      ...(referencia ? { referencia } : {}),
+    }),
   });
 
 // SPEC-24: gestión de usuarios — todos estos endpoints exigen rol

@@ -168,6 +168,10 @@ CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
 
 -- SPEC-26 (R26.4) — upgrades para bases ya creadas (CREATE IF NOT
 -- EXISTS no altera tablas existentes; idempotente).
+-- SPEC-30 (T30.2): motivo estructurado del ajuste como columna (el
+-- CHECK de tipo_movimiento no incluye CONTEO — conteo es motivo,
+-- no tipo).
+ALTER TABLE historial_stock ADD COLUMN IF NOT EXISTS motivo TEXT;
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tiempo_entrega_min_dias INTEGER;
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tiempo_entrega_max_dias INTEGER;
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS confiabilidad_pct INTEGER
