@@ -128,7 +128,7 @@ export default function Alertas({ usuario }) {
   // se marca leída y la lista se refresca.
   const pedidoHecho = async (alerta) => {
     setComprando(null);
-    pushToast('Pedido registrado — queda pendiente de procesamiento');
+    pushToast('Pedido registrado — queda solo en el log del servidor (la OC real no se genera todavía)');
     try {
       await marcarAlertaLeida(alerta.id);
       await cargar();
