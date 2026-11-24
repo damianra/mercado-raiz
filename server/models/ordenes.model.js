@@ -174,12 +174,12 @@ export async function getOrden(ordenId) {
 const INSERT_ORDEN = `INSERT INTO ordenes_compra
   (orden_id, producto_id, proveedor_id, cantidad, precio_unitario, monto_total,
    estado, requiere_aprobacion, analisis_ia, aprobado_por, fecha_aprobacion,
-   fecha_creacion, fecha_actualizacion)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+   alerta_id, fecha_creacion, fecha_actualizacion)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 async function insertarOrden(
   t, ordenId, producto,
-  { cantidad, requiereAprobacion, analisisIa, proveedorId, costoResuelto }, ts,
+  { cantidad, requiereAprobacion, analisisIa, proveedorId, costoResuelto, alertaId }, ts,
 ) {
   // SPEC-27: la orden se precia con el costo del proveedor elegido
   // (item.proveedorId → su fila producto_proveedor ya validada); el
@@ -201,6 +201,7 @@ async function insertarOrden(
     analisisIa ?? null,
     requiere ? null : 'auto',
     requiere ? null : ts,
+    alertaId ?? null,
     ts,
     ts,
   );
@@ -227,33 +228,38 @@ async function resolverCosto(db, producto, proveedorId) {
     : { sinPrecio: `proveedor ${proveedorId} sin precio activo para producto ${producto.id}` };
 }
 
+const SELECT_PRODUCTO_COSTO = `SELECT p.*, pp.costo_unitario FROM productos p
+     LEFT JOIN producto_proveedor pp
+       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+     WHERE p.id = ?`;
+
+// Variante tx-aware (SPEC-30 T30.4): crea la OC dentro de una
+// transacción ya abierta — el pedido del buyer marca la alerta
+// leída y crea la OC atómicamente en la misma tx. Devuelve el
+// orden_id, null (producto inexistente) o { sinPrecio }.
+export async function crearOrdenEnTx(t, requerido) {
+  const producto = await t.get(SELECT_PRODUCTO_COSTO, [requerido.productoId]);
+  if (!producto) return null;
+  const resolucion = await resolverCosto(t, producto, requerido.proveedorId);
+  if (resolucion.sinPrecio) return { sinPrecio: resolucion.sinPrecio };
+  // El MAX(orden_id) y el INSERT viven en la misma tx o dos
+  // creaciones concurrentes podrían generar el mismo OC-NNN.
+  const { maxid } = await t.prepare(PROXIMO_ID).get();
+  const nextId = `OC-${String((maxid ?? 0) + 1).padStart(3, '0')}`;
+  await insertarOrden(
+    t, nextId, producto,
+    { ...requerido, costoResuelto: resolucion.costoResuelto }, now(),
+  );
+  return nextId;
+}
+
 // Crea la orden: precio y proveedor salen del producto, el monto se
 // calcula server-side y el orden_id es el próximo 'OC-NNN' secuencial.
 // Devuelve null si el producto no existe (el controller → 404).
 export async function createOrden(requerido) {
-  const { productoId } = requerido;
   const db = await openDb();
-  const producto = await db.get(
-    `SELECT p.*, pp.costo_unitario FROM productos p
-     LEFT JOIN producto_proveedor pp
-       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
-     WHERE p.id = ?`,
-    [productoId],
-  );
-  if (!producto) return null;
-  const resolucion = await resolverCosto(db, producto, requerido.proveedorId);
-  if (resolucion.sinPrecio) return { sinPrecio: resolucion.sinPrecio };
-  const item = { ...requerido, costoResuelto: resolucion.costoResuelto };
-
-  // Transacción: el MAX(orden_id) y el INSERT deben ser atómicos o dos
-  // creaciones concurrentes podrían generar el mismo OC-NNN.
-  const ordenId = await db.tx(async (t) => {
-    const { maxid } = await t.prepare(PROXIMO_ID).get();
-    const nextId = `OC-${String((maxid ?? 0) + 1).padStart(3, '0')}`;
-    await insertarOrden(t, nextId, producto, item, now());
-    return nextId;
-  });
-
+  const ordenId = await db.tx((t) => crearOrdenEnTx(t, requerido));
+  if (ordenId == null || ordenId.sinPrecio) return ordenId;
   return getOrden(ordenId);
 }
 

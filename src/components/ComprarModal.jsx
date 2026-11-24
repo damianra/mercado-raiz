@@ -95,8 +95,8 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
               Solicitar pedido
             </h2>
             <p className="mt-1 text-sm text-warmgray">
-              Elegí proveedor y cantidad — la solicitud se registra en el
-              log del servidor (la orden de compra no se genera todavía)
+              Elegí proveedor y cantidad — crea la orden de compra en estado
+              pendiente de aprobación (la ve el aprobador en su dashboard)
             </p>
           </div>
           <button

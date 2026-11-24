@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS ordenes_compra (
   cantidad_recibida INTEGER,
   recibido_por TEXT,
   fecha_recepcion TIMESTAMPTZ,
+  -- SPEC-30 (T30.4): la alerta que originó la OC — trazabilidad
+  -- pedido del buyer → alerta atendida (FK se agrega abajo,
+  -- alertas aún no existe en este punto del script).
+  alerta_id INTEGER,
   fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT now(),
   fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -85,6 +89,7 @@ ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_envio TIMESTAMPTZ;
 ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS cantidad_recibida INTEGER;
 ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS recibido_por TEXT;
 ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_recepcion TIMESTAMPTZ;
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS alerta_id INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_ordenes_estado ON ordenes_compra(estado);
 CREATE INDEX IF NOT EXISTS idx_ordenes_fecha ON ordenes_compra(fecha_creacion);
@@ -223,6 +228,21 @@ CREATE TABLE IF NOT EXISTS alertas (
 
 CREATE INDEX IF NOT EXISTS idx_alertas_leida ON alertas(leida);
 CREATE INDEX IF NOT EXISTS idx_alertas_tipo ON alertas(tipo);
+
+-- SPEC-30 (T30.4): la OC registra la alerta que la originó (FK +
+-- una OC por alerta — respaldo del guard leida=0 del endpoint).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c
+                 JOIN pg_namespace n ON n.oid = c.connamespace
+                 WHERE c.conname = 'ordenes_compra_alerta_id_fkey'
+                   AND n.nspname = current_schema()) THEN
+    ALTER TABLE ordenes_compra
+      ADD CONSTRAINT ordenes_compra_alerta_id_fkey
+      FOREIGN KEY (alerta_id) REFERENCES alertas(id);
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ordenes_alerta
+  ON ordenes_compra(alerta_id) WHERE alerta_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS alertas_meta (
   clave TEXT PRIMARY KEY,
