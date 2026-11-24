@@ -123,3 +123,29 @@ test('otros roles no ven /alertas (ADMIN → 404)', async ({ page }) => {
   await page.goto('/alertas');
   await expect(page.getByText('Página no encontrada')).toBeVisible();
 });
+
+// SPEC-30 (T30.6) — la campanita del Topbar es el canal de alertas
+// ALTA para roles operativos: GERENTE las ve sin entrar a /alertas
+// (su menú ni siquiera la lista). Click → /quiebres, la vista
+// donde actúa (venta/ajuste/conteo).
+const GERENTE = { email: 'carlos.martinez@mercadorai.com', password: 'demo-gerente-2026' };
+
+test('la campanita lleva las alertas ALTA al GERENTE y navega a Quiebres', async ({
+  page,
+}) => {
+  await login(page, GERENTE);
+  // Badge sin abrir: las ALTA no leídas del seed (QUIEBRE, lazy eval)
+  const campana = page.getByRole('button', { name: /Notificaciones/ });
+  await expect(campana.locator('span')).toBeVisible();
+
+  await campana.click();
+  const menu = page.locator('div[role="menu"]');
+  await expect(menu.getByText('Alertas de stock')).toBeVisible();
+
+  // La primera sección son las ALTA — click navega a /quiebres.
+  await menu.locator('ul').first().getByRole('menuitem').first().click();
+  await expect(page).toHaveURL(/\/quiebres/);
+  await expect(
+    page.getByRole('heading', { name: 'Quiebres de stock' }),
+  ).toBeVisible();
+});

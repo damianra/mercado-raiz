@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, LogOut, Menu, TriangleAlert } from 'lucide-react';
+import { Bell, LogOut, Menu, PackageX, TriangleAlert } from 'lucide-react';
 import { formatMoney } from '../data/orders.js';
+import { getAlertas } from '../lib/api.js';
+import { navigate } from '../lib/router.jsx';
 
 const ROL_LABEL = {
   ADMIN: 'Administración',
@@ -17,6 +19,11 @@ const iniciales = (nombre = '') =>
     .slice(0, 2)
     .map((p) => p[0].toUpperCase())
     .join('') || '?';
+
+// SPEC-30 (T30.6): la campanita es el canal de alertas ALTA para
+// GERENTE/APROBADOR — poll cada 60s, sin entrar a /alertas.
+const POLL_MS = 60_000;
+const MAX_ALERTAS_CAMPANA = 6;
 
 export default function Topbar({
   urgentes = 0,
@@ -36,6 +43,32 @@ export default function Topbar({
 }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef(null);
+  const [altas, setAltas] = useState([]);
+
+  // La campanita se auto-abastece: alertas ALTA no leídas cada
+  // POLL_MS. El GET /api/alertas está habilitado para los roles
+  // operativos (BUYER lo oculta con sinNotificaciones — su página
+  // entera ES el panel de alertas).
+  useEffect(() => {
+    if (sinNotificaciones) return undefined;
+    let vivo = true;
+    const cargar = () =>
+      getAlertas({ leida: 0 })
+        .then((r) => {
+          if (vivo) {
+            setAltas(r.data.filter((a) => a.severidad === 'ALTA'));
+          }
+        })
+        .catch(() => {}); // el badge nunca rompe la página
+    cargar();
+    const t = setInterval(cargar, POLL_MS);
+    return () => {
+      vivo = false;
+      clearInterval(t);
+    };
+  }, [sinNotificaciones]);
+
+  const badge = urgentes + altas.length;
 
   useEffect(() => {
     if (!open) return;
@@ -78,14 +111,14 @@ export default function Topbar({
             <button
               onClick={() => setOpen((o) => !o)}
               className="relative rounded-lg p-2 text-grafito transition-colors hover:bg-root/10"
-              aria-label={`Notificaciones${urgentes ? `, ${urgentes} urgentes` : ''}`}
+              aria-label={`Notificaciones${badge ? `, ${badge} pendientes` : ''}`}
               aria-expanded={open}
               aria-haspopup="true"
             >
               <Bell size={20} strokeWidth={1.5} />
-              {urgentes > 0 && (
+              {badge > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-terra px-1 font-mono text-[10px] font-bold text-white">
-                  {urgentes}
+                  {badge}
                 </span>
               )}
             </button>
@@ -94,50 +127,104 @@ export default function Topbar({
               <div
                 className="absolute right-0 top-12 w-80 rounded-lg bg-white p-2 shadow-lift ring-1 ring-root/10 animate-fade-up"
                 role="menu"
-                aria-label="Notificaciones de órdenes urgentes"
+                aria-label="Notificaciones"
               >
                 <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warmgray">
                   Notificaciones
                 </p>
-                {alertas.length === 0 ? (
+                {altas.length === 0 && alertas.length === 0 ? (
                   <p className="px-3 pb-4 pt-2 text-center text-sm text-warmgray">
-                    Sin notificaciones — no hay órdenes urgentes pendientes.
+                    Sin notificaciones — no hay alertas ni órdenes urgentes.
                   </p>
                 ) : (
-                  <ul className="max-h-72 overflow-y-auto">
-                    {alertas.map((o) => (
-                      <li key={o.id}>
-                        <button
-                          role="menuitem"
-                          onClick={() => {
-                            setOpen(false);
-                            onSelectOrden?.(o);
-                          }}
-                          className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
-                        >
-                          <TriangleAlert
-                            size={16}
-                            strokeWidth={1.5}
-                            className="mt-0.5 shrink-0 text-terra"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-grafito">
-                              {o.producto}
-                            </span>
-                            <span className="block font-mono text-xs text-info">
-                              {o.id}
-                            </span>
-                            <span className="block text-xs text-warmgray">
-                              Stock agotado — requiere aprobación
-                            </span>
-                          </span>
-                          <span className="tabular shrink-0 font-mono text-xs font-bold text-root">
-                            {formatMoney(o.monto)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="max-h-80 overflow-y-auto">
+                    {altas.length > 0 && (
+                      <>
+                        <p className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-terra">
+                          Alertas de stock
+                        </p>
+                        <ul>
+                          {altas.slice(0, MAX_ALERTAS_CAMPANA).map((a) => (
+                            <li key={`alerta-${a.id}`}>
+                              <button
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpen(false);
+                                  navigate('/quiebres');
+                                }}
+                                className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
+                              >
+                                <PackageX
+                                  size={16}
+                                  strokeWidth={1.5}
+                                  className="mt-0.5 shrink-0 text-terra"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-semibold text-grafito">
+                                    {a.producto ?? 'Producto'}
+                                  </span>
+                                  {a.sku && (
+                                    <span className="block font-mono text-xs text-info">
+                                      {a.sku}
+                                    </span>
+                                  )}
+                                  <span className="block text-xs text-warmgray">
+                                    {a.mensaje}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        {altas.length > MAX_ALERTAS_CAMPANA && (
+                          <p className="px-3 pb-2 text-center text-xs text-warmgray">
+                            +{altas.length - MAX_ALERTAS_CAMPANA} alertas más
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {alertas.length > 0 && (
+                      <>
+                        <p className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-warmgray">
+                          Órdenes urgentes
+                        </p>
+                        <ul>
+                          {alertas.map((o) => (
+                            <li key={o.id}>
+                              <button
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpen(false);
+                                  onSelectOrden?.(o);
+                                }}
+                                className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
+                              >
+                                <TriangleAlert
+                                  size={16}
+                                  strokeWidth={1.5}
+                                  className="mt-0.5 shrink-0 text-terra"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-semibold text-grafito">
+                                    {o.producto}
+                                  </span>
+                                  <span className="block font-mono text-xs text-info">
+                                    {o.id}
+                                  </span>
+                                  <span className="block text-xs text-warmgray">
+                                    Stock agotado — requiere aprobación
+                                  </span>
+                                </span>
+                                <span className="tabular shrink-0 font-mono text-xs font-bold text-root">
+                                  {formatMoney(o.monto)}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             )}
