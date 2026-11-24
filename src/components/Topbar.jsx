@@ -24,6 +24,12 @@ const iniciales = (nombre = '') =>
 // GERENTE/APROBADOR — poll cada 60s, sin entrar a /alertas.
 const POLL_MS = 60_000;
 const MAX_ALERTAS_CAMPANA = 6;
+// Mismo set que el GET /api/alertas — SERVICIO no pollea un 403.
+const ROLES_LEEN_ALERTAS = ['BUYER', 'ADMIN', 'GERENTE', 'APROBADOR'];
+// QUIEBRE → /quiebres (stock ≤ 0 siempre está en la tabla);
+// RIESGO_LEAD puede tener stock ≥ mínimo → va a /metricas
+// (la tabla de riesgo cobertura < lead).
+const DESTINO_ALERTA = { QUIEBRE: '/quiebres' };
 
 export default function Topbar({
   urgentes = 0,
@@ -50,7 +56,9 @@ export default function Topbar({
   // operativos (BUYER lo oculta con sinNotificaciones — su página
   // entera ES el panel de alertas).
   useEffect(() => {
-    if (sinNotificaciones) return undefined;
+    if (sinNotificaciones || !ROLES_LEEN_ALERTAS.includes(usuario?.rol)) {
+      return undefined;
+    }
     let vivo = true;
     const cargar = () =>
       getAlertas({ leida: 0 })
@@ -66,9 +74,14 @@ export default function Topbar({
       vivo = false;
       clearInterval(t);
     };
-  }, [sinNotificaciones]);
+  }, [sinNotificaciones, usuario?.rol]);
 
-  const badge = urgentes + altas.length;
+  // Una OC urgente y su alerta QUIEBRE son el mismo stock-out —
+  // la OC (accionable) gana y la alerta no duplica el badge.
+  const altasVisibles = altas.filter(
+    (a) => !alertas.some((o) => o.producto === a.producto),
+  );
+  const badge = urgentes + altasVisibles.length;
 
   useEffect(() => {
     if (!open) return;
@@ -132,25 +145,25 @@ export default function Topbar({
                 <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warmgray">
                   Notificaciones
                 </p>
-                {altas.length === 0 && alertas.length === 0 ? (
+                {altasVisibles.length === 0 && alertas.length === 0 ? (
                   <p className="px-3 pb-4 pt-2 text-center text-sm text-warmgray">
                     Sin notificaciones — no hay alertas ni órdenes urgentes.
                   </p>
                 ) : (
                   <div className="max-h-80 overflow-y-auto">
-                    {altas.length > 0 && (
+                    {altasVisibles.length > 0 && (
                       <>
                         <p className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-terra">
                           Alertas de stock
                         </p>
                         <ul>
-                          {altas.slice(0, MAX_ALERTAS_CAMPANA).map((a) => (
+                          {altasVisibles.slice(0, MAX_ALERTAS_CAMPANA).map((a) => (
                             <li key={`alerta-${a.id}`}>
                               <button
                                 role="menuitem"
                                 onClick={() => {
                                   setOpen(false);
-                                  navigate('/quiebres');
+                                  navigate(DESTINO_ALERTA[a.tipo] ?? '/metricas');
                                 }}
                                 className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
                               >
@@ -176,10 +189,17 @@ export default function Topbar({
                             </li>
                           ))}
                         </ul>
-                        {altas.length > MAX_ALERTAS_CAMPANA && (
-                          <p className="px-3 pb-2 text-center text-xs text-warmgray">
-                            +{altas.length - MAX_ALERTAS_CAMPANA} alertas más
-                          </p>
+                        {altasVisibles.length > MAX_ALERTAS_CAMPANA && (
+                          <button
+                            onClick={() => {
+                              setOpen(false);
+                              navigate('/quiebres');
+                            }}
+                            className="w-full rounded-lg px-3 pb-2 pt-1 text-center text-xs font-semibold text-info transition-colors hover:bg-cream"
+                          >
+                            +{altasVisibles.length - MAX_ALERTAS_CAMPANA} alertas
+                            más — ver quiebres
+                          </button>
                         )}
                       </>
                     )}
