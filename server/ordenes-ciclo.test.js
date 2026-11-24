@@ -101,7 +101,7 @@ describe('POST /api/ordenes/:id/recibir', () => {
         `SELECT tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario
          FROM historial_stock WHERE producto_id = ? AND referencia = ?`,
       )
-      .get(antes.producto_id, `OC ${id}`);
+      .get(antes.producto_id, id);
     expect(mov).toMatchObject({
       tipo_movimiento: 'REPOSICION',
       cantidad_anterior: antes.stock_actual,
@@ -145,18 +145,53 @@ describe('POST /api/ordenes/:id/recibir', () => {
     }
   });
 
-  it('rechaza 409 en estados inválidos y es idempotente (no doble suma)', async () => {
-    // PENDIENTE y RECHAZADA no se pueden recibir (OC-001 quedó
-    // ENVIADA del test de enviar — no reutilizarla acá).
+  it('rechaza 409 en estados inválidos', async () => {
     expect((await recibir(ordenSeed('PENDIENTE_APROBACION'))).status).toBe(409);
     expect((await recibir(ordenSeed('RECHAZADA'))).status).toBe(409);
     expect((await recibir('OC-999')).status).toBe(404);
-    // El seed ya recibida en el test anterior → segunda vez → 409,
-    // el stock NO vuelve a subir.
-    const id = ordenSeed('ENVIADA');
+  });
+
+  // Helper: orden ENVIADA propia por test (sin depender del orden
+  // de ejecución ni de mutar seeds compartidos).
+  const nuevaEnviada = async () => {
+    const creada = await post('/api/ordenes', {
+      producto_id: seedData.productos[4].id,
+      cantidad: 4,
+      requiere_aprobacion: false,
+    }, servicio);
+    const { data: nueva } = await creada.json();
+    await enviar(nueva.orden_id, aprobador);
+    return nueva.orden_id;
+  };
+
+  it('es idempotente: un segundo /recibir → 409 y el stock no sube de nuevo', async () => {
+    const id = await nuevaEnviada();
+    await recibir(id);
     const antes = await stockDe(id);
     const res = await recibir(id);
     expect(res.status).toBe(409);
     expect((await stockDe(id)).stock_actual).toBe(antes.stock_actual);
+  });
+
+  it('dos /recibir concurrentes: uno gana, el otro 409 — una sola suma', async () => {
+    const id = await nuevaEnviada();
+    const { cantidad } = await db
+      .prepare('SELECT cantidad FROM ordenes_compra WHERE orden_id = ?')
+      .get(id);
+    const antes = await stockDe(id);
+    const [a, b] = await Promise.all([recibir(id), recibir(id)]);
+    const estados = [a.status, b.status].sort();
+    expect(estados).toEqual([200, 409]);
+    // Exactamente una suma — el guard de estado dentro del lock lo
+    // garantiza (FOR UPDATE + verificación post-lock en la tx).
+    expect((await stockDe(id)).stock_actual).toBe(antes.stock_actual + cantidad);
+    const movs = await db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM historial_stock h
+         JOIN ordenes_compra o ON o.producto_id = h.producto_id
+         WHERE o.orden_id = ? AND h.referencia = ? AND h.tipo_movimiento = 'REPOSICION'`,
+      )
+      .get(id, id);
+    expect(movs.c).toBe(1);
   });
 });

@@ -2155,14 +2155,21 @@ Estas tareas convierten el sistema en herramienta diaria.
   con `cantidad_recibida` ≤ cantidad pedida — recepciones
   parciales y faltantes medibles (OTIF real). La recepción SUMA
   `stock_actual` y escribe `historial_stock` (REPOSICION, ref
-  `OC <id>`) en la misma transacción (`FOR UPDATE` en orden y
-  producto → idempotente, no doble suma). Roles: misma matriz que
+  `OC <id>`) en la misma transacción. Idempotencia bajo
+  concurrencia garantizada por el guard de estado dentro del
+  lock: `SELECT ... FOR UPDATE` re-verifica el estado tras
+  adquirir el lock (READ COMMITTED re-lee la fila más reciente)
+  y `enviar` usa `UPDATE ... AND estado='APROBADA'` — el segundo
+  `/recibir` concurrente recibe 409 y el stock NO se suma dos
+  veces (test `Promise.all` lo prueba). Roles: misma matriz que
   aprobar (APROBADOR/GERENTE/ADMIN). Campos nuevos en la OC:
   `enviado_por`/`fecha_envio`/`cantidad_recibida`/`recibido_por`/
-  `fecha_recepcion`. UI: "Enviar" en la fila aprobada (un click,
-  no exige cantidad) y "Registrar recepción" en la enviada →
-  abre el detalle con input pre-cargado en la pedida (parcial →
-  muestra el faltante); filtros Enviadas/Recibidas nuevos.
+  `fecha_recepcion`. UI: "Marcar como enviada" en la fila
+  aprobada (un click — copy honesto: la OC no se envía desde el
+  sistema, se registra que ya se comunicó) y "Registrar
+  recepción" en la enviada → abre el detalle con input
+  pre-cargado en la pedida (parcial → muestra el faltante);
+  filtros Enviadas/Recibidas nuevos.
 
 - **T30.2** Ventas y ajustes que mueven stock: `POST /api/ventas`
   (punto de integración POS real) — descuenta `stock_actual` +

@@ -66,6 +66,9 @@ function mapOrdenResumen(row) {
     requiere_aprobacion: !!row.requiere_aprobacion,
     analisis_ia: row.analisis_ia,
     fecha_creacion: row.fecha_creacion,
+    cantidad_recibida: row.cantidad_recibida,
+    enviado_por: row.enviado_por,
+    recibido_por: row.recibido_por,
   };
 }
 
@@ -333,16 +336,20 @@ export async function rechazarOrden(ordenId, rechazadoPor, motivo) {
 }
 
 // SPEC-30 (T30.1): APROBADA → ENVIADA — la OC ya se le mandó al
-// proveedor. El controller verifica el estado antes (409 si no).
+// proveedor. El AND estado='APROBADA' guarda la transición en el
+// UPDATE mismo: si otra request ya la movió entre el check del
+// controller y este write, changes=0 → null → 409 (no se puede
+// regresar una RECIBIDA a ENVIADA por una request lenta).
 export async function enviarOrden(ordenId, enviadoPor) {
   const db = await openDb();
   const ts = now();
-  await db.run(
+  const r = await db.run(
     `UPDATE ordenes_compra
      SET estado = 'ENVIADA', enviado_por = ?, fecha_envio = ?, fecha_actualizacion = ?
-     WHERE orden_id = ?`,
+     WHERE orden_id = ? AND estado = 'APROBADA'`,
     [enviadoPor, ts, ts, ordenId],
   );
+  if (r.changes === 0) return null;
   return getOrden(ordenId);
 }
 
@@ -353,11 +360,19 @@ export async function enviarOrden(ordenId, enviadoPor) {
 export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
   const db = await openDb();
   const ts = now();
-  await db.tx(async (t) => {
+  const ok = await db.tx(async (t) => {
+    // La race real: dos /recibir concurrentes pasan el check del
+    // controller y se serializan acá — el segundo bloquea en FOR
+    // UPDATE y, al commit del primero, re-lee la fila ya RECIBIDA
+    // (READ COMMITTED). El estado se verifica DENTRO del lock y la
+    // transición es atómica: AND estado='ENVIADA' → changes=0 →
+    // null → 409. Sin esto la segunda request volvería a sumar
+    // stock y a insertar otro REPOSICION.
     const o = await t.get(
-      `SELECT producto_id, cantidad FROM ordenes_compra WHERE orden_id = ? FOR UPDATE`,
+      `SELECT producto_id, estado FROM ordenes_compra WHERE orden_id = ? FOR UPDATE`,
       [ordenId],
     );
+    if (!o || o.estado !== 'ENVIADA') return false;
     await t.run(
       `UPDATE ordenes_compra
        SET estado = 'RECIBIDA', cantidad_recibida = ?, recibido_por = ?,
@@ -378,9 +393,11 @@ export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
       `INSERT INTO historial_stock
          (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
        VALUES (?, 'REPOSICION', ?, ?, ?, ?, ?)`,
-      [o.producto_id, anterior, nuevo, cantidadRecibida, `OC ${ordenId}`, recibidoPor],
+      [o.producto_id, anterior, nuevo, cantidadRecibida, ordenId, recibidoPor],
     );
+    return true;
   });
+  if (!ok) return null;
   // getOrden va por el pool — leer DESPUÉS del commit, no dentro.
   return getOrden(ordenId);
 }

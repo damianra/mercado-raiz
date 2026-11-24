@@ -224,9 +224,15 @@ export async function enviar(req, res) {
     });
   }
   const o = await enviarOrden(req.params.orden_id, req.usuario.email);
+  // null → otra request ya transicionó la orden (race): 409 honesto.
+  if (!o) {
+    return res.status(409).json({
+      error: 'la orden ya cambió de estado — recargá y reintentá',
+    });
+  }
   res.json({
     success: true,
-    message: `Orden ${o.orden_id} enviada al proveedor`,
+    message: `Orden ${o.orden_id} marcada como enviada`,
     data: { orden_id: o.orden_id, estado: o.estado, enviado_por: o.enviado_por, fecha_envio: o.fecha_envio },
   });
 }
@@ -248,6 +254,13 @@ export async function recibir(req, res) {
     return badRequest(res, `cantidad_recibida debe ser un entero entre 1 y ${orden.cantidad}`);
   }
   const o = await recibirOrden(req.params.orden_id, recibida, req.usuario.email);
+  // null → carrera: otra request ya la recibió → el stock NO se
+  // duplicó y esta es la respuesta honesta.
+  if (!o) {
+    return res.status(409).json({
+      error: 'la orden ya fue recibida — el stock no se volvió a sumar',
+    });
+  }
   res.json({
     success: true,
     message: `Orden ${o.orden_id} recibida — stock actualizado`,

@@ -320,8 +320,8 @@ function Acciones({ orden: o, procesando, onVer, onAprobar, onRechazar, onEnviar
           onClick={() => onEnviar(o)}
           disabled={procesando}
           className="rounded-lg p-2 text-info transition hover:bg-info/10 disabled:opacity-40"
-          aria-label={`Enviar ${o.id} al proveedor`}
-          title="Enviar al proveedor"
+          aria-label={`Marcar ${o.id} como enviada`}
+          title="Marcar como enviada (la OC ya se le comunicó al proveedor)"
         >
           {procesando ? (
             <LoaderCircle size={18} className="animate-spin" />

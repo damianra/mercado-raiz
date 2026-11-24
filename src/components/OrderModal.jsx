@@ -24,7 +24,8 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
   const pendiente = orden.estado === 'PENDIENTE_APROBACION';
   const aprobada = orden.estado === 'APROBADO' || orden.estado === 'APROBADO_AUTO';
   const enviada = orden.estado === 'ENVIADA';
-  const cantRecibir = parseInt(recibida, 10);
+  // Number() (no parseInt) → '2.5' queda inválido, no truncado.
+  const cantRecibir = recibida.trim() === '' ? NaN : Number(recibida);
   const recibirValida =
     Number.isInteger(cantRecibir) && cantRecibir >= 1 && cantRecibir <= orden.cantidad;
 
@@ -156,7 +157,8 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         {aprobada && (
           <div className="mt-6">
             <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
-              Orden aprobada — el siguiente paso es enviarla al proveedor.
+              Orden aprobada — cuando se la comuniques al proveedor, marcalo acá
+              (la OC no se envía desde el sistema).
             </p>
             <button
               onClick={() => onEnviar(orden)}
@@ -165,11 +167,11 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
             >
               {procesando ? (
                 <>
-                  <LoaderCircle size={16} className="animate-spin" /> Enviando…
+                  <LoaderCircle size={16} className="animate-spin" /> Registrando…
                 </>
               ) : (
                 <>
-                  <Send size={16} strokeWidth={2.5} /> Enviar al proveedor
+                  <Send size={16} strokeWidth={2.5} /> Marcar como enviada
                 </>
               )}
             </button>
@@ -178,7 +180,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         {enviada && (
           <div className="mt-6">
             <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
-              Orden enviada al proveedor — cuando llega el camión registrá la recepción.
+              Orden marcada como enviada — cuando llega el camión registrá la recepción.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex h-12 flex-1 items-center gap-2 rounded-lg bg-white px-3 ring-1 ring-root/20 focus-within:ring-2 focus-within:ring-root">
@@ -215,7 +217,8 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
             </div>
             {recibirValida && cantRecibir < orden.cantidad && (
               <p className="mt-2 text-xs text-warmgray">
-                Recepción parcial — faltan {orden.cantidad - cantRecibir} unidades del pedido.
+                Recepción parcial — falta {orden.cantidad - cantRecibir}{' '}
+                {orden.cantidad - cantRecibir === 1 ? 'unidad' : 'unidades'} del pedido.
               </p>
             )}
           </div>

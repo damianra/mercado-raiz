@@ -124,7 +124,7 @@ export default function App({ usuario }) {
         await enviarOrden(orden.id);
         actualizar(orden.id, 'ENVIADA');
         setDetalle((d) => (d?.id === orden.id ? null : d));
-        pushToast(`Orden ${orden.id} enviada al proveedor`);
+        pushToast(`Orden ${orden.id} marcada como enviada`);
       } else {
         const res = await recibirOrden(orden.id, cantidadRecibida);
         setOrdenes((prev) =>
