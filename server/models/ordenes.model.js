@@ -30,6 +30,7 @@ const FROM_ORDEN = `FROM ordenes_compra o
 const SELECT_ORDEN = `SELECT o.id, o.orden_id, o.cantidad, o.precio_unitario, o.monto_total,
     o.estado, o.requiere_aprobacion, o.analisis_ia, o.aprobado_por,
     o.motivo_rechazo, o.fecha_aprobacion, o.fecha_creacion, o.fecha_actualizacion,
+    o.enviado_por, o.fecha_envio, o.cantidad_recibida, o.recibido_por, o.fecha_recepcion,
     p.id AS p_id, p.sku AS p_sku, p.nombre AS p_nombre, p.categoria AS p_categoria,
     p.stock_actual AS p_stock_actual, p.stock_minimo AS p_stock_minimo,
     p.precio_venta AS p_precio_venta, p.ubicacion AS p_ubicacion,
@@ -93,6 +94,11 @@ function mapOrdenDetalle(row) {
     motivo_rechazo: row.motivo_rechazo,
     fecha_aprobacion: row.fecha_aprobacion,
     fecha_actualizacion: row.fecha_actualizacion,
+    enviado_por: row.enviado_por,
+    fecha_envio: row.fecha_envio,
+    cantidad_recibida: row.cantidad_recibida,
+    recibido_por: row.recibido_por,
+    fecha_recepcion: row.fecha_recepcion,
   };
 }
 
@@ -323,5 +329,58 @@ export async function rechazarOrden(ordenId, rechazadoPor, motivo) {
      WHERE orden_id = ?`,
     [rechazadoPor, motivo, ts, ts, ordenId],
   );
+  return getOrden(ordenId);
+}
+
+// SPEC-30 (T30.1): APROBADA → ENVIADA — la OC ya se le mandó al
+// proveedor. El controller verifica el estado antes (409 si no).
+export async function enviarOrden(ordenId, enviadoPor) {
+  const db = await openDb();
+  const ts = now();
+  await db.run(
+    `UPDATE ordenes_compra
+     SET estado = 'ENVIADA', enviado_por = ?, fecha_envio = ?, fecha_actualizacion = ?
+     WHERE orden_id = ?`,
+    [enviadoPor, ts, ts, ordenId],
+  );
+  return getOrden(ordenId);
+}
+
+// SPEC-30 (T30.1): ENVIADA → RECIBIDA — llegó el camión. En la
+// misma transacción: la OC registra cuánto llegó (cantidad_recibida
+// ≤ cantidad — el camión puede traer menos: el faltante queda
+// medible) y el producto SUMA stock + historial_stock REPOSICION.
+export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
+  const db = await openDb();
+  const ts = now();
+  await db.tx(async (t) => {
+    const o = await t.get(
+      `SELECT producto_id, cantidad FROM ordenes_compra WHERE orden_id = ? FOR UPDATE`,
+      [ordenId],
+    );
+    await t.run(
+      `UPDATE ordenes_compra
+       SET estado = 'RECIBIDA', cantidad_recibida = ?, recibido_por = ?,
+           fecha_recepcion = ?, fecha_actualizacion = ?
+       WHERE orden_id = ?`,
+      [cantidadRecibida, recibidoPor, ts, ts, ordenId],
+    );
+    const { stock_actual: anterior } = await t.get(
+      `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
+      [o.producto_id],
+    );
+    const nuevo = anterior + cantidadRecibida;
+    await t.run(`UPDATE productos SET stock_actual = ? WHERE id = ?`, [
+      nuevo,
+      o.producto_id,
+    ]);
+    await t.run(
+      `INSERT INTO historial_stock
+         (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
+       VALUES (?, 'REPOSICION', ?, ?, ?, ?, ?)`,
+      [o.producto_id, anterior, nuevo, cantidadRecibida, `OC ${ordenId}`, recibidoPor],
+    );
+  });
+  // getOrden va por el pool — leer DESPUÉS del commit, no dentro.
   return getOrden(ordenId);
 }

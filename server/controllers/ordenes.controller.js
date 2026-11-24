@@ -5,8 +5,10 @@ import {
   aprobarOrden,
   createOrden,
   createOrdenesBatch,
+  enviarOrden,
   getOrden,
   listOrdenes,
+  recibirOrden,
   rechazarOrden,
 } from '../models/ordenes.model.js';
 
@@ -206,6 +208,57 @@ export async function rechazar(req, res) {
       orden_id: orden.orden_id,
       estado: orden.estado,
       motivo: orden.motivo_rechazo,
+    },
+  });
+}
+
+// SPEC-30 (T30.1): APROBADA → ENVIADA. Guard de estado igual que
+// aprobar/rechazar — 404 si no existe, 409 en transición inválida.
+export async function enviar(req, res) {
+  const orden = await getOrden(req.params.orden_id);
+  if (!orden) return res.status(404).json({ error: 'orden no encontrada' });
+  if (orden.estado !== 'APROBADA') {
+    return res.status(409).json({
+      error: `solo se puede enviar una orden aprobada (estado actual: ${orden.estado})`,
+      estado: orden.estado,
+    });
+  }
+  const o = await enviarOrden(req.params.orden_id, req.usuario.email);
+  res.json({
+    success: true,
+    message: `Orden ${o.orden_id} enviada al proveedor`,
+    data: { orden_id: o.orden_id, estado: o.estado, enviado_por: o.enviado_por, fecha_envio: o.fecha_envio },
+  });
+}
+
+// SPEC-30 (T30.1): ENVIADA → RECIBIDA. cantidad_recibida opcional
+// (default la pedida completa); parcial deja el faltante medible.
+// La recepción suma stock + historial en la misma tx (model).
+export async function recibir(req, res) {
+  const orden = await getOrden(req.params.orden_id);
+  if (!orden) return res.status(404).json({ error: 'orden no encontrada' });
+  if (orden.estado !== 'ENVIADA') {
+    return res.status(409).json({
+      error: `solo se puede recibir una orden enviada (estado actual: ${orden.estado})`,
+      estado: orden.estado,
+    });
+  }
+  const recibida = req.body?.cantidad_recibida ?? orden.cantidad;
+  if (!Number.isInteger(recibida) || recibida < 1 || recibida > orden.cantidad) {
+    return badRequest(res, `cantidad_recibida debe ser un entero entre 1 y ${orden.cantidad}`);
+  }
+  const o = await recibirOrden(req.params.orden_id, recibida, req.usuario.email);
+  res.json({
+    success: true,
+    message: `Orden ${o.orden_id} recibida — stock actualizado`,
+    data: {
+      orden_id: o.orden_id,
+      estado: o.estado,
+      cantidad: o.cantidad,
+      cantidad_recibida: o.cantidad_recibida,
+      faltante: o.cantidad - o.cantidad_recibida,
+      recibido_por: o.recibido_por,
+      stock_actual: o.producto.stock_actual,
     },
   });
 }

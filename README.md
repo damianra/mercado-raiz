@@ -79,6 +79,8 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `POST /api/ordenes` — crea orden (`monto_total` calculado server-side; `>= $50.000` → `PENDIENTE_APROBACION`)
 - `POST /api/ordenes/batch` — array de órdenes en una transacción (todo o nada; 400 con detalle por índice si algún item falla — SPEC-16)
 - `POST /api/ordenes/:orden_id/aprobar` · `POST /api/ordenes/:orden_id/rechazar` (requiere `motivo`)
+- `POST /api/ordenes/:orden_id/enviar` — APROBADA→ENVIADA (la OC ya se le mandó al proveedor; rol aprobador)
+- `POST /api/ordenes/:orden_id/recibir` — ENVIADA→RECIBIDA (llegó el camión: suma `stock_actual` + `historial_stock` en tx; `cantidad_recibida` opcional ≤ pedida, default completa — recepciones parciales medibles)
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
@@ -142,8 +144,8 @@ rotativo en cookie httpOnly. Usuarios del seed (`npm run seed`):
 
 | Email | Password dev | Rol | Puede |
 |---|---|---|---|
-| carlos.martinez@mercadorai.com | `demo-gerente-2026` | GERENTE | leer, crear, aprobar/rechazar |
-| maria.lopez@mercadorai.com | `demo-aprobadora-2026` | APROBADOR | leer, crear, aprobar/rechazar |
+| carlos.martinez@mercadorai.com | `demo-gerente-2026` | GERENTE | leer, crear, aprobar/rechazar, enviar/recibir OCs |
+| maria.lopez@mercadorai.com | `demo-aprobadora-2026` | APROBADOR | leer, crear, aprobar/rechazar, enviar/recibir OCs |
 | admin@mercadorai.com | `demo-admin-2026` | ADMIN | todo + gestión de usuarios |
 | agente@mercadorai.com | `demo-agente-2026` | SERVICIO | leer + crear órdenes (cuenta del agente LangGraph — no puede aprobar) |
 | buyer@mercadorai.com | `demo-buyer-2026` | BUYER | solo `/alertas` — el resto del dominio devuelve 403 (SPEC-29) |

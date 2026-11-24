@@ -74,6 +74,9 @@ export function mapOrden(o) {
     entregaDias: o.proveedor?.tiempo_entrega_dias ?? null,
     urgente: o.estado === 'PENDIENTE_APROBACION' && stockActual === 0,
     analisisIA: o.analisis_ia ?? 'Sin análisis disponible.',
+    cantidadRecibida: o.cantidad_recibida ?? null,
+    enviadoPor: o.enviado_por ?? null,
+    recibidoPor: o.recibido_por ?? null,
   };
 }
 
@@ -176,6 +179,23 @@ export const rechazarOrden = (ordenId, motivo) =>
   apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/rechazar`, {
     method: 'POST',
     body: JSON.stringify({ motivo }),
+  });
+
+// SPEC-30 (T30.1): ciclo hacia el proveedor — APROBADA→ENVIADA
+// ("ya se la mandamos") y ENVIADA→RECIBIDA (llegó el camión →
+// suma stock). cantidadRecibida opcional: default la pedida.
+export const enviarOrden = (ordenId) =>
+  apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/enviar`, {
+    method: 'POST',
+    body: '{}',
+  });
+
+export const recibirOrden = (ordenId, cantidadRecibida) =>
+  apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/recibir`, {
+    method: 'POST',
+    body: JSON.stringify(
+      cantidadRecibida != null ? { cantidad_recibida: cantidadRecibida } : {},
+    ),
   });
 
 // SPEC-24: gestión de usuarios — todos estos endpoints exigen rol
