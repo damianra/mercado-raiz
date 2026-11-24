@@ -57,6 +57,7 @@ export async function sugerenciaCompra(productoId) {
   return {
     producto,
     demanda_diaria: demanda,
+    desvio_demanda: desvio,
     precios: precios.map((p) => ({
       ...p,
       cantidad_sugerida: cantidadSugerida({
@@ -104,7 +105,12 @@ export async function solicitarPedido({ productoId, proveedorId, cantidad, alert
     solicitado_por: usuario?.email ?? null,
   };
   // INTEGRACIÓN FUTURA: createOrden(...) → estado PENDIENTE_APROBACION
-  // + marcar la alerta asociada como atendida.
+  // + marcar la alerta asociada como atendida. Antes de cablearla:
+  // (a) validar que alerta_id corresponde a producto_id y sigue
+  //     no leída — hoy solo se verifica que existe;
+  // (b) idempotencia: unicidad por alerta_id para no duplicar la
+  //     OC si el buyer re-pide tras un PATCH leída fallido;
+  // (c) cota superior de `cantidad` (hoy solo se exige entero ≥1).
   console.log(
     `[PEDIDO] ${resumen.solicitado_por} solicita ${cantidad}u de ` +
       `${fila.sku} (${fila.producto}) a ${fila.proveedor} @ $${fila.costo_unitario}` +
