@@ -63,6 +63,37 @@ test('lista alertas reales con severidad y permite marcar leída', async ({
   await expect(page.locator(`[data-alerta-id="${alertaId}"]`)).toHaveCount(0);
 });
 
+test('Comprar abre el modal de proveedores y solicita el pedido (T29.3)', async ({
+  page,
+}) => {
+  await login(page);
+  const items = page.locator(LISTA);
+  await expect(items.first()).toBeVisible({ timeout: 30_000 });
+
+  // las alertas comprables muestran "Comprar", no "Marcar leída"
+  const quiebre = items.filter({ hasText: 'Quiebre' }).first();
+  const alertaId = await quiebre.getAttribute('data-alerta-id');
+  await quiebre.getByRole('button', { name: 'Comprar' }).click();
+
+  const modal = page.getByRole('dialog', { name: 'Solicitar pedido' });
+  await expect(modal).toBeVisible();
+  // proveedores con precio real + el más barato preseleccionado
+  const radios = modal.getByRole('radio');
+  await expect(radios.first()).toBeChecked();
+  await expect(modal).toContainText('Más barato');
+  await expect(modal).toContainText('$');
+  // cantidad pre-cargada con la sugerencia del automático
+  const inputCant = modal.getByLabel('Cantidad');
+  expect(Number(await inputCant.inputValue())).toBeGreaterThan(0);
+  await inputCant.fill('3');
+
+  await modal.getByRole('button', { name: 'Solicitar pedido' }).click();
+  await expect(modal).toBeHidden();
+  await expect(page.getByText('Pedido registrado')).toBeVisible();
+  // la alerta quedó atendida — sale de la lista de no leídas
+  await expect(page.locator(`[data-alerta-id="${alertaId}"]`)).toHaveCount(0);
+});
+
 test('los filtros por tipo y el toggle de leídas funcionan', async ({ page }) => {
   await login(page);
   await expect(page.locator(LISTA).first()).toBeVisible({ timeout: 30_000 });

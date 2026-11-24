@@ -2104,6 +2104,41 @@ hardcodeado "Órdenes Pendientes").
 - **T29.1** Backend: schema + rol BUYER + seed + lockdown + modelo
   de reglas + endpoints + tests. ✅
 - **T29.2** Frontend: vista `/alertas` + guards por rol + e2e. ✅
+- **T29.3** Acción "Comprar" desde la alerta → modal de proveedores
+  + stub `POST /api/pedidos` (solo log — el camino queda marcado
+  para la integración real con `ordenes_compra`).
+
+**R29.6** En alertas de falta de stock (`QUIEBRE`, `RIESGO_LEAD`)
+la acción principal es **Comprar**: abre un
+modal con los proveedores activos del artículo, su
+`costo_unitario` y `lead_efectivo`. "Marcar leída" queda como
+acción secundaria (el buyer también puede descartarla sin pedir). Default del selector =
+proveedor más barato. La cantidad pre-cargada es la que
+computaría el flujo automático:
+`ceil(demanda × (lead + 7) + 1.65·σ·√lead)` acotada a
+`max(objetivo − stock, 2·stock_minimo − stock, 1)` — recalcula al
+cambiar de proveedor (lead distinto ⇒ sugerencia distinta). Los
+demás tipos (`DEAD_STOCK`, `ORDEN_PENDIENTE`) no son comprables y
+conservan "Marcar leída".
+
+**R29.7** `GET /api/pedidos/sugerencia?producto_id=` — hoja de
+compra del modal: producto (sku/stock/mínimo), `precios[]` por
+proveedor activo y stats de demanda (`demanda_diaria`,
+`desvio_demanda`). Vive bajo `/api/pedidos` y no en
+`/api/productos/:id` porque el BUYER sigue sin acceso al dominio
+de catálogo. Roles: `BUYER` y `ADMIN`.
+
+**R29.7b** `POST /api/pedidos {producto_id, proveedor_id,
+cantidad, alerta_id?}` — stub deliberado: valida el payload (ids
+enteros, cantidad ≥1, proveedor con precio activo para ese
+producto), loguea la solicitud y responde `202`. NO crea la orden
+todavía: el comentario marca la integración futura
+(`ordenes.model.createOrden` + `PENDIENTE_APROBACION` + snapshot
+de costo). Mismos roles que la sugerencia.
+
+**R29.8** Tras el 202 el frontend marca la alerta como leída y
+muestra toast "Pedido registrado". El modal en productos sin
+precio activo muestra estado informativo y deshabilita confirmar.
 
 ---
 
