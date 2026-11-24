@@ -10,7 +10,7 @@ const FROM_HISTORIAL = `FROM historial_stock h
 
 const SELECT_HISTORIAL = `SELECT h.id, h.producto_id, h.tipo_movimiento,
     h.cantidad_anterior, h.cantidad_nueva, h.diferencia,
-    h.referencia, h.usuario, h.fecha,
+    h.referencia, h.usuario, h.fecha, h.motivo,
     p.sku AS p_sku, p.nombre AS p_nombre
   ${FROM_HISTORIAL}`;
 
@@ -25,6 +25,7 @@ function mapMovimiento(row) {
     referencia: row.referencia,
     usuario: row.usuario,
     fecha: row.fecha,
+    motivo: row.motivo,
   };
 }
 

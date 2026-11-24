@@ -1,9 +1,10 @@
-import { CANALES_VENTA, listVentas, registrarVenta } from '../models/ventas.model.js';
+import { CANALES_VENTA, listVentas, registrarVenta, registrarVentasBatch } from '../models/ventas.model.js';
 import { capString } from '../security.js';
 
 const badRequest = (res, msg) => res.status(400).json({ error: msg });
 // Cota razonable para un evento POS — ventas de bulto van por MAYOR.
 const UNIDADES_MAX = 100_000;
+const MAX_LOTE_VENTAS = 500;
 
 // Valida forma YYYY-MM-DD y que sea una fecha real — '2026-99-99'
 // pasaría el regex pero reventaría el cast ::date con un 500.
@@ -49,33 +50,77 @@ export async function list(req, res) {
   );
 }
 
-// SPEC-30 (T30.2): punto de integración POS real — un evento de
-// venta que descuenta stock + historial en la misma transacción.
-export async function create(req, res) {
-  const { producto_id, unidades, canal, fecha, referencia } = req.body ?? {};
-  const productoId = Number(producto_id);
-  const uds = Number(unidades);
-  if (!Number.isInteger(productoId) || productoId < 1) {
-    return badRequest(res, 'producto_id debe ser un entero positivo');
+// SPEC-30 (T30.2): validación sin coercion — Number(null)/Number('')
+// /Number(true) convierten a valores "válidos" que no lo son (la misma
+// convención estricta de validarItemOrden).
+function validarItemVenta(raw) {
+  const { producto_id, unidades, canal, fecha, referencia } = raw ?? {};
+  if (!Number.isInteger(producto_id) || producto_id < 1) {
+    return 'producto_id debe ser un entero positivo';
   }
-  if (!Number.isInteger(uds) || uds < 1 || uds > UNIDADES_MAX) {
-    return badRequest(res, `unidades debe ser un entero entre 1 y ${UNIDADES_MAX}`);
+  if (!Number.isInteger(unidades) || unidades < 1 || unidades > UNIDADES_MAX) {
+    return `unidades debe ser un entero entre 1 y ${UNIDADES_MAX}`;
   }
   if (!CANALES_VENTA.includes(canal)) {
-    return badRequest(res, `canal inválido — válidos: ${CANALES_VENTA.join(', ')}`);
+    return `canal inválido — válidos: ${CANALES_VENTA.join(', ')}`;
   }
   if (fecha !== undefined && !esFechaValida(fecha)) {
-    return badRequest(res, 'fecha debe ser una fecha YYYY-MM-DD válida');
+    return 'fecha debe ser una fecha YYYY-MM-DD válida';
   }
-
-  const r = await registrarVenta({
-    productoId,
-    unidades: uds,
+  return {
+    productoId: producto_id,
+    unidades,
     canal,
     fecha,
     referencia: referencia ? capString(referencia, 120) : undefined,
-    usuario: req.usuario.email,
-  });
+  };
+}
+
+// Punto de integración POS real — un evento de venta que descuenta
+// stock + historial en la misma transacción.
+export async function create(req, res) {
+  const item = validarItemVenta(req.body);
+  if (typeof item === 'string') return badRequest(res, item);
+
+  const r = await registrarVenta({ ...item, usuario: req.usuario.email });
   if (r.status === 201) return res.status(201).json({ success: true, data: r.data });
   return res.status(r.status).json({ error: r.error });
+}
+
+// POST /api/ventas/batch — la integración POS manda el lote de un
+// cierre/turno en UNA request (una escritura para el rate limiter —
+// como /ordenes/batch). Todo o nada: cualquier item inválido o
+// producto inexistente → 400 con detalle por índice y nada se persiste.
+export async function createBatch(req, res) {
+  const items = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return badRequest(res, 'el body debe ser un array de ventas no vacío');
+  }
+  if (items.length > MAX_LOTE_VENTAS) {
+    return badRequest(res, `el lote supera el máximo de ${MAX_LOTE_VENTAS} ventas`);
+  }
+
+  const errores = [];
+  const validados = items.map((raw, indice) => {
+    const item = validarItemVenta(raw);
+    if (typeof item === 'string') errores.push({ indice, error: item });
+    return item;
+  });
+  if (errores.length) {
+    return res.status(400).json({ error: 'items inválidos en el lote', detalle: errores });
+  }
+
+  const resultado = await registrarVentasBatch(validados, req.usuario.email);
+  if (resultado.faltantes) {
+    return res.status(400).json({
+      error: 'productos inexistentes en el lote — no se registró ninguna venta',
+      detalle: resultado.faltantes.map((f) => ({ ...f, error: 'producto no encontrado' })),
+    });
+  }
+
+  res.status(201).json({
+    success: true,
+    message: `${resultado.ventas.length} ventas registradas`,
+    data: resultado.ventas,
+  });
 }

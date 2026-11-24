@@ -29,7 +29,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
   }, []);
 
   const n = Number(unidades);
-  const valido = Number.isInteger(n) && n >= 1;
+  const valido = Number.isInteger(n) && n >= 1 && n <= 100_000;
   const resultante = valido ? producto.stock_actual - n : null;
 
   const submit = async () => {
@@ -106,6 +106,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
                 id="venta-unidades"
                 type="number"
                 min="1"
+                max="100000"
                 step="1"
                 value={unidades}
                 onChange={(e) => setUnidades(e.target.value)}

@@ -7,6 +7,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 import { closeDb, openDb } from './db.js';
+import { estadoProducto } from './models/productos.model.js';
 import { seedData } from './seed-data.js';
 import { loginComo } from './test-auth.js';
 
@@ -114,6 +115,8 @@ describe('POST /api/ventas', () => {
   it.each([
     [{ unidades: 0 }, 'unidades'],
     [{ unidades: 'abc' }, 'unidades'],
+    [{ unidades: '3' }, 'unidades string — sin coercion'],
+    [{ unidades: true }, 'unidades boolean — Number(true)=1'],
     [{ unidades: 1, canal: 'MAIL' }, 'canal'],
     [{ unidades: 1, fecha: '2026-99-99' }, 'fecha'],
     [{ producto_id: -1, unidades: 1 }, 'producto_id'],
@@ -130,6 +133,55 @@ describe('POST /api/ventas', () => {
   it('403 para BUYER (lockdown)', async () => {
     const res = await vender(P(5), { unidades: 1 }, buyer);
     expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/ventas/batch', () => {
+  const venderLote = (items, sesion) => post('/api/ventas/batch', items, sesion);
+
+  it('201: aplica todas las ventas del lote en una tx', async () => {
+    const p1 = P(6);
+    const p2 = P(7);
+    const [a1, a2] = await Promise.all([stockDe(p1.id), stockDe(p2.id)]);
+    const res = await venderLote([
+      { producto_id: p1.id, unidades: 2, canal: 'POS' },
+      { producto_id: p2.id, unidades: 5, canal: 'WEB' },
+    ]);
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.data).toHaveLength(2);
+    expect(await stockDe(p1.id)).toMatchObject({ stock_actual: a1.stock_actual - 2 });
+    expect(await stockDe(p2.id)).toMatchObject({ stock_actual: a2.stock_actual - 5 });
+    expect(body.data[0]).toMatchObject({ stock_anterior: a1.stock_actual });
+    expect(body.data[1]).toMatchObject({ stock_anterior: a2.stock_actual });
+  });
+
+  it('400 con faltante por índice → no se persiste nada', async () => {
+    const p = P(8);
+    const { stock_actual: antes } = await stockDe(p.id);
+    const res = await venderLote([
+      { producto_id: p.id, unidades: 2, canal: 'POS' },
+      { producto_id: 999999, unidades: 1, canal: 'POS' },
+    ]);
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.detalle).toMatchObject([{ indice: 1, producto_id: 999999 }]);
+    // todo-o-nada: ni el stock ni la venta del primer item quedaron
+    expect(await stockDe(p.id)).toMatchObject({ stock_actual: antes });
+    const { c } = await db
+      .prepare(`SELECT COUNT(*) AS c FROM ventas WHERE producto_id = ?`)
+      .get(p.id);
+    expect(c).toBe(0);
+  });
+
+  it('400 con item de forma inválida → detalle por índice', async () => {
+    const res = await venderLote([
+      { producto_id: P(9).id, unidades: 1, canal: 'POS' },
+      { producto_id: P(9).id, unidades: 0, canal: 'POS' },
+    ]);
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.detalle[0].indice).toBe(1);
   });
 });
 
@@ -189,9 +241,36 @@ describe('POST /api/stock/ajuste', () => {
     [{ motivo: 'MAGIA', delta: -1 }, 'motivo'],
     [{ motivo: 'MERMA', delta: 0 }, 'delta 0'],
     [{ motivo: 'CONTEO', cantidad_nueva: -3 }, 'negativo'],
+    [{ motivo: 'CONTEO', cantidad_nueva: '' }, 'string vacío — Number()→0'],
+    [{ motivo: 'CONTEO', cantidad_nueva: '37' }, 'string — sin coercion'],
+    [{ motivo: 'MERMA', delta: 3e9 }, 'fuera de int4'],
+    [{ motivo: 'ROTURA', delta: true }, 'boolean'],
   ])('400 en payload inválido: %s', async (body) => {
     const res = await ajustar(P(14), body);
     expect(res.status).toBe(400);
+  });
+
+  it('null = campo ausente: {cantidad_nueva: null, delta: -1} aplica el delta', async () => {
+    const p = P(16);
+    const { stock_actual: antes } = await stockDe(p.id);
+    const res = await ajustar(p, { motivo: 'MERMA', cantidad_nueva: null, delta: -1 });
+    expect(res.status).toBe(201);
+    expect(await stockDe(p.id)).toMatchObject({ stock_actual: antes - 1 });
+  });
+
+  it('stock negativo queda clasificado CRITICO (no STOCK_BAJO)', async () => {
+    const p = P(17);
+    const { stock_actual: antes } = await stockDe(p.id);
+    await vender(p, { unidades: antes + 4 });
+    expect((await stockDe(p.id)).stock_actual).toBe(-4);
+    expect(estadoProducto(-4, p.stock_minimo)).toBe('CRITICO');
+    const res = await fetch(
+      `${base}/api/productos?estado=CRITICO&search=${p.sku}`,
+      { headers: gerente.headers },
+    );
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({ id: p.id, estado: 'CRITICO' });
   });
 
   it('403 para APROBADOR (firma compras, no inventario) y BUYER', async () => {

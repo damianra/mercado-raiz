@@ -72,42 +72,66 @@ export async function listVentas({ productoId, canal, desde, hasta, page, limit 
 // es el conteo físico (POST /stock/ajuste), no rechazar la venta.
 // Por eso stock_actual puede quedar negativo: señal de divergencia.
 // En la misma tx: descuento + fila ventas + historial_stock VENTA.
-export async function registrarVenta({
-  productoId,
-  unidades,
-  canal,
-  fecha,
-  referencia,
-  usuario,
-}) {
+// `p` viene ya lockeada (FOR UPDATE) por el caller.
+async function aplicarVentaEnTx(t, p, { productoId, unidades, canal, fecha, referencia, usuario }, ts) {
+  const anterior = p.stock_actual;
+  const nuevo = anterior - unidades;
+  await t.run(
+    `UPDATE productos SET stock_actual = ?, fecha_actualizacion = ? WHERE id = ?`,
+    [nuevo, ts, productoId],
+  );
+  const v = await t.get(
+    `INSERT INTO ventas (producto_id, fecha, unidades, canal, referencia)
+     VALUES (?, ?::date, ?, ?, ?) RETURNING id`,
+    [productoId, fecha ?? ts.slice(0, 10), unidades, canal, referencia ?? null],
+  );
+  await t.run(
+    `INSERT INTO historial_stock
+       (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
+     VALUES (?, 'VENTA', ?, ?, ?, ?, ?)`,
+    [productoId, anterior, nuevo, -unidades, referencia ?? `VTA-${v.id}`, usuario],
+  );
+  return { venta_id: v.id, stock_anterior: anterior, stock_nuevo: nuevo };
+}
+
+export async function registrarVenta(item) {
   const db = await openDb();
   const ts = new Date().toISOString();
   return db.tx(async (t) => {
     const p = await t.get(
       `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
-      [productoId],
+      [item.productoId],
     );
     if (!p) return { status: 404, error: 'producto no encontrado' };
-    const anterior = p.stock_actual;
-    const nuevo = anterior - unidades;
-    await t.run(
-      `UPDATE productos SET stock_actual = ?, fecha_actualizacion = ? WHERE id = ?`,
-      [nuevo, ts, productoId],
-    );
-    const v = await t.get(
-      `INSERT INTO ventas (producto_id, fecha, unidades, canal, referencia)
-       VALUES (?, ?::date, ?, ?, ?) RETURNING id`,
-      [productoId, fecha ?? ts.slice(0, 10), unidades, canal, referencia ?? null],
-    );
-    await t.run(
-      `INSERT INTO historial_stock
-         (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
-       VALUES (?, 'VENTA', ?, ?, ?, ?, ?)`,
-      [productoId, anterior, nuevo, -unidades, referencia ?? `VTA-${v.id}`, usuario],
-    );
-    return {
-      status: 201,
-      data: { venta_id: v.id, stock_anterior: anterior, stock_nuevo: nuevo },
-    };
+    return { status: 201, data: await aplicarVentaEnTx(t, p, item, ts) };
+  });
+}
+
+// POST /ventas/batch (T30.2): lote POS en una sola request — todo o
+// nada. Primero se lockean/verifican TODOS los productos (un faltante
+// aborta antes de escribir nada), después se aplican las ventas.
+export async function registrarVentasBatch(items, usuario) {
+  const db = await openDb();
+  const ts = new Date().toISOString();
+  return db.tx(async (t) => {
+    const faltantes = [];
+    const productos = [];
+    for (const [indice, it] of items.entries()) {
+      const p = await t.get(
+        `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
+        [it.productoId],
+      );
+      if (!p) faltantes.push({ indice, producto_id: it.productoId });
+      productos.push(p);
+    }
+    if (faltantes.length) return { faltantes };
+    const ventas = [];
+    for (const [indice, it] of items.entries()) {
+      ventas.push({
+        producto_id: it.productoId,
+        ...(await aplicarVentaEnTx(t, productos[indice], { ...it, usuario }, ts)),
+      });
+    }
+    return { ventas };
   });
 }

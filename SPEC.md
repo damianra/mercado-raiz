@@ -2200,10 +2200,22 @@ Estas tareas convierten el sistema en herramienta diaria.
     falta migrarlo).
   - `productos.fecha_actualizacion` se actualiza en ambos writes
     (y se agrega a `recibirOrden` — write de stock omitido).
+  - `POST /api/ventas/batch` — lote del cierre de turno en UNA
+    request (rate limiter), todo-o-nada con detalle por índice
+    como `/ordenes/batch` (máx 500).
+  - **Stock negativo = CRITICO** (`<= 0`, no `= 0`) en
+    `estadoProducto`/`ESTADO_PRODUCTO_EXPR`, KPIs del dashboard,
+    `estadisticas` (skus_sin_stock, quiebre_seguro,
+    dias_en_quiebre) y `/quiebres` — la convención que
+    `alertas` ya usaba.
+  - Validación sin coercion (`Number.isInteger` sobre el valor
+    crudo — `null`/`''`/`true`/`'3'` → 400; `null` en campo
+    opcional = ausente) + cota int4.
   - Front: acciones por fila en `/quiebres` — modal "Ajustar
     stock" (motivo + conteo absoluto o delta + nota + preview
     del stock resultante) y "Registrar venta" (unidades+canal,
-    para operación manual sin POS).
+    para operación manual sin POS); la fila sale de la lista
+    cuando el conteo la restaura sobre el mínimo.
 
 - **T30.3** `historial_stock` poblado desde las ventas del seed
   (reconstruir stock por día para todo el catálogo) — fill rate,

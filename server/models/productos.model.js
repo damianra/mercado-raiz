@@ -3,12 +3,12 @@ import { openDb } from '../db.js';
 // Estado derivado del stock — la columna `estado` puede quedar vieja
 // tras ventas/ajustes, así que siempre se recalcula al leer.
 export const ESTADO_PRODUCTO_EXPR = `CASE
-  WHEN p.stock_actual = 0 THEN 'CRITICO'
+  WHEN p.stock_actual <= 0 THEN 'CRITICO'
   WHEN p.stock_actual < p.stock_minimo THEN 'STOCK_BAJO'
   ELSE 'OK' END`;
 
 export function estadoProducto(stockActual, stockMinimo) {
-  if (stockActual === 0) return 'CRITICO';
+  if (stockActual <= 0) return 'CRITICO';
   if (stockActual < stockMinimo) return 'STOCK_BAJO';
   return 'OK';
 }
