@@ -57,6 +57,11 @@ npm run agente   # harness-langgraph (requiere la API en :4000 y Ollama en :1143
 
 El agente lee productos con stock bajo, estima demanda con el LLM, crea órdenes vía HTTP y termina — la corrida es atómica (SPEC-12). Las órdenes que superan el umbral quedan `PENDIENTE_APROBACION` y se aprueban/rechazan desde el dashboard por REST puro del backend. Ver `harness-langgraph/README.md`.
 
+Desde SPEC-30 (T30.5) el agente tiene **disparador propio** — ya no depende de `POST /run` manual:
+
+- **Watchdog**: una corrida cada `AGENTE_INTERVALO_MIN` minutos (default 60; `0` = off). No pisa corridas en curso ni pausadas.
+- **Trigger por evento**: `POST :4110/trigger` — el backend lo llama (fire-and-forget) cuando una venta deja `stock ≤ 0` — quiebre recién nacido, candidato inmediato. Debounce `AGENTE_TRIGGER_COOLDOWN_MIN` (default 15 min) para que un cierre de caja no dispare una corrida por quiebre. El backend apunta con `HARNESS_URL` (default `http://localhost:4110`).
+
 ## Scripts
 
 | Comando | Descripción |

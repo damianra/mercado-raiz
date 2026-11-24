@@ -90,6 +90,9 @@ export const orchestrator = {
 
   /** Dispara una corrida nueva. `input` opcional: {limite} — T26.8. */
   async iniciar(input = {}) {
+    // Timestamp del arranque — el cooldown del trigger por evento
+    // (T30.5) enfría contra TODA corrida, no solo las suyas.
+    this.ultimaCorrida = Date.now();
     const threadId = `run-${Date.now()}`;
     writeFileSync(ARCHIVO_THREAD, threadId);
     this.corrida = { threadId, fase: 'corriendo', detalle: null };

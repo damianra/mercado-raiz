@@ -8,6 +8,7 @@
  * interrupts — /resume queda para compat de pausas viejas).
  */
 import { orchestrator } from './harness/orchestrator.js';
+import { scheduler } from './harness/scheduler.js';
 import { iniciarServidor } from './harness/server.js';
 import { seccion, log } from './utils/logger.js';
 import { config } from './config/env.js';
@@ -18,6 +19,10 @@ log(`Umbral de aprobación: $${config.umbralAprobacion}`);
 
 await orchestrator.inicializar();
 iniciarServidor();
+// T30.5: watchdog — corridas periódicas (AGENTE_INTERVALO_MIN;
+// 0 = solo /run y /trigger manual). El trigger por evento lo
+// atiende el propio servidor (POST /trigger → scheduler.trigger).
+scheduler.iniciar();
 
 await orchestrator.iniciar().catch((err) => {
   log(`❌ la corrida falló: ${err.message}`);

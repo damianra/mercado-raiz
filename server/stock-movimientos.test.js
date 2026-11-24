@@ -4,7 +4,7 @@
 // tx (stock negativo permitido: la venta es hecho físico).
 // POST /api/stock/ajuste — merma/rotura (delta) o conteo físico
 // (cantidad_nueva) con motivo estructurado → historial AJUSTE.
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import { closeDb, openDb } from './db.js';
 import { estadoProducto } from './models/productos.model.js';
@@ -301,5 +301,82 @@ describe('POST /api/stock/ajuste', () => {
   it('404 producto inexistente', async () => {
     const res = await ajustar({ id: 999999 }, { motivo: 'CONTEO', cantidad_nueva: 1 });
     expect(res.status).toBe(404);
+  });
+});
+
+// SPEC-30 (T30.5): una venta que deja stock <=0 avisa al harness
+// (POST /trigger, fire-and-forget) — quiebre recién nacido =
+// candidato inmediato del agente. El fetch del emit se captura sin
+// tocar el fetch real que usan los helpers del propio test.
+describe('trigger al agente cuando la venta quiebra el stock', () => {
+  const llamadas = [];
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    llamadas.length = 0;
+    vi.stubGlobal('fetch', (url, opts) => {
+      if (String(url).includes('/trigger')) {
+        llamadas.push({ url: String(url), body: JSON.parse(opts.body) });
+        return Promise.resolve({ ok: true });
+      }
+      return realFetch(url, opts);
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('venta a stock 0 → POST /trigger con el producto', async () => {
+    const p = P(22);
+    const { stock_actual } = await stockDe(p.id);
+    const res = await vender(p, { unidades: stock_actual });
+    expect(res.status).toBe(201);
+    expect((await stockDe(p.id)).stock_actual).toBe(0);
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0].url).toMatch(/:4110\/trigger$/);
+    expect(llamadas[0].body).toMatchObject({
+      motivo: 'stock0',
+      producto_ids: [p.id],
+    });
+  });
+
+  it('venta que deja negativo también dispara (quiebre es quiebre)', async () => {
+    const p = P(23);
+    const { stock_actual } = await stockDe(p.id);
+    await vender(p, { unidades: stock_actual + 3 });
+    expect((await stockDe(p.id)).stock_actual).toBe(-3);
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it('venta normal (queda stock positivo) → NO dispara', async () => {
+    const p = P(24);
+    const res = await vender(p, { unidades: 1 });
+    expect(res.status).toBe(201);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('batch con varios quiebres → un solo trigger con todos los ids', async () => {
+    const [a, b, c] = [P(25), P(26), P(27)];
+    const { stock_actual: sa } = await stockDe(a.id);
+    const { stock_actual: sb } = await stockDe(b.id);
+    const res = await post('/api/ventas/batch', [
+      { producto_id: a.id, unidades: sa, canal: 'POS' }, // → 0
+      { producto_id: b.id, unidades: sb + 2, canal: 'POS' }, // → -2
+      { producto_id: c.id, unidades: 1, canal: 'POS' }, // queda positivo
+    ]);
+    expect(res.status).toBe(201);
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0].body.producto_ids.sort()).toEqual([a.id, b.id].sort());
+  });
+
+  it('el harness caído no rompe la venta (fire-and-forget)', async () => {
+    vi.stubGlobal('fetch', (url, opts) => {
+      if (String(url).includes('/trigger')) {
+        return Promise.reject(new Error('ECONNREFUSED'));
+      }
+      return realFetch(url, opts);
+    });
+    const p = P(28);
+    const { stock_actual } = await stockDe(p.id);
+    const res = await vender(p, { unidades: stock_actual });
+    expect(res.status).toBe(201); // la venta se completó igual
   });
 });
