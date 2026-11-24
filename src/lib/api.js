@@ -198,6 +198,34 @@ export const recibirOrden = (ordenId, cantidadRecibida) =>
     ),
   });
 
+// SPEC-30 (T30.2): venta POS — descuenta stock + historial en la
+// misma tx (la venta puede dejar el stock negativo: es un hecho
+// físico; la corrección es el ajuste/conteo).
+export const registrarVenta = ({ productoId, unidades, canal, referencia }) =>
+  apiFetch('/ventas', {
+    method: 'POST',
+    body: JSON.stringify({
+      producto_id: productoId,
+      unidades,
+      canal,
+      ...(referencia ? { referencia } : {}),
+    }),
+  });
+
+// Ajuste manual — cantidadNueva (conteo absoluto) o delta (merma/
+// rotura), motivo obligatorio MERMA|ROTURA|CONTEO|OTRO.
+export const ajustarStock = ({ productoId, motivo, cantidadNueva, delta, referencia }) =>
+  apiFetch('/stock/ajuste', {
+    method: 'POST',
+    body: JSON.stringify({
+      producto_id: productoId,
+      motivo,
+      ...(cantidadNueva !== undefined ? { cantidad_nueva: cantidadNueva } : {}),
+      ...(delta !== undefined ? { delta } : {}),
+      ...(referencia ? { referencia } : {}),
+    }),
+  });
+
 // SPEC-24: gestión de usuarios — todos estos endpoints exigen rol
 // ADMIN en el backend; el front además oculta la sección a otros
 // roles (regla UI n°2).

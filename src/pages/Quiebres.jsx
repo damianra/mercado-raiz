@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CircleDollarSign,
+  ClipboardList,
   PackageX,
+  ShoppingBag,
   TriangleAlert,
   TrendingDown,
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar.jsx';
 import Topbar from '../components/Topbar.jsx';
 import Toasts from '../components/Toasts.jsx';
+import AjusteStockModal from '../components/AjusteStockModal.jsx';
+import VentaModal from '../components/VentaModal.jsx';
 import { EmptyState, ErrorState } from '../components/ui.jsx';
 import { getDemandaStats, getProductosQuiebres } from '../lib/api.js';
 import { logout } from '../lib/auth.js';
@@ -26,6 +30,8 @@ export default function Quiebres({ usuario }) {
   const [filtro, setFiltro] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [venta, setVenta] = useState(null);
+  const [ajuste, setAjuste] = useState(null);
   const timers = useRef([]);
 
   const pushToast = useCallback((mensaje, tipo = 'ok') => {
@@ -87,6 +93,36 @@ export default function Quiebres({ usuario }) {
     cargar();
     return () => timers.current.forEach(clearTimeout);
   }, [cargar]);
+
+  // T30.2: tras venta/ajuste el stock cambia local — recalculo las
+  // métricas derivadas de la fila sin refetchear toda la lista.
+  const movimientoHecho = useCallback(
+    (fila, res, tipo) => {
+      setFilas((fs) =>
+        fs.map((x) =>
+          x.id === fila.id
+            ? {
+                ...x,
+                stock_actual: res.stock_nuevo,
+                cobertura: x.demanda > 0 ? res.stock_nuevo / x.demanda : null,
+                perdidaDia:
+                  res.stock_nuevo === 0 && x.margen != null
+                    ? Math.max(0, x.demanda * x.margen)
+                    : null,
+              }
+            : x,
+        ),
+      );
+      setVenta(null);
+      setAjuste(null);
+      pushToast(
+        `${tipo} registrad${tipo === 'Venta' ? 'a' : 'o'} — ${fila.sku}: stock ${res.stock_anterior} → ${res.stock_nuevo}`,
+      );
+    },
+    [pushToast],
+  );
+
+  const puedeAjustar = ['GERENTE', 'ADMIN'].includes(usuario?.rol);
 
   const sinStock = filas.filter((f) => f.stock_actual === 0);
   const enRiesgo = filas.filter((f) => f.stock_actual > 0);
@@ -195,6 +231,7 @@ export default function Quiebres({ usuario }) {
                     <th className="px-4 py-3 text-right">Margen/u</th>
                     <th className="px-4 py-3 text-right">Pérdida/día</th>
                     <th className="px-4 py-3 text-right">Perdido 90d</th>
+                    <th className="px-4 py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -237,6 +274,28 @@ export default function Quiebres({ usuario }) {
                       <td className="px-4 py-3 text-right text-grafito">
                         {f.perdido90 != null ? formatMoney(f.perdido90) : '—'}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex gap-1">
+                          <button
+                            onClick={() => setVenta(f)}
+                            title="Registrar venta"
+                            aria-label={`Registrar venta de ${f.sku}`}
+                            className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
+                          >
+                            <ShoppingBag size={16} strokeWidth={1.5} />
+                          </button>
+                          {puedeAjustar && (
+                            <button
+                              onClick={() => setAjuste(f)}
+                              title="Ajustar stock (conteo / merma)"
+                              aria-label={`Ajustar stock de ${f.sku}`}
+                              className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
+                            >
+                              <ClipboardList size={16} strokeWidth={1.5} />
+                            </button>
+                          )}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -245,6 +304,20 @@ export default function Quiebres({ usuario }) {
           )}
         </main>
       </div>
+      {venta && (
+        <VentaModal
+          producto={venta}
+          onClose={() => setVenta(null)}
+          onHecho={(res) => movimientoHecho(venta, res, 'Venta')}
+        />
+      )}
+      {ajuste && (
+        <AjusteStockModal
+          producto={ajuste}
+          onClose={() => setAjuste(null)}
+          onHecho={(res) => movimientoHecho(ajuste, res, 'Ajuste')}
+        />
+      )}
       <Toasts toasts={toasts} />
     </div>
   );

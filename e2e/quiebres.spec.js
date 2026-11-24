@@ -5,6 +5,7 @@ import { test, expect } from '@playwright/test';
 // STOCK_BAJO con demanda real en `ventas` → la tabla sale poblada.
 const ADMIN = { email: 'admin@mercadorai.com', password: 'demo-admin-2026' };
 const GERENTE = { email: 'carlos.martinez@mercadorai.com', password: 'demo-gerente-2026' };
+const APROBADOR = { email: 'maria.lopez@mercadorai.com', password: 'demo-aprobadora-2026' };
 
 const FILAS = 'section[aria-label="Tabla de órdenes de compra"] tbody tr';
 const FILAS_Q = 'main table tbody tr';
@@ -65,6 +66,46 @@ test('los filtros separan sin-stock de bajo-el-mínimo', async ({ page }) => {
 test('GERENTE también accede a la vista operativa', async ({ page }) => {
   await irAQuiebres(page, GERENTE);
   expect(await page.locator(FILAS_Q).count()).toBeGreaterThan(0);
+});
+
+// SPEC-30 (T30.2) — acciones de movimiento de stock por fila:
+// "Registrar venta" (descuenta) y "Ajustar stock" (conteo/merma).
+test('registrar venta desde la fila descuenta el stock', async ({ page }) => {
+  await irAQuiebres(page);
+  const fila = page.locator(FILAS_Q).first();
+  const sku = await fila.locator('td').first().locator('.font-mono, .text-xs').last().innerText();
+
+  await fila.getByLabel(`Registrar venta de ${sku}`).click();
+  const modal = page.getByRole('dialog', { name: 'Registrar venta' });
+  await expect(modal).toBeVisible();
+  await modal.getByLabel('Unidades').fill('1');
+  await modal.getByRole('button', { name: 'Registrar venta' }).click();
+
+  await expect(page.getByText(/Venta registrada — .* stock/)).toBeVisible();
+});
+
+test('ajustar stock con conteo fija la cantidad absoluta', async ({ page }) => {
+  await irAQuiebres(page, GERENTE);
+  const fila = page.locator(FILAS_Q).first();
+  const sku = await fila.locator('td').first().locator('.text-xs').innerText();
+
+  await fila.getByLabel(`Ajustar stock de ${sku}`).click();
+  const modal = page.getByRole('dialog', { name: 'Ajustar stock' });
+  await expect(modal).toBeVisible();
+  // CONTEO viene preseleccionado → input de unidades contadas
+  await modal.getByRole('spinbutton', { name: 'Unidades contadas' }).fill('99');
+  await expect(modal.getByText('Stock resultante')).toBeVisible();
+  await modal.getByRole('button', { name: 'Registrar ajuste' }).click();
+
+  await expect(page.getByText(/Ajuste registrado — .* 99/)).toBeVisible();
+});
+
+test('APROBADOR ve "Registrar venta" pero no "Ajustar stock" (rol)', async ({ page }) => {
+  await irAQuiebres(page, APROBADOR);
+  const fila = page.locator(FILAS_Q).first();
+  const sku = await fila.locator('td').first().locator('.text-xs').innerText();
+  await expect(fila.getByLabel(`Registrar venta de ${sku}`)).toBeVisible();
+  await expect(fila.getByLabel(`Ajustar stock de ${sku}`)).toHaveCount(0);
 });
 
 test('la navegación del sidebar vuelve al dashboard', async ({ page }) => {

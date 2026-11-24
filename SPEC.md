@@ -2177,6 +2177,33 @@ Estas tareas convierten el sistema en herramienta diaria.
   roturas, conteo físico en góndola/depósito) con motivo
   estructurado — el conteo manual de góndola vive acá, no en la
   OC.
+  Diseño:
+  - `POST /api/ventas` (`requireAuth`+`bloquearBuyer`, sin rol
+    extra — evento de integración como `POST /ordenes`):
+    `{producto_id, unidades, canal:POS|WEB|MAYOR, fecha?,
+    referencia?}`. Tx con `FOR UPDATE`: descuenta
+    `stock_actual`, inserta la venta y `historial_stock` VENTA
+    (`diferencia=-unidades`, referencia `VTA-<id>` si no viene).
+    **Stock negativo permitido**: la venta es hecho físico — si
+    el teórico dice 0 el dato ya divergía; la corrección es el
+    conteo, no rechazar la venta. 404 producto, 400 payload.
+  - `POST /api/stock/ajuste` (`GERENTE`+`ADMIN`): `{producto_id,
+    motivo:MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?,
+    referencia?}` — exactamente uno de `cantidad_nueva`
+    (absoluta, el conteo) o `delta` (signado, la merma); delta
+    que deje negativo → 400 (usar CONTEO). Misma tx:
+    `UPDATE productos` + `historial_stock` AJUSTE.
+  - Schema: `historial_stock.motivo TEXT` (ALTER idempotente) —
+    motivo estructurado como columna, no parseado del
+    `referencia`. `tipo_movimiento` queda AJUSTE (CONTEO es
+    motivo, no tipo — el CHECK no incluye CONTEO y no hace
+    falta migrarlo).
+  - `productos.fecha_actualizacion` se actualiza en ambos writes
+    (y se agrega a `recibirOrden` — write de stock omitido).
+  - Front: acciones por fila en `/quiebres` — modal "Ajustar
+    stock" (motivo + conteo absoluto o delta + nota + preview
+    del stock resultante) y "Registrar venta" (unidades+canal,
+    para operación manual sin POS).
 
 - **T30.3** `historial_stock` poblado desde las ventas del seed
   (reconstruir stock por día para todo el catálogo) — fill rate,

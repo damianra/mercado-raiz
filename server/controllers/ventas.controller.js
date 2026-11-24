@@ -1,5 +1,9 @@
-import { CANALES_VENTA, listVentas } from '../models/ventas.model.js';
+import { CANALES_VENTA, listVentas, registrarVenta } from '../models/ventas.model.js';
 import { capString } from '../security.js';
+
+const badRequest = (res, msg) => res.status(400).json({ error: msg });
+// Cota razonable para un evento POS — ventas de bulto van por MAYOR.
+const UNIDADES_MAX = 100_000;
 
 // Valida forma YYYY-MM-DD y que sea una fecha real — '2026-99-99'
 // pasaría el regex pero reventaría el cast ::date con un 500.
@@ -43,4 +47,35 @@ export async function list(req, res) {
       limit: l,
     }),
   );
+}
+
+// SPEC-30 (T30.2): punto de integración POS real — un evento de
+// venta que descuenta stock + historial en la misma transacción.
+export async function create(req, res) {
+  const { producto_id, unidades, canal, fecha, referencia } = req.body ?? {};
+  const productoId = Number(producto_id);
+  const uds = Number(unidades);
+  if (!Number.isInteger(productoId) || productoId < 1) {
+    return badRequest(res, 'producto_id debe ser un entero positivo');
+  }
+  if (!Number.isInteger(uds) || uds < 1 || uds > UNIDADES_MAX) {
+    return badRequest(res, `unidades debe ser un entero entre 1 y ${UNIDADES_MAX}`);
+  }
+  if (!CANALES_VENTA.includes(canal)) {
+    return badRequest(res, `canal inválido — válidos: ${CANALES_VENTA.join(', ')}`);
+  }
+  if (fecha !== undefined && !esFechaValida(fecha)) {
+    return badRequest(res, 'fecha debe ser una fecha YYYY-MM-DD válida');
+  }
+
+  const r = await registrarVenta({
+    productoId,
+    unidades: uds,
+    canal,
+    fecha,
+    referencia: referencia ? capString(referencia, 120) : undefined,
+    usuario: req.usuario.email,
+  });
+  if (r.status === 201) return res.status(201).json({ success: true, data: r.data });
+  return res.status(r.status).json({ error: r.error });
 }

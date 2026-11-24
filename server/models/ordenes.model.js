@@ -391,10 +391,10 @@ export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
       [o.producto_id],
     );
     const nuevo = anterior + cantidadRecibida;
-    await t.run(`UPDATE productos SET stock_actual = ? WHERE id = ?`, [
-      nuevo,
-      o.producto_id,
-    ]);
+    await t.run(
+      `UPDATE productos SET stock_actual = ?, fecha_actualizacion = ? WHERE id = ?`,
+      [nuevo, ts, o.producto_id],
+    );
     await t.run(
       `INSERT INTO historial_stock
          (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva, diferencia, referencia, usuario)
