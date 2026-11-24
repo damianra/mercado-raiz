@@ -16,9 +16,9 @@ responden tarde o a ojo:
 2. **¿Qué hay que pedir, a quién y cuánto?** — un agente automático
    propone la orden de compra completa: proveedor más conveniente
    (precio vs. demora) y cantidad calculada según la demanda real.
-3. **¿Quién lo aprueba y en qué estado está?** — nada se compra sin
-   validación humana, y cada orden se sigue hasta que el camión descarga
-   y el stock sube.
+3. **¿Quién lo aprueba y en qué estado está?** — nada *grande* se
+   compra sin validación humana, y cada orden se sigue hasta que el
+   camión descarga y el stock sube.
 
 La promesa: **menos góndolas vacías, menos plata clavada en mercadería
 que no rota, y decisiones de compra con números a la vista.**
@@ -39,6 +39,9 @@ Se genera una Orden de Compra (OC)
         ▼
 Si supera $50.000 → espera aprobación humana
 Si es menor       → se aprueba sola
+(las OCs que crea el comprador a mano
+siempre esperan aprobación, cualquiera
+sea el monto)
         │
         ▼
 Se marca como enviada al proveedor
@@ -64,14 +67,15 @@ Las alertas **salen al encuentro del usuario**:
 - **El comprador**, en cambio, entra directamente a su bandeja de
   alertas: esa es su pantalla de inicio y su lista de trabajo diaria.
 
-Tipos de alerta que genera el sistema (se re-evalúan solas cada hora):
+Tipos de alerta que genera el sistema (se re-evalúan ~cada hora
+mientras alguien las consulta — la campanita las refresca sola):
 
 | Alerta | Qué significa | Gravedad |
 |---|---|---|
 | **Quiebre** | Stock en cero con demanda activa — se está perdiendo venta ahora | Alta |
 | **Riesgo por demora** | El stock alcanza para menos días de lo que tarda el proveedor en entregar | Alta/Media |
-| **Stock muerto** | Mercadería parada hace más de 60 días — plata inmovilizada | Baja |
-| **Orden pendiente** | Una OC lleva demasiado tiempo esperando aprobación | Media |
+| **Stock muerto** | Mercadería parada hace más de 90 días — plata inmovilizada | Baja |
+| **Orden pendiente** | Una OC lleva más de 48 horas esperando aprobación | Media |
 
 ## Los roles
 
@@ -125,12 +129,12 @@ propone; María decide.
 
 ### BUYER (Comprador) — *la bandeja de entrada del abastecimiento*
 
-**Quién es**: (`buyer@mercadorai.com`). Rol de foco único y deliberado:
-**no ve nada más que sus alertas**.
+**Quién es**: Laura Fernández (`buyer@mercadorai.com`). Rol de foco
+único y deliberado: **no ve nada más que sus alertas**.
 
-**Qué ve**: una sola pantalla — el dashboard de alertas con filtros por
-tipo y severidad. Ni dashboard de órdenes, ni proveedores, ni métricas:
-cero distracciones.
+**Qué ve**: una sola pantalla — el dashboard de alertas con filtro por
+tipo y un interruptor de "solo no leídas". Ni dashboard de órdenes, ni
+proveedores, ni métricas: cero distracciones.
 
 **Qué hace día a día**:
 
@@ -159,16 +163,20 @@ Métricas, **Usuarios** y **Proveedores** (estas dos solo para él).
 - Todo lo del gerente y la aprobadora (ventas, ajustes, OCs completas).
 - **Gestiona usuarios**: altas, cambios de rol, activar/desactivar.
 - **Gestiona proveedores**: altas, datos de contacto, condiciones de
-  entrega, catálogo de precios por producto.
-- Auditoría: puede leer las alertas del comprador (pero no las atiende
-  — esa cola es del BUYER).
+  entrega (demora estimada, pedido mínimo, costo de envío) y
+  activar/desactivar.
+- Auditoría: puede leer y operar la cola de alertas del comprador
+  (la pantalla es del BUYER, pero el acceso a los datos queda
+  habilitado para supervisión).
 
 ### SERVICIO — *la cuenta del robot*
 
-**Quién es**: (`agente@mercadorai.com`). No es una persona: es la
-identidad con la que **el agente automático** firma las órdenes que
-propone. Puede leer el negocio y crear OCs, pero **nunca aprobarlas** —
-por diseño, el robot no puede validarse a sí mismo.
+**Quién es**: la cuenta "Agente de reposición" (`agente@mercadorai.com`).
+No es una persona: es la identidad con la que **el agente automático**
+firma las órdenes que propone — y con la que una futura caja/POS
+registraría ventas. Puede leer el negocio y crear OCs, pero **nunca
+aprobarlas** — por diseño, el robot no puede validarse a sí mismo.
+No recibe alertas: las genera, no las consume.
 
 ---
 
@@ -178,8 +186,9 @@ Corre cada hora por su cuenta (y además se despierta solo cuando una
 venta deja un producto en cero). En cada corrida:
 
 1. Lee los productos en riesgo.
-2. Estima la demanda con un modelo de lenguaje (corre en local, los
-   datos no salen del negocio).
+2. Estima la demanda — con un modelo de lenguaje para los productos
+   impredecibles (corre en local, los datos no salen del negocio) y
+   con reglas estadísticas para los de venta pareja.
 3. Elige proveedor por cada producto — pondera precio contra demora.
 4. Calcula la cantidad a pedir.
 5. Genera las OCs con su **análisis escrito** — lo que el aprobador lee
@@ -195,11 +204,11 @@ gente.
 |---|---|
 | **Dashboard / Órdenes** | La bandeja de OCs: pendientes, aprobadas, enviadas, recibidas — con buscador y filtros por estado |
 | **Quiebres** | Los productos en riesgo ordenados por **plata que se pierde por día** — con acciones directas de venta y ajuste |
-| **Métricas** | El scorecard: fill rate, días en quiebre, inventario en plata, stock muerto y ranking de proveedores por confiabilidad |
+| **Métricas** | El scorecard: fill rate, margen en riesgo por día, margen perdido del período, inventario en plata, stock muerto y scorecard de proveedores |
 | **Alertas** (solo BUYER) | La cola de trabajo del comprador |
-| **Proveedores** (solo ADMIN) | ABM de proveedores, sus condiciones y su catálogo |
+| **Proveedores** (solo ADMIN) | ABM de proveedores y sus condiciones comerciales |
 | **Usuarios** (solo ADMIN) | ABM de usuarios y roles |
-| **Campanita** (todos menos BUYER) | Las alertas graves + órdenes urgentes, sin abrir nada |
+| **Campanita** (GERENTE, APROBADOR, ADMIN) | Las alertas graves + órdenes urgentes, sin abrir nada |
 
 ## Glosario mínimo
 
@@ -208,7 +217,7 @@ gente.
 - **Cobertura**: para cuántos días alcanza el stock al ritmo de venta actual.
 - **Lead / demora del proveedor**: cuántos días tarda en entregar.
 - **Fill rate**: qué porcentaje de los días el producto estuvo disponible.
-- **Stock muerto**: mercadería que no rota hace más de 60 días.
+- **Stock muerto**: mercadería que no rota hace más de 90 días.
 - **Margen en riesgo**: la ganancia que se pierde por día mientras no
   haya stock — el número que ordena la tabla de quiebres.
 
