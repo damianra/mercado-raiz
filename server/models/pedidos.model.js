@@ -110,34 +110,43 @@ export async function solicitarPedido({ productoId, proveedorId, cantidad, alert
     }
   }
 
-  const resultado = await db.tx(async (t) => {
-    if (alertaId != null) {
-      const r = await t.run(
-        'UPDATE alertas SET leida = 1 WHERE id = ? AND producto_id = ? AND leida = 0',
-        [alertaId, productoId],
-      );
-      if (r.changes === 0) return { conflicto: true };
-    }
-    return crearOrdenEnTx(t, {
-      productoId,
-      proveedorId,
-      cantidad,
-      // La OC del buyer SIEMPRE pasa por aprobación — el aprobador
-      // decide si la compra se hace (es su rol, no el del buyer).
-      requiereAprobacion: true,
-      analisisIa:
-        `Pedido manual del buyer ${usuario?.email ?? ''}` +
-        (alertaId ? ` desde la alerta #${alertaId}.` : '.'),
-      alertaId: alertaId ?? null,
-    });
-  });
+  const resultado = await db
+    .tx(async (t) => {
+      if (alertaId != null) {
+        const r = await t.run(
+          'UPDATE alertas SET leida = 1 WHERE id = ? AND producto_id = ? AND leida = 0',
+          [alertaId, productoId],
+        );
+        if (r.changes === 0) return { conflicto: true };
+      }
+      const id = await crearOrdenEnTx(t, {
+        productoId,
+        proveedorId,
+        cantidad,
+        // La OC del buyer SIEMPRE pasa por aprobación — el aprobador
+        // decide si la compra se hace (es su rol, no el del buyer).
+        requiereAprobacion: true,
+        analisisIa:
+          `Pedido manual del buyer ${usuario?.email ?? ''}` +
+          (alertaId ? ` desde la alerta #${alertaId}.` : '.'),
+        alertaId: alertaId ?? null,
+      });
+      // Si la OC no se pudo crear DESPUÉS de marcar la alerta,
+      // devolver el error commitearía leida=1 sin OC — la alerta
+      // desaparecería sin pedido y sin poder reintentar. Tirar el
+      // error hace rollback de TODO (la alerta queda reintentable).
+      if (id == null || id.sinPrecio) {
+        const e = new Error(id?.sinPrecio ?? 'producto no encontrado');
+        e.status = id == null ? 404 : 400;
+        throw e;
+      }
+      return id;
+    })
+    .catch((e) => (e.status ? e : Promise.reject(e)));
   if (resultado?.conflicto) {
     return { status: 409, error: 'la alerta ya fue atendida — no se generó otra OC' };
   }
-  if (resultado == null) return { status: 404, error: 'producto no encontrado' };
-  if (resultado.sinPrecio) {
-    return { status: 400, error: resultado.sinPrecio };
-  }
+  if (resultado?.status) return { status: resultado.status, error: resultado.message };
   const orden = await getOrden(resultado);
   console.log(
     `[PEDIDO] ${usuario?.email} pidió ${cantidad}u de ${fila.sku} ` +

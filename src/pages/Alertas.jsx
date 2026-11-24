@@ -130,7 +130,7 @@ export default function Alertas({ usuario }) {
   const pedidoHecho = async (alerta, orden) => {
     setComprando(null);
     pushToast(
-      `OC ${orden?.orden_id ?? ''} creada — queda pendiente de aprobación`,
+      `${orden?.orden_id ?? 'OC'} creada — queda pendiente de aprobación`,
     );
     await cargar();
   };

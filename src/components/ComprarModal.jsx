@@ -8,7 +8,7 @@ import { formatMoney } from '../data/orders.js';
 // y lead; el más barato queda preseleccionado y la cantidad viene
 // pre-cargada con la sugerencia del flujo automático para el lead
 // elegido (recalcula al cambiar de proveedor). Confirma → POST
-// /api/pedidos (stub: valida + loguea, 202).
+// /api/pedidos → OC real PENDIENTE_APROBACION (T30.4).
 export default function ComprarModal({ alerta, onClose, onPedido }) {
   const [data, setData] = useState(null);
   const [errorCarga, setErrorCarga] = useState(null);

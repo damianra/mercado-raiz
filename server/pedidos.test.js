@@ -133,6 +133,30 @@ describe('T30.4 — POST /api/pedidos crea la OC real', () => {
     expect(despues.c).toBe(antes.c);
   });
 
+  it('si la OC falla dentro de la tx, la alerta NO queda leída (rollback)', async () => {
+    const alertaId = await nuevaAlerta();
+    // Fuerzo el fallo post-marca: una OC previa ya reclamó esta
+    // alerta_id → el INSERT choca contra idx_ordenes_alerta → la tx
+    // hace rollback del UPDATE leida=1 también.
+    await db
+      .prepare(
+        `INSERT INTO ordenes_compra
+           (orden_id, producto_id, proveedor_id, cantidad, precio_unitario,
+            monto_total, estado, requiere_aprobacion, alerta_id)
+         VALUES ('OC-900', ?, ?, 1, 1, 1, 'PENDIENTE_APROBACION', 1, ?)`,
+      )
+      .run(pp.producto_id, pp.proveedor_id, alertaId);
+    const r = await req('/pedidos', {
+      method: 'POST',
+      body: { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 2, alerta_id: alertaId },
+    });
+    expect(r.status).toBe(500);
+    const { leida } = await db
+      .prepare('SELECT leida FROM alertas WHERE id = ?')
+      .get(alertaId);
+    expect(leida).toBe(0); // rollback — queda reintentable
+  });
+
   it('409 si la alerta ya estaba leída y 400 si no corresponde al producto', async () => {
     const leidaId = await nuevaAlerta(pp.producto_id, 1);
     const r = await req('/pedidos', {

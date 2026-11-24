@@ -90,7 +90,7 @@ test('Comprar abre el modal de proveedores y crea la OC real (T29.3/T30.4)', asy
   await modal.getByRole('button', { name: 'Solicitar pedido' }).click();
   await expect(modal).toBeHidden();
   // T30.4: el pedido creó la OC real → el toast trae el número.
-  await expect(page.getByText(/OC OC-\d+ creada — queda pendiente/)).toBeVisible();
+  await expect(page.getByText(/OC-\d+ creada — queda pendiente/)).toBeVisible();
   // la alerta quedó atendida — sale de la lista de no leídas
   await expect(page.locator(`[data-alerta-id="${alertaId}"]`)).toHaveCount(0);
 });
