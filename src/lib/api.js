@@ -142,8 +142,8 @@ export const leerTodasAlertas = () =>
 export const getSugerenciaPedido = (productoId) =>
   apiFetch(`/pedidos/sugerencia?producto_id=${encodeURIComponent(productoId)}`);
 
-// SPEC-29 (R29.7b): stub — valida y loguea la solicitud (202), la
-// OC real queda para la integración futura.
+// SPEC-30 (T30.4): crea la OC real PENDIENTE_APROBACION y marca
+// la alerta atendida en el server (misma tx) → 201 con la orden.
 export const solicitarPedido = ({ productoId, proveedorId, cantidad, alertaId }) =>
   apiFetch('/pedidos', {
     method: 'POST',

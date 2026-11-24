@@ -1,15 +1,15 @@
-// SPEC-29 (T29.3, R29.7/R29.7b): solicitud de pedido del BUYER
-// desde /alertas.
-//
-// STUB DELIBERADO: `solicitarPedido` valida la solicitud contra
-// los precios reales del catálogo y la LOGUEA — NO crea la orden
-// de compra todavía. La integración real es: este mismo método
-// llama a `ordenes.model.createOrden({ productoId, cantidad,
-// proveedorId, requiereAprobacion: true })` y la OC nace
-// PENDIENTE_APROBACION con el snapshot del costo elegido. El
-// endpoint y el contrato del payload ya quedan fijos acá.
+// SPEC-30 (T30.4): pedido del BUYER desde /alertas — la solicitud
+// crea la OC real en PENDIENTE_APROBACION (la ve el aprobador en
+// su dashboard) y marca la alerta leída en la misma transacción.
+// Ex-stub T29.3: el payload y los endpoints no cambiaron.
 import { openDb } from '../db.js';
+import { crearOrdenEnTx, getOrden } from './ordenes.model.js';
 import { estadisticaDemanda } from './estadisticas.model.js';
+
+// Cota de sanidad por pedido manual — el buyer puede tipear
+// cualquier cosa; la OC igual pasa por aprobación humana, pero
+// esto corta typos/abuse antes de llegar al dashboard.
+export const CANTIDAD_MAX_PEDIDO = 10_000;
 
 // Misma math del agente (calcular-cantidad, SPEC-26 R26.8):
 // objetivo = demanda×(lead + 7d de buffer) + z·σ·√lead, piso
@@ -71,10 +71,17 @@ export async function sugerenciaCompra(productoId) {
   };
 }
 
-// R29.7b — POST /api/pedidos. Valida contra precios reales y
-// loguea; el 202 significa "solicitud aceptada", no "OC creada".
+// R29.7b / T30.4 — POST /api/pedidos. Ya no es stub: en UNA
+// transacción marca la alerta leída y crea la OC
+// PENDIENTE_APROBACION. La alerta es la clave de idempotencia:
+// `leida=0` en el WHERE hace que un retry/doble-click/race
+// falle con changes=0 → 409, y el índice único parcial
+// idx_ordenes_alerta es el respaldo en la tabla.
 export async function solicitarPedido({ productoId, proveedorId, cantidad, alertaId, usuario }) {
   const db = await openDb();
+  if (cantidad > CANTIDAD_MAX_PEDIDO) {
+    return { status: 400, error: `cantidad máxima por pedido: ${CANTIDAD_MAX_PEDIDO}` };
+  }
   const fila = await db.get(
     `SELECT p.sku, p.nombre AS producto, pr.nombre AS proveedor, pp.costo_unitario
      FROM producto_proveedor pp
@@ -88,33 +95,63 @@ export async function solicitarPedido({ productoId, proveedorId, cantidad, alert
     return { status: 400, error: 'el proveedor no tiene precio activo para ese producto' };
   }
   if (alertaId != null) {
-    const al = await db.get('SELECT id FROM alertas WHERE id = ?', [alertaId]);
+    // Pre-check para mensajes precisos; el guard atómico es el
+    // UPDATE de la tx (race entre este read y ese write).
+    const al = await db.get(
+      'SELECT producto_id, leida FROM alertas WHERE id = ?',
+      [alertaId],
+    );
     if (!al) return { status: 400, error: 'alerta no encontrada' };
+    if (al.producto_id !== productoId) {
+      return { status: 400, error: 'la alerta no corresponde a ese producto' };
+    }
+    if (al.leida) {
+      return { status: 409, error: 'la alerta ya fue atendida' };
+    }
   }
 
-  const resumen = {
-    producto_id: productoId,
-    sku: fila.sku,
-    producto: fila.producto,
-    proveedor_id: proveedorId,
-    proveedor: fila.proveedor,
-    cantidad,
-    costo_unitario: Number(fila.costo_unitario),
-    monto_estimado: Number((cantidad * fila.costo_unitario).toFixed(2)),
-    alerta_id: alertaId ?? null,
-    solicitado_por: usuario?.email ?? null,
-  };
-  // INTEGRACIÓN FUTURA: createOrden(...) → estado PENDIENTE_APROBACION
-  // + marcar la alerta asociada como atendida. Antes de cablearla:
-  // (a) validar que alerta_id corresponde a producto_id y sigue
-  //     no leída — hoy solo se verifica que existe;
-  // (b) idempotencia: unicidad por alerta_id para no duplicar la
-  //     OC si el buyer re-pide tras un PATCH leída fallido;
-  // (c) cota superior de `cantidad` (hoy solo se exige entero ≥1).
+  const resultado = await db
+    .tx(async (t) => {
+      if (alertaId != null) {
+        const r = await t.run(
+          'UPDATE alertas SET leida = 1 WHERE id = ? AND producto_id = ? AND leida = 0',
+          [alertaId, productoId],
+        );
+        if (r.changes === 0) return { conflicto: true };
+      }
+      const id = await crearOrdenEnTx(t, {
+        productoId,
+        proveedorId,
+        cantidad,
+        // La OC del buyer SIEMPRE pasa por aprobación — el aprobador
+        // decide si la compra se hace (es su rol, no el del buyer).
+        requiereAprobacion: true,
+        analisisIa:
+          `Pedido manual del buyer ${usuario?.email ?? ''}` +
+          (alertaId ? ` desde la alerta #${alertaId}.` : '.'),
+        alertaId: alertaId ?? null,
+      });
+      // Si la OC no se pudo crear DESPUÉS de marcar la alerta,
+      // devolver el error commitearía leida=1 sin OC — la alerta
+      // desaparecería sin pedido y sin poder reintentar. Tirar el
+      // error hace rollback de TODO (la alerta queda reintentable).
+      if (id == null || id.sinPrecio) {
+        const e = new Error(id?.sinPrecio ?? 'producto no encontrado');
+        e.status = id == null ? 404 : 400;
+        throw e;
+      }
+      return id;
+    })
+    .catch((e) => (e.status ? e : Promise.reject(e)));
+  if (resultado?.conflicto) {
+    return { status: 409, error: 'la alerta ya fue atendida — no se generó otra OC' };
+  }
+  if (resultado?.status) return { status: resultado.status, error: resultado.message };
+  const orden = await getOrden(resultado);
   console.log(
-    `[PEDIDO] ${resumen.solicitado_por} solicita ${cantidad}u de ` +
-      `${fila.sku} (${fila.producto}) a ${fila.proveedor} @ $${fila.costo_unitario}` +
-      ` ≈ $${resumen.monto_estimado} — alerta ${alertaId ?? '—'}`,
+    `[PEDIDO] ${usuario?.email} pidió ${cantidad}u de ${fila.sku} ` +
+      `a ${fila.proveedor} → OC ${resultado} PENDIENTE_APROBACION` +
+      ` — alerta ${alertaId ?? '—'}`,
   );
-  return { status: 202, data: resumen };
+  return { status: 201, data: orden };
 }

@@ -2183,11 +2183,19 @@ Estas tareas convierten el sistema en herramienta diaria.
   días-en-quiebre y margen-perdido dejan de ser null para el
   99.5% de los SKUs.
 
-- **T30.4** Pedido del buyer real: `POST /api/pedidos` llama a
-  `createOrden` → OC `PENDIENTE_APROBACION` visible en el
-  dashboard de aprobadores. Antes de cablear: validar
-  alerta↔producto y alerta no leída, idempotencia por alerta_id,
-  cota superior de cantidad (notas en `pedidos.model.js`).
+- **T30.4** ✅ Pedido del buyer real: `POST /api/pedidos` crea la
+  OC `PENDIENTE_APROBACION` (siempre — el buyer pide, el
+  aprobador firma, no auto-aprueba por monto bajo) y marca la
+  alerta leída **en la misma transacción** — la alerta es la
+  clave de idempotencia (`UPDATE ... AND leida=0` → changes=0 →
+  409; respaldo: índice único parcial `idx_ordenes_alerta` + col
+  `alerta_id` en la OC para trazabilidad). Validaciones:
+  alerta↔producto (400), alerta no leída (409), cota
+  `CANTIDAD_MAX_PEDIDO=10.000` (400). `createOrden` se refactorizó
+  a `crearOrdenEnTx(t, …)` exportada (la misma lógica de precio
+  por proveedor/OC-NNN dentro de la tx del caller); la OC aparece
+  en el dashboard de aprobadores. Front: toast con el `OC-NNN`
+  real; el PATCH leída del cliente ya no hace falta (server-side).
 
 - **T30.5** Agente con disparador propio: watchdog/schedule en el
   harness (intervalo configurable + trigger por evento: venta

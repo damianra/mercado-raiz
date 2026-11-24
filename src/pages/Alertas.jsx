@@ -124,17 +124,15 @@ export default function Alertas({ usuario }) {
     }
   };
 
-  // El pedido salió por el stub (202): la alerta queda atendida →
-  // se marca leída y la lista se refresca.
-  const pedidoHecho = async (alerta) => {
+  // T30.4: el pedido ya creó la OC real PENDIENTE_APROBACION y
+  // marcó la alerta leída en el server (misma tx) → solo toast
+  // con el número de OC y refresh.
+  const pedidoHecho = async (alerta, orden) => {
     setComprando(null);
-    pushToast('Pedido registrado — queda solo en el log del servidor (la OC real no se genera todavía)');
-    try {
-      await marcarAlertaLeida(alerta.id);
-      await cargar();
-    } catch (e) {
-      pushToast(`Pedido enviado pero no se pudo cerrar la alerta: ${e.message}`, 'error');
-    }
+    pushToast(
+      `${orden?.orden_id ?? 'OC'} creada — queda pendiente de aprobación`,
+    );
+    await cargar();
   };
 
   const r = data.resumen;
@@ -295,7 +293,7 @@ export default function Alertas({ usuario }) {
         <ComprarModal
           alerta={comprando}
           onClose={() => setComprando(null)}
-          onPedido={() => pedidoHecho(comprando)}
+          onPedido={(orden) => pedidoHecho(comprando, orden)}
         />
       )}
     </div>

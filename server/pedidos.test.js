@@ -1,7 +1,8 @@
 // @vitest-environment node
 // SPEC-29 T29.3: GET /api/pedidos/sugerencia (hoja de compra del
-// modal) + POST /api/pedidos — stub: valida contra precios reales
-// y loguea → 202 sin crear la OC. Roles: BUYER y ADMIN.
+// modal). SPEC-30 T30.4: POST /api/pedidos crea la OC real
+// (PENDIENTE_APROBACION) y marca la alerta atendida atómicamente.
+// Roles: BUYER y ADMIN.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 import { closeDb, openDb } from './db.js';
@@ -38,6 +39,18 @@ const req = (path, { method = 'GET', sesion = buyer, body } = {}) =>
 // Par producto/proveedor válido del seed (precio activo real).
 const pp = seedData.producto_proveedor.find((x) => x.activo === 1);
 
+// Fixture: alerta no leída sobre el producto del par pp (la que
+// originaría el pedido del buyer). Devuelve el id.
+const nuevaAlerta = async (productoId = pp.producto_id, leida = 0) => {
+  const { id } = await db
+    .prepare(
+      `INSERT INTO alertas (tipo, producto_id, severidad, mensaje, leida)
+       VALUES ('QUIEBRE', ?, 'ALTA', 'fixture pedido', ?) RETURNING id`,
+    )
+    .get(productoId, leida);
+  return id;
+};
+
 describe('R29.7 — GET /api/pedidos/sugerencia', () => {
   it('devuelve producto + precios por proveedor con cantidad sugerida', async () => {
     const r = await req(`/pedidos/sugerencia?producto_id=${pp.producto_id}`);
@@ -66,29 +79,109 @@ describe('R29.7 — GET /api/pedidos/sugerencia', () => {
   });
 });
 
-describe('R29.7b — POST /api/pedidos (stub)', () => {
-  it('202 con payload válido: valida contra precio real y devuelve resumen', async () => {
+describe('T30.4 — POST /api/pedidos crea la OC real', () => {
+  it('201: crea la OC PENDIENTE_APROBACION y marca la alerta leída', async () => {
+    const alertaId = await nuevaAlerta();
     const r = await req('/pedidos', {
       method: 'POST',
-      body: { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 5 },
+      body: {
+        producto_id: pp.producto_id,
+        proveedor_id: pp.proveedor_id,
+        cantidad: 5,
+        alerta_id: alertaId,
+      },
     });
-    expect(r.status).toBe(202);
+    expect(r.status).toBe(201);
     const { ok, data } = await r.json();
     expect(ok).toBe(true);
-    expect(data.sku).toBeTruthy();
-    expect(data.proveedor).toBeTruthy();
+    // OC real: PENDIENTE_APROBACION forzada — el buyer pide, el
+    // aprobador firma (no auto-aprueba aunque el monto sea bajo).
+    expect(data.orden_id).toMatch(/^OC-/);
+    expect(data.estado).toBe('PENDIENTE_APROBACION');
+    expect(data.requiere_aprobacion).toBe(true);
     expect(data.cantidad).toBe(5);
-    expect(data.monto_estimado).toBeCloseTo(5 * data.costo_unitario, 2);
-    expect(data.solicitado_por).toBe('buyer@mercadorai.com');
+    expect(data.proveedor.id).toBe(pp.proveedor_id);
+    // La alerta quedó atendida en la misma tx.
+    const { leida } = await db
+      .prepare('SELECT leida FROM alertas WHERE id = ?')
+      .get(alertaId);
+    expect(leida).toBe(1);
+    // Trazabilidad: la OC registra la alerta que la originó.
+    const oc = await db
+      .prepare('SELECT alerta_id FROM ordenes_compra WHERE orden_id = ?')
+      .get(data.orden_id);
+    expect(oc.alerta_id).toBe(alertaId);
   });
 
-  it('400 en payload inválido y en proveedor sin precio para el producto', async () => {
+  it('idempotente: retry sobre la misma alerta → 409, sin segunda OC', async () => {
+    const alertaId = await nuevaAlerta();
+    const body = {
+      producto_id: pp.producto_id,
+      proveedor_id: pp.proveedor_id,
+      cantidad: 3,
+      alerta_id: alertaId,
+    };
+    expect((await req('/pedidos', { method: 'POST', body })).status).toBe(201);
+    const antes = await db
+      .prepare('SELECT COUNT(*) AS c FROM ordenes_compra WHERE alerta_id = ?')
+      .get(alertaId);
+    const r2 = await req('/pedidos', { method: 'POST', body });
+    expect(r2.status).toBe(409);
+    const despues = await db
+      .prepare('SELECT COUNT(*) AS c FROM ordenes_compra WHERE alerta_id = ?')
+      .get(alertaId);
+    expect(despues.c).toBe(antes.c);
+  });
+
+  it('si la OC falla dentro de la tx, la alerta NO queda leída (rollback)', async () => {
+    const alertaId = await nuevaAlerta();
+    // Fuerzo el fallo post-marca: una OC previa ya reclamó esta
+    // alerta_id → el INSERT choca contra idx_ordenes_alerta → la tx
+    // hace rollback del UPDATE leida=1 también.
+    await db
+      .prepare(
+        `INSERT INTO ordenes_compra
+           (orden_id, producto_id, proveedor_id, cantidad, precio_unitario,
+            monto_total, estado, requiere_aprobacion, alerta_id)
+         VALUES ('OC-900', ?, ?, 1, 1, 1, 'PENDIENTE_APROBACION', 1, ?)`,
+      )
+      .run(pp.producto_id, pp.proveedor_id, alertaId);
+    const r = await req('/pedidos', {
+      method: 'POST',
+      body: { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 2, alerta_id: alertaId },
+    });
+    expect(r.status).toBe(500);
+    const { leida } = await db
+      .prepare('SELECT leida FROM alertas WHERE id = ?')
+      .get(alertaId);
+    expect(leida).toBe(0); // rollback — queda reintentable
+  });
+
+  it('409 si la alerta ya estaba leída y 400 si no corresponde al producto', async () => {
+    const leidaId = await nuevaAlerta(pp.producto_id, 1);
+    const r = await req('/pedidos', {
+      method: 'POST',
+      body: { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 2, alerta_id: leidaId },
+    });
+    expect(r.status).toBe(409);
+
+    const otroProducto = seedData.productos.find((p) => p.id !== pp.producto_id).id;
+    const alertaOtro = await nuevaAlerta(otroProducto);
+    const r2 = await req('/pedidos', {
+      method: 'POST',
+      body: { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 2, alerta_id: alertaOtro },
+    });
+    expect(r2.status).toBe(400);
+  });
+
+  it('400 en payload inválido, cota de cantidad y proveedor sin precio', async () => {
     for (const body of [
       {},
       { producto_id: pp.producto_id },
       { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 0 },
       { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 2.5 },
       { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 5, alerta_id: -1 },
+      { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 10_001 },
     ]) {
       expect((await req('/pedidos', { method: 'POST', body })).status).toBe(400);
     }
@@ -102,9 +195,9 @@ describe('R29.7b — POST /api/pedidos (stub)', () => {
     ).toBe(400);
   });
 
-  it('roles: BUYER y ADMIN entran, GERENTE y anónimo no', async () => {
+  it('roles: BUYER y ADMIN crean, GERENTE y anónimo no', async () => {
     const body = { producto_id: pp.producto_id, proveedor_id: pp.proveedor_id, cantidad: 1 };
-    expect((await req('/pedidos', { method: 'POST', sesion: admin, body })).status).toBe(202);
+    expect((await req('/pedidos', { method: 'POST', sesion: admin, body })).status).toBe(201);
     const gerente = await loginComo(base, 'GERENTE');
     expect((await req('/pedidos', { method: 'POST', sesion: gerente, body })).status).toBe(403);
     expect((await fetch(`${base}/api/pedidos`, { method: 'POST' })).status).toBe(401);
