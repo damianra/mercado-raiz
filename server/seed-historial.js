@@ -3,14 +3,17 @@
 // necesita para dias_en_quiebre, fill rate y margen_perdido en TODO
 // el catálogo (hoy solo el fixture de 7 filas la tiene).
 //
-// Modelo: sierra de reabastecimiento real — el producto arranca la
-// ventana abastecido a `objetivo`; cada venta descuenta (puede ir
-// negativo — semántica T30.2); cuando cae a/bajo el mínimo y no hay
-// reposición en tránsito, llega una a los `lead` días (determinístico
-// por hash del EAN, como seed-ventas). Si la demanda agota antes,
-// quedan días de quiebre reales. Al final, un AJUSTE CONTEO
-// reconcilia con el stock_actual declarado por el seed.
-// Referencia 'SEED-RECONSTRUCCION' marca lo sintético.
+// Modelo: sierra de reabastecimiento real — el producto entra a la
+// ventana abastecido a `objetivo` (el `cantidad_anterior` del primer
+// movimiento declara la posición pre-ventana); cada venta descuenta
+// (puede ir negativo — semántica T30.2); cuando cae a/bajo el
+// mínimo y no hay reposición en tránsito, llega una a los `lead`
+// días (determinístico por hash del EAN, como seed-ventas) — en su
+// propia fecha, haya o no venta ese día (un camión es su propio
+// movimiento). Si la demanda agota antes, quedan días de quiebre
+// reales. Al final, un AJUSTE CONTEO reconcilia con el stock_actual
+// declarado por el seed. Referencia 'SEED-RECONSTRUCCION' marca lo
+// sintético.
 import { seedData } from './seed-data.js';
 
 // FNV-1a 32-bit — idéntica a seed-ventas/seed-articulos (mismo eje).
@@ -40,43 +43,52 @@ const mov = (p, tipo, anterior, nueva, referencia, fecha, hora, motivo) => ({
 });
 
 /**
- * Cadena de movimientos de UN producto para la ventana
- * [hoy-DIAS, hoy]. Pura (sin DB) — testeable por separado.
- * `ventas` = filas del producto ordenadas por fecha asc.
+ * Cadena de movimientos de UN producto. Pura (sin DB) — testeable
+ * por separado. `ventas` = filas del producto ordenadas por fecha
+ * asc; se clampean a fecha <= hoy (POST /ventas admite fecha
+ * futura — rompería el cierre de la cadena en stock_actual).
  */
 export function historialDeProducto(p, ventas, hoy = new Date()) {
-  const inicio = new Date(hoy);
-  inicio.setUTCDate(inicio.getUTCDate() - DIAS);
+  const hoyStr = hoy.toISOString().slice(0, 10);
+  const serie = ventas.filter((v) => v.fecha <= hoyStr);
 
-  // Sin ventas (~12% del catálogo): la posición es constante — una
-  // fila basta para la cadena (stock 0 → 90 días de quiebre reales).
-  if (!ventas.length) {
-    return [mov(p, 'REPOSICION', 0, p.stock_actual, REF, inicio, 7)];
+  // Sin ventas (~12% del catálogo): la posición es constante — un
+  // conteo de la reconstrucción (anterior=nueva: los días previos a
+  // la ventana heredan stock_actual, no quiebre fantasma).
+  if (!serie.length) {
+    const inicio = new Date(hoy);
+    inicio.setUTCDate(inicio.getUTCDate() - DIAS);
+    return [
+      mov(p, 'AJUSTE', p.stock_actual, p.stock_actual, REF, inicio, 7, 'CONTEO'),
+    ];
   }
 
   const semilla = p.ean || p.sku || String(p.id);
-  const mediaDiaria = ventas.reduce((a, v) => a + v.unidades, 0) / DIAS;
+  const mediaDiaria = serie.reduce((a, v) => a + v.unidades, 0) / DIAS;
   // Nivel de reposición: el mayor entre 3 mínimos y ~2 semanas de
   // demanda — el "pedir hasta acá" de un super.
   const objetivo = Math.max(p.stock_minimo * 3, Math.ceil(mediaDiaria * 14), 1);
   const lead = 2 + Math.floor(rand(semilla, 'hist:lead') * 5); // 2..6 días
   const trigger = Math.max(p.stock_minimo, 0);
 
-  const movs = [mov(p, 'REPOSICION', 0, objetivo, REF, inicio, 7)];
+  const movs = [];
   let pos = objetivo;
   let llegada = null; // ymd en que llega la reposición en tránsito
 
-  for (const v of ventas) {
-    // El camión llega de mañana (07:00) — la venta del día va después.
-    if (llegada === v.fecha) {
-      movs.push(mov(p, 'REPOSICION', pos, objetivo, REF, v.fecha, 7));
+  for (const v of serie) {
+    // El camión llega cuando llega — haya venta o no ese día (07:00,
+    // antes de la venta de las 20:00). Igualdad estricta contra la
+    // fecha de la venta dejaría entregas colgadas en días sin
+    // movimiento y bloquearía toda reposición futura.
+    if (llegada !== null && llegada <= v.fecha) {
+      movs.push(mov(p, 'REPOSICION', pos, objetivo, REF, llegada, 7));
       pos = objetivo;
       llegada = null;
     }
     const nueva = pos - v.unidades;
-    movs.push(
-      mov(p, 'VENTA', pos, nueva, v.referencia ?? REF, v.fecha, 20),
-    );
+    // El primer mov de la cadena declara anterior=objetivo: los días
+    // pre-ventana (replay con dias>91) heredan "venía abastecido".
+    movs.push(mov(p, 'VENTA', pos, nueva, v.referencia ?? REF, v.fecha, 20));
     pos = nueva;
     // Reposición al tocar el mínimo — una en tránsito a la vez
     // (como la supresión ORDEN_PENDIENTE del agente).
@@ -87,10 +99,19 @@ export function historialDeProducto(p, ventas, hoy = new Date()) {
     }
   }
 
+  // Reposición que llegó en un tramo final sin ventas (sigue siendo
+  // un movimiento — fecha propia). Si llega después de hoy, queda
+  // en tránsito: el ajuste reconcilia igual.
+  if (llegada !== null && llegada <= hoyStr) {
+    movs.push(mov(p, 'REPOSICION', pos, objetivo, REF, llegada, 7));
+    pos = objetivo;
+  }
+
   // La cadena simulada termina donde termina; un conteo inicial la
-  // reconcilia con el stock_actual declarado por el seed.
+  // reconcilia con el stock_actual declarado por el seed. A las
+  // 23:00 ordena después de cualquier VENTA de hoy (20:00).
   if (pos !== p.stock_actual) {
-    movs.push(mov(p, 'AJUSTE', pos, p.stock_actual, REF, hoy, 7, 'CONTEO'));
+    movs.push(mov(p, 'AJUSTE', pos, p.stock_actual, REF, hoy, 23, 'CONTEO'));
   }
   return movs;
 }
@@ -100,14 +121,16 @@ export function historialDeProducto(p, ventas, hoy = new Date()) {
  * para todo el catálogo desde `ventas` (corre después de seedVentas
  * en el mismo path — solo DB real, no schemas de test). Los
  * productos del fixture seedData.historial_stock se saltean: su
-// cadena hecha a mano convive con las pruebas de estadísticas.
+ * cadena hecha a mano convive con las pruebas de estadísticas.
  */
 export async function seedHistorial(db) {
   const { c } = await db.get(
-    `SELECT COUNT(*)::int AS c FROM historial_stock WHERE referencia = '${REF}'`,
+    "SELECT COUNT(*)::int AS c FROM historial_stock WHERE referencia = ?",
+    [REF],
   );
   if (c > 0) return 0;
 
+  const hoy = new Date(); // un ancla — la misma ventana para todos
   const skip = new Set(seedData.historial_stock.map((m) => m.producto_id));
   const productos = await db.all(
     'SELECT id, sku, ean, stock_actual, stock_minimo FROM productos ORDER BY id',
@@ -125,7 +148,7 @@ export async function seedHistorial(db) {
 
   const filas = productos
     .filter((p) => !skip.has(p.id))
-    .flatMap((p) => historialDeProducto(p, ventasPor.get(p.id) ?? []));
+    .flatMap((p) => historialDeProducto(p, ventasPor.get(p.id) ?? [], hoy));
   if (!filas.length) return 0;
 
   const COLS = [

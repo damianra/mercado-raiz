@@ -55,25 +55,57 @@ describe('historialDeProducto (pura)', () => {
       { fecha: '2026-10-04', unidades: 15 },
     ];
     const movs = historialDeProducto(p, ventas, HOY);
-    // Entre la 1ra REPOSICION inicial y la próxima no hay otra
-    // intermedia disparada en el mismo tramo de espera.
+    // Una sola entrega se dispara en el tramo (lead 2-6 cae después
+    // de la última venta → entrega en la cola de la ventana).
     const reposiciones = movs.filter((m) => m.tipo_movimiento === 'REPOSICION');
-    expect(reposiciones.length).toBe(2); // inicial + la que llega
+    expect(reposiciones.length).toBe(1);
   });
 
-  it('sin ventas → una sola fila con la posición constante', () => {
-    const p = { id: 11, sku: 'T3', ean: 't3', stock_actual: 25, stock_minimo: 5 };
+  it('la reposición llega en su propia fecha aunque ese día no haya venta (gap-day)', () => {
+    // Venta en D, próxima en D+10: cualquier lead 2-6 cae en un día
+    // sin venta — si la entrega exigiera v.fecha === llegada, se
+    // perdía y la cadena colapsaba a quiebre permanente.
+    const p = { id: 11, sku: 'T2b', ean: 't2b', stock_actual: 40, stock_minimo: 10 };
+    const ventas = [
+      { fecha: '2026-10-01', unidades: 30 }, // cae a/bajo mínimo
+      { fecha: '2026-10-11', unidades: 5 },
+      { fecha: '2026-10-20', unidades: 5 },
+    ];
+    const movs = historialDeProducto(p, ventas, HOY);
+    const repo = movs.find(
+      (m) => m.tipo_movimiento === 'REPOSICION' && m.fecha.slice(0, 10) !== '2026-10-01',
+    );
+    expect(repo).toBeDefined();
+    // Llegó ENTRE las dos ventas, en un día sin venta propio.
+    const f = repo.fecha.slice(0, 10);
+    expect(f > '2026-10-01' && f <= '2026-10-11').toBe(true);
+    // Y la cadena siguió sana después (termina en stock_actual).
+    expect(movs.at(-1).cantidad_nueva).toBe(40);
+  });
+
+  it('el primer mov declara la posición pre-ventana (anterior = objetivo)', () => {
+    // quiebreDesde hereda movs[0].anterior a los días anteriores a
+    // la ventana — si fuera 0, dias>91 contaría quiebre fantasma.
+    const p = P(32);
+    const movs = historialDeProducto(p, ventasDeProducto(p, HOY), HOY);
+    expect(movs[0].cantidad_anterior).toBeGreaterThan(0);
+  });
+
+  it('sin ventas → un conteo con la posición constante', () => {
+    const p = { id: 12, sku: 'T3', ean: 't3', stock_actual: 25, stock_minimo: 5 };
     const movs = historialDeProducto(p, [], HOY);
     expect(movs).toHaveLength(1);
     expect(movs[0]).toMatchObject({
-      tipo_movimiento: 'REPOSICION',
+      tipo_movimiento: 'AJUSTE',
+      motivo: 'CONTEO',
+      cantidad_anterior: 25,
       cantidad_nueva: 25,
       referencia: 'SEED-RECONSTRUCCION',
     });
   });
 
   it('sin ventas y stock 0 → la posición queda en 0 toda la ventana', () => {
-    const p = { id: 12, sku: 'T4', ean: 't4', stock_actual: 0, stock_minimo: 5 };
+    const p = { id: 13, sku: 'T4', ean: 't4', stock_actual: 0, stock_minimo: 5 };
     const movs = historialDeProducto(p, [], HOY);
     expect(movs).toHaveLength(1);
     expect(movs[0].cantidad_nueva).toBe(0);

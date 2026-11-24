@@ -2221,20 +2221,23 @@ Estas tareas convierten el sistema en herramienta diaria.
 - **T30.3** ✅ `historial_stock` poblado desde las ventas del seed
   (`server/seed-historial.js`) — sierra de reabastecimiento
   determinística por producto (`historialDeProducto`, pura):
-  REPOSICION `SEED-RECONSTRUCCION` `0→objetivo` al inicio de la
-  ventana (`objetivo = max(min×3, ⌈media×14⌉)`), una VENTA por día
-  con la referencia `VTA-*` de la venta, y al caer a/bajo el
-  mínimo llega reposición a `lead` días (2–6, hash EAN) — si la
-  demanda agota antes, el stock cruza a ≤0 y los días de quiebre
-  son reales. Cierra con AJUSTE `CONTEO` reconciliando con
-  `stock_actual` (o última VENTA si la sierra termina exacta).
-  Sin ventas (~12%): una fila `0→stock_actual` de posición
-  constante. Corre tras `seedVentas` en el mismo path (solo DB
-  real — schemas de test lo saltean), idempotente (guard por
-  referencia), y saltea los 7 productos del fixture
-  `seedData.historial_stock`. ~75k filas → fill rate,
-  días-en-quiebre y margen-perdido dejan de ser null para el
-  99.5% del catálogo.
+  el producto entra a la ventana abastecido (`anterior` del primer
+  mov = `objetivo = max(min×3, ⌈media×14⌉)` — días pre-ventana no
+  cuentan quiebre fantasma), una VENTA por día con la referencia
+  `VTA-*` de la venta, y al caer a/bajo el mínimo llega reposición
+  a `lead` días (2–6, hash EAN) **en su propia fecha, haya o no
+  venta ese día** (un camión es su propio movimiento — exigir día
+  con venta colgaba la entrega y bloqueaba toda reposición
+  futura). Si la demanda agota antes → días de quiebre reales.
+  Cierra con AJUSTE `CONTEO` a las 23:00 reconciliando con
+  `stock_actual` (posteriores solo las VENTA del día). Sin ventas
+  (~12%): AJUSTE `CONTEO` `stock_actual→stock_actual` de posición
+  constante. Ventas se clampean a `fecha ≤ hoy`. Corre tras
+  `seedVentas` en el mismo path (solo DB real — schemas de test lo
+  saltean), idempotente (guard por referencia), y saltea los 7
+  productos del fixture `seedData.historial_stock`. ~123k filas →
+  fill rate, días-en-quiebre y margen-perdido dejan de ser null
+  para el 99.5% del catálogo.
 
 - **T30.4** ✅ Pedido del buyer real: `POST /api/pedidos` crea la
   OC `PENDIENTE_APROBACION` (siempre — el buyer pide, el
