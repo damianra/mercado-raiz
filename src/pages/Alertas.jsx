@@ -6,8 +6,10 @@ import {
   CircleAlert,
   Clock,
   PackageX,
+  ShoppingCart,
   TriangleAlert,
 } from 'lucide-react';
+import ComprarModal from '../components/ComprarModal.jsx';
 import Sidebar from '../components/Sidebar.jsx';
 import Topbar from '../components/Topbar.jsx';
 import Toasts from '../components/Toasts.jsx';
@@ -27,6 +29,10 @@ const TIPOS = {
   DEAD_STOCK: { label: 'Dead stock', icon: BellOff },
   ORDEN_PENDIENTE: { label: 'Orden pendiente', icon: CircleAlert },
 };
+// SPEC-29 (R29.6): solo las alertas de falta de stock son
+// comprables — dead stock y OC pendiente no se resuelven pidiendo
+// más mercadería.
+const COMPRABLES = new Set(['QUIEBRE', 'RIESGO_LEAD']);
 const SEV = {
   ALTA: { chip: 'bg-red-100 text-red-800', dot: 'bg-red-600', label: 'Alta' },
   MEDIA: { chip: 'bg-amber-100 text-amber-800', dot: 'bg-amber-500', label: 'Media' },
@@ -53,6 +59,7 @@ export default function Alertas({ usuario }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [marcandoId, setMarcandoId] = useState(null);
   const [marcandoTodas, setMarcandoTodas] = useState(false);
+  const [comprando, setComprando] = useState(null);
   const [toasts, setToasts] = useState([]);
   const timers = useRef([]);
 
@@ -114,6 +121,19 @@ export default function Alertas({ usuario }) {
       pushToast(`No se pudieron marcar: ${e.message}`, 'error');
     } finally {
       setMarcandoTodas(false);
+    }
+  };
+
+  // El pedido salió por el stub (202): la alerta queda atendida →
+  // se marca leída y la lista se refresca.
+  const pedidoHecho = async (alerta) => {
+    setComprando(null);
+    pushToast('Pedido registrado — queda pendiente de procesamiento');
+    try {
+      await marcarAlertaLeida(alerta.id);
+      await cargar();
+    } catch (e) {
+      pushToast(`Pedido enviado pero no se pudo cerrar la alerta: ${e.message}`, 'error');
     }
   };
 
@@ -242,14 +262,26 @@ export default function Alertas({ usuario }) {
                       <p className="mt-1.5 text-sm text-grafito">{a.mensaje}</p>
                     </div>
                     {!a.leida && (
-                      <button
-                        onClick={() => marcar(a.id)}
-                        disabled={marcandoId === a.id}
-                        className="shrink-0 rounded-lg border border-root/20 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`Marcar leída la alerta ${a.id}`}
-                      >
-                        Marcar leída
-                      </button>
+                      <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+                        {COMPRABLES.has(a.tipo) && (
+                          <button
+                            onClick={() => setComprando(a)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-root px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-root-dark"
+                            aria-label={`Comprar para la alerta ${a.id}`}
+                          >
+                            <ShoppingCart size={13} strokeWidth={2} />
+                            Comprar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => marcar(a.id)}
+                          disabled={marcandoId === a.id}
+                          className="rounded-lg border border-root/20 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Marcar leída la alerta ${a.id}`}
+                        >
+                          Marcar leída
+                        </button>
+                      </div>
                     )}
                   </li>
                 );
@@ -259,6 +291,13 @@ export default function Alertas({ usuario }) {
         </main>
       </div>
       <Toasts toasts={toasts} />
+      {comprando && (
+        <ComprarModal
+          alerta={comprando}
+          onClose={() => setComprando(null)}
+          onPedido={() => pedidoHecho(comprando)}
+        />
+      )}
     </div>
   );
 }

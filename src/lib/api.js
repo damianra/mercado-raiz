@@ -134,6 +134,24 @@ export const marcarAlertaLeida = (id) =>
 export const leerTodasAlertas = () =>
   apiFetch('/alertas/leer-todas', { method: 'PATCH', body: '{}' });
 
+// SPEC-29 (R29.7): hoja de compra del modal del BUYER — precios
+// por proveedor + demanda + cantidad sugerida por lead.
+export const getSugerenciaPedido = (productoId) =>
+  apiFetch(`/pedidos/sugerencia?producto_id=${encodeURIComponent(productoId)}`);
+
+// SPEC-29 (R29.7b): stub — valida y loguea la solicitud (202), la
+// OC real queda para la integración futura.
+export const solicitarPedido = ({ productoId, proveedorId, cantidad, alertaId }) =>
+  apiFetch('/pedidos', {
+    method: 'POST',
+    body: JSON.stringify({
+      producto_id: productoId,
+      proveedor_id: proveedorId,
+      cantidad,
+      ...(alertaId ? { alerta_id: alertaId } : {}),
+    }),
+  });
+
 export const crearOrden = ({ productoId, cantidad, requiereAprobacion }) =>
   apiFetch('/ordenes', {
     method: 'POST',
