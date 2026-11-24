@@ -72,7 +72,7 @@ export function mapOrden(o) {
     stockActual,
     stockMinimo: o.producto?.stock_minimo ?? 0,
     entregaDias: o.proveedor?.tiempo_entrega_dias ?? null,
-    urgente: o.estado === 'PENDIENTE_APROBACION' && stockActual === 0,
+    urgente: o.estado === 'PENDIENTE_APROBACION' && stockActual <= 0,
     analisisIA: o.analisis_ia ?? 'Sin análisis disponible.',
     cantidadRecibida: o.cantidad_recibida ?? null,
     enviadoPor: o.enviado_por ?? null,

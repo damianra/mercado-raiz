@@ -180,7 +180,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
               <span className="text-sm text-warmgray">Stock resultante</span>
               <span
                 className={`font-mono text-lg font-bold ${
-                  resultante === 0 ? 'text-red-700' : 'text-grafito'
+                  resultante <= 0 ? 'text-red-700' : 'text-grafito'
                 }`}
               >
                 {producto.stock_actual} → {resultante}

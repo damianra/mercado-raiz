@@ -108,28 +108,36 @@ export async function registrarVenta(item) {
 }
 
 // POST /ventas/batch (T30.2): lote POS en una sola request — todo o
-// nada. Primero se lockean/verifican TODOS los productos (un faltante
-// aborta antes de escribir nada), después se aplican las ventas.
+// nada. Fase 1: se lockean los productos distintos EN ORDEN (dos
+// lotes concurrentes con el mismo set no pueden intercalar locks →
+// sin deadlock) y se verifica existencia — un faltante aborta antes
+// de escribir nada. Fase 2: cada item re-lee el stock dentro del
+// lock ya tomado — la tx ve sus propios writes, así que el mismo
+// producto repetido en el lote descuenta acumulado y la cadena
+// anterior→nueva del historial queda continua.
 export async function registrarVentasBatch(items, usuario) {
   const db = await openDb();
   const ts = new Date().toISOString();
   return db.tx(async (t) => {
-    const faltantes = [];
-    const productos = [];
-    for (const [indice, it] of items.entries()) {
+    const ids = [...new Set(items.map((it) => it.productoId))].sort((a, b) => a - b);
+    const existentes = new Set();
+    for (const id of ids) {
+      const p = await t.get(`SELECT id FROM productos WHERE id = ? FOR UPDATE`, [id]);
+      if (p) existentes.add(id);
+    }
+    const faltantes = items.flatMap((it, indice) =>
+      existentes.has(it.productoId) ? [] : [{ indice, producto_id: it.productoId }],
+    );
+    if (faltantes.length) return { faltantes };
+    const ventas = [];
+    for (const it of items) {
       const p = await t.get(
         `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
         [it.productoId],
       );
-      if (!p) faltantes.push({ indice, producto_id: it.productoId });
-      productos.push(p);
-    }
-    if (faltantes.length) return { faltantes };
-    const ventas = [];
-    for (const [indice, it] of items.entries()) {
       ventas.push({
         producto_id: it.productoId,
-        ...(await aplicarVentaEnTx(t, productos[indice], { ...it, usuario }, ts)),
+        ...(await aplicarVentaEnTx(t, p, { ...it, usuario }, ts)),
       });
     }
     return { ventas };

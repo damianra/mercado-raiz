@@ -174,6 +174,26 @@ describe('POST /api/ventas/batch', () => {
     expect(c).toBe(0);
   });
 
+  it('mismo producto repetido en el lote descuenta acumulado y la cadena queda continua', async () => {
+    const p = P(20);
+    const { stock_actual: antes } = await stockDe(p.id);
+    const res = await venderLote([
+      { producto_id: p.id, unidades: 2, canal: 'POS' },
+      { producto_id: p.id, unidades: 3, canal: 'POS' },
+    ]);
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    // sin re-leer dentro del lock: el 2do item vería el stock viejo
+    // y escribiría antes-3 (lost update) — quedan antes-5.
+    expect(await stockDe(p.id)).toMatchObject({ stock_actual: antes - 5 });
+    expect(body.data[0].stock_anterior).toBe(antes);
+    expect(body.data[1].stock_anterior).toBe(antes - 2);
+    const [m2, m1] = await movimientosDe(p.id);
+    expect(m1.cantidad_nueva).toBe(antes - 2);
+    expect(m2.cantidad_anterior).toBe(antes - 2);
+    expect(m2.cantidad_nueva).toBe(antes - 5);
+  });
+
   it('400 con item de forma inválida → detalle por índice', async () => {
     const res = await venderLote([
       { producto_id: P(9).id, unidades: 1, canal: 'POS' },

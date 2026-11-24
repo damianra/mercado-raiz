@@ -177,7 +177,7 @@ sort, 400/404/409, umbral, recálculo), `test/api-contract.test.js`
   `APROBADA` + `!requiere_aprobacion` → badge `APROBADO_AUTO`
   ("Aprobado auto"); estado desconocido → `PENDIENTE_APROBACION`;
   `producto`/`proveedor` ausentes → `'—'`; `urgente` = pendiente con
-  `stock_actual === 0`.
+  `stock_actual <= 0` (era `=== 0` — T30.2 permite negativos).
 - **R4.3** Carga inicial: `getOrdenes()` + `getDashboardStats()` en
   `Promise.allSettled` — las órdenes son contenido crítico (fallo →
   `ErrorState`); stats es secundario (fallo → KPIs calculados local).
@@ -211,9 +211,10 @@ del seed, búsqueda/filtro, modal + aprobar, skeleton, vacío, error).
 ### Requisitos
 
 - **R5.1** Estado de producto **derivado al leer** (la columna puede
-  quedar vieja): `stock_actual === 0` → `CRITICO`; `< stock_minimo`
+  quedar vieja): `stock_actual <= 0` → `CRITICO`; `< stock_minimo`
   → `STOCK_BAJO`; resto → `OK`. Un UPDATE de stock se refleja sin
-  tocar `estado`.
+  tocar `estado`. (`<= 0` desde T30.2 — una venta puede dejar el
+  stock negativo y sigue siendo quiebre.)
 - **R5.2** `monto_total = round(cantidad × precio_unitario, 2)` —
   calculado server-side al crear, nunca confiado al body.
 - **R5.3** Umbral de aprobación: `UMBRAL_APROBACION = 100`
