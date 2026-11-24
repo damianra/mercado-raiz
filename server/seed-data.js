@@ -173,6 +173,14 @@ const ordenes_compra = elegidos.map((p, i) => {
     aprobado_por: t.aprobado_por,
     motivo_rechazo: t.motivo_rechazo,
     fecha_aprobacion: t.fecha_aprobacion,
+    // SPEC-30 (T30.1): el ciclo queda coherente — enviada/recibida
+    // traen quien y cuándo; recibida registra cuánto ingresó.
+    enviado_por: ['ENVIADA', 'RECIBIDA'].includes(t.estado) ? t.aprobado_por : null,
+    fecha_envio: t.estado === 'RECIBIDA' ? '2026-10-27T09:00:00'
+      : t.estado === 'ENVIADA' ? '2026-10-29T11:00:00' : null,
+    cantidad_recibida: t.estado === 'RECIBIDA' ? cantidad : null,
+    recibido_por: t.estado === 'RECIBIDA' ? 'deposito@mercadorai.com' : null,
+    fecha_recepcion: t.estado === 'RECIBIDA' ? '2026-10-29T08:30:00' : null,
     fecha_creacion: t.fecha_creacion,
     fecha_actualizacion: t.fecha_actualizacion,
   };

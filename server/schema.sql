@@ -65,12 +65,26 @@ CREATE TABLE IF NOT EXISTS ordenes_compra (
   aprobado_por TEXT,
   motivo_rechazo TEXT,
   fecha_aprobacion TIMESTAMPTZ,
+  -- SPEC-30 (T30.1): ciclo hacia el proveedor — enviada (la OC ya
+  -- se le mandó) y recibida (llegó el camión → suma stock).
+  enviado_por TEXT,
+  fecha_envio TIMESTAMPTZ,
+  cantidad_recibida INTEGER,
+  recibido_por TEXT,
+  fecha_recepcion TIMESTAMPTZ,
   fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT now(),
   fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   FOREIGN KEY (producto_id) REFERENCES productos(id),
   FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 );
+
+-- Upgrade idempotente para DBs creadas antes de SPEC-30.
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS enviado_por TEXT;
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_envio TIMESTAMPTZ;
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS cantidad_recibida INTEGER;
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS recibido_por TEXT;
+ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_recepcion TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_ordenes_estado ON ordenes_compra(estado);
 CREATE INDEX IF NOT EXISTS idx_ordenes_fecha ON ordenes_compra(fecha_creacion);

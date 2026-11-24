@@ -9,6 +9,8 @@ import {
   Download,
   Plus,
   Inbox,
+  Send,
+  PackageCheck,
 } from 'lucide-react';
 import { ESTADOS, formatMoney } from '../data/orders.js';
 
@@ -16,6 +18,8 @@ const FILTROS = [
   { id: 'TODAS', label: 'Todas' },
   { id: 'PENDIENTE_APROBACION', label: 'Pendientes' },
   { id: 'APROBADO', label: 'Aprobadas' },
+  { id: 'ENVIADA', label: 'Enviadas' },
+  { id: 'RECIBIDA', label: 'Recibidas' },
   { id: 'RECHAZADO', label: 'Rechazadas' },
 ];
 
@@ -41,6 +45,7 @@ export default function OrdersTable({
   onVer,
   onAprobar,
   onRechazar,
+  onEnviar,
   onNueva,
 }) {
   const [busqueda, setBusqueda] = useState('');
@@ -177,6 +182,7 @@ export default function OrdersTable({
                     onVer={onVer}
                     onAprobar={onAprobar}
                     onRechazar={onRechazar}
+                    onEnviar={onEnviar}
                   />
                 ))}
               </tbody>
@@ -211,6 +217,7 @@ export default function OrdersTable({
                     onVer={onVer}
                     onAprobar={onAprobar}
                     onRechazar={onRechazar}
+                    onEnviar={onEnviar}
                   />
                 </div>
               </li>
@@ -222,7 +229,7 @@ export default function OrdersTable({
   );
 }
 
-function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar }) {
+function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar, onEnviar }) {
   return (
     <tr
       className={`group h-16 border-b border-root/5 transition-colors duration-150 hover:bg-cream ${
@@ -258,6 +265,7 @@ function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar }) {
             onVer={onVer}
             onAprobar={onAprobar}
             onRechazar={onRechazar}
+            onEnviar={onEnviar}
           />
         </div>
       </td>
@@ -265,8 +273,12 @@ function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar }) {
   );
 }
 
-function Acciones({ orden: o, procesando, onVer, onAprobar, onRechazar }) {
+function Acciones({ orden: o, procesando, onVer, onAprobar, onRechazar, onEnviar }) {
   const pendiente = o.estado === 'PENDIENTE_APROBACION';
+  // SPEC-30 (T30.1): APROBADA→ENVIADA en un click; la recepción
+  // exige cantidad → se resuelve en el modal de detalle.
+  const aprobada = esAprobada(o.estado);
+  const enviada = o.estado === 'ENVIADA';
   return (
     <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
       <button
@@ -302,6 +314,31 @@ function Acciones({ orden: o, procesando, onVer, onAprobar, onRechazar }) {
             <X size={18} strokeWidth={2} />
           </button>
         </>
+      )}
+      {aprobada && (
+        <button
+          onClick={() => onEnviar(o)}
+          disabled={procesando}
+          className="rounded-lg p-2 text-info transition hover:bg-info/10 disabled:opacity-40"
+          aria-label={`Marcar ${o.id} como enviada`}
+          title="Marcar como enviada (la OC ya se le comunicó al proveedor)"
+        >
+          {procesando ? (
+            <LoaderCircle size={18} className="animate-spin" />
+          ) : (
+            <Send size={18} strokeWidth={1.5} />
+          )}
+        </button>
+      )}
+      {enviada && (
+        <button
+          onClick={() => onVer(o)}
+          className="rounded-lg p-2 text-success transition hover:bg-success/10"
+          aria-label={`Registrar recepción de ${o.id}`}
+          title="Registrar recepción (llegó el camión)"
+        >
+          <PackageCheck size={18} strokeWidth={1.5} />
+        </button>
       )}
     </div>
   );

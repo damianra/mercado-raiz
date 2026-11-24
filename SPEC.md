@@ -2142,6 +2142,67 @@ precio activo muestra estado informativo y deshabilita confirmar.
 
 ---
 
+## SPEC-30 · Inventario vivo — el stock se mueve (roadmap P0/P1)
+
+Auditoría de productividad real: la inteligencia (demanda,
+márgenes, alertas, agente) opera sobre un inventario congelado —
+`stock_actual` solo lo escribe el seed y las OCs nunca "llegan".
+Estas tareas convierten el sistema en herramienta diaria.
+
+- **T30.1** ✅ Ciclo de la OC hacia el proveedor: `POST
+  /ordenes/:id/enviar` (APROBADA→ENVIADA — "la OC ya se le mandó
+  al proveedor") y `POST /ordenes/:id/recibir` (ENVIADA→RECIBIDA)
+  con `cantidad_recibida` ≤ cantidad pedida — recepciones
+  parciales y faltantes medibles (OTIF real). La recepción SUMA
+  `stock_actual` y escribe `historial_stock` (REPOSICION, ref
+  `OC <id>`) en la misma transacción. Idempotencia bajo
+  concurrencia garantizada por el guard de estado dentro del
+  lock: `SELECT ... FOR UPDATE` re-verifica el estado tras
+  adquirir el lock (READ COMMITTED re-lee la fila más reciente)
+  y `enviar` usa `UPDATE ... AND estado='APROBADA'` — el segundo
+  `/recibir` concurrente recibe 409 y el stock NO se suma dos
+  veces (test `Promise.all` lo prueba). Roles: misma matriz que
+  aprobar (APROBADOR/GERENTE/ADMIN). Campos nuevos en la OC:
+  `enviado_por`/`fecha_envio`/`cantidad_recibida`/`recibido_por`/
+  `fecha_recepcion`. UI: "Marcar como enviada" en la fila
+  aprobada (un click — copy honesto: la OC no se envía desde el
+  sistema, se registra que ya se comunicó) y "Registrar
+  recepción" en la enviada → abre el detalle con input
+  pre-cargado en la pedida (parcial → muestra el faltante);
+  filtros Enviadas/Recibidas nuevos.
+
+- **T30.2** Ventas y ajustes que mueven stock: `POST /api/ventas`
+  (punto de integración POS real) — descuenta `stock_actual` +
+  `historial_stock` en tx. `POST /api/stock/ajuste` (merma,
+  roturas, conteo físico en góndola/depósito) con motivo
+  estructurado — el conteo manual de góndola vive acá, no en la
+  OC.
+
+- **T30.3** `historial_stock` poblado desde las ventas del seed
+  (reconstruir stock por día para todo el catálogo) — fill rate,
+  días-en-quiebre y margen-perdido dejan de ser null para el
+  99.5% de los SKUs.
+
+- **T30.4** Pedido del buyer real: `POST /api/pedidos` llama a
+  `createOrden` → OC `PENDIENTE_APROBACION` visible en el
+  dashboard de aprobadores. Antes de cablear: validar
+  alerta↔producto y alerta no leída, idempotencia por alerta_id,
+  cota superior de cantidad (notas en `pedidos.model.js`).
+
+- **T30.5** Agente con disparador propio: watchdog/schedule en el
+  harness (intervalo configurable + trigger por evento: venta
+  que deja stock en cero → candidato inmediato). Sin esto el
+  "automático" depende de un `POST /run` manual.
+
+- **T30.6** Las alertas llegan sin entrar a mirar: canal fuera de
+  la app (email/webhook) o al menos la campanita del Topbar
+  funcional para GERENTE/APROBADOR con las alertas ALTA.
+
+Fuera de scope (P3, anotado): vencimientos/lotes, depósito vs
+góndola como ubicaciones de stock, tickets/cesta, promos,
+multi-sucursal, locks multi-proceso (advisory lock si la app
+escala).
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |

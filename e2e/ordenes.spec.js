@@ -23,8 +23,49 @@ async function login(page, email = LOGIN_EMAIL, password = LOGIN_PASS) {
 
 async function cargarDashboard(page) {
   await login(page);
+  // El click de login y el render del dashboard compiten — esperar
+  // el shell autenticado antes de la tabla (si no, race y la tabla
+  // no llega a montarse en 5s).
+  await page.locator('aside nav').waitFor();
   await expect(page.locator(FILAS).first()).toBeVisible();
 }
+
+// SPEC-30 (T30.1): ciclo hacia el proveedor — la fila aprobada
+// ofrece "Enviar", la enviada abre el detalle para registrar la
+// recepción con cantidad (default = pedida completa).
+test('ciclo OC: aprobada → enviada → recibida suma stock en la fila', async ({
+  page,
+}) => {
+  await cargarDashboard(page);
+  // Fila aprobada: botón enviar en la fila.
+  const fila = page
+    .locator(FILAS)
+    .filter({ has: page.getByRole('button', { name: /Marcar OC-.* como enviada/ }) })
+    .first();
+  await expect(fila).toBeVisible();
+  const ordenId = await fila.locator('td').first().innerText();
+  await fila.getByRole('button', { name: `Marcar ${ordenId} como enviada` }).click();
+  await expect(page.getByText(`Orden ${ordenId} marcada como enviada`)).toBeVisible();
+  // Tras la transición el botón Enviar desaparece → reubicar la
+  // fila por su id de orden (el locator anterior ya no matchea).
+  const filaEnviada = page.locator(FILAS).filter({ hasText: ordenId });
+  await expect(filaEnviada.getByText('Enviada')).toBeVisible();
+
+  // Ahora la fila ofrece "registrar recepción" → abre el detalle.
+  await filaEnviada
+    .getByRole('button', { name: `Registrar recepción de ${ordenId}` })
+    .click();
+  const modal = page.getByRole('dialog');
+  await expect(modal.getByLabel('Cantidad recibida')).toBeVisible();
+  // Recepción parcial: una unidad menos → faltante visible.
+  const input = modal.getByLabel('Cantidad recibida');
+  const pedida = parseInt(await input.inputValue(), 10);
+  await input.fill(String(pedida - 1));
+  await expect(modal.getByText(/falta 1 unidad/)).toBeVisible();
+  await modal.getByRole('button', { name: 'Registrar recepción' }).click();
+  await expect(page.getByText(new RegExp(`Orden ${ordenId} recibida`))).toBeVisible();
+  await expect(page.getByText('Recibida').first()).toBeVisible();
+});
 
 test('sin sesión, toda ruta protegida cae en el login', async ({ page }) => {
   await page.goto('/');

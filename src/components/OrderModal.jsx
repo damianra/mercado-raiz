@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
-import { X, Package, Sparkles, Check, LoaderCircle, Truck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Package, Sparkles, Check, LoaderCircle, Truck, Send, PackageCheck } from 'lucide-react';
 import { formatMoney } from '../data/orders.js';
 
-export default function OrderModal({ orden, procesando, onClose, onAprobar, onRechazar }) {
+export default function OrderModal({ orden, procesando, onClose, onAprobar, onRechazar, onEnviar, onRecibir }) {
+  const [recibida, setRecibida] = useState('');
+
+  useEffect(() => {
+    setRecibida(orden ? String(orden.cantidad) : '');
+  }, [orden]);
+
   useEffect(() => {
     if (!orden) return;
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -16,6 +22,12 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
 
   if (!orden) return null;
   const pendiente = orden.estado === 'PENDIENTE_APROBACION';
+  const aprobada = orden.estado === 'APROBADO' || orden.estado === 'APROBADO_AUTO';
+  const enviada = orden.estado === 'ENVIADA';
+  // Number() (no parseInt) → '2.5' queda inválido, no truncado.
+  const cantRecibir = recibida.trim() === '' ? NaN : Number(recibida);
+  const recibirValida =
+    Number.isInteger(cantRecibir) && cantRecibir >= 1 && cantRecibir <= orden.cantidad;
 
   return (
     <div
@@ -114,8 +126,9 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
           )}
         </div>
 
-        {/* Acciones */}
-        {pendiente ? (
+        {/* Acciones — por estado (SPEC-30 T30.1): pendiente →
+            aprobar/rechazar, aprobada → enviar, enviada → recibir. */}
+        {pendiente && (
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
               onClick={() => onRechazar(orden)}
@@ -140,9 +153,81 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
               )}
             </button>
           </div>
-        ) : (
+        )}
+        {aprobada && (
+          <div className="mt-6">
+            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
+              Orden aprobada — cuando se la comuniques al proveedor, marcalo acá
+              (la OC no se envía desde el sistema).
+            </p>
+            <button
+              onClick={() => onEnviar(orden)}
+              disabled={procesando}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-root text-sm font-semibold text-white transition duration-200 ease-brand hover:-translate-y-0.5 hover:bg-root-dark hover:shadow-lift disabled:opacity-40"
+            >
+              {procesando ? (
+                <>
+                  <LoaderCircle size={16} className="animate-spin" /> Registrando…
+                </>
+              ) : (
+                <>
+                  <Send size={16} strokeWidth={2.5} /> Marcar como enviada
+                </>
+              )}
+            </button>
+          </div>
+        )}
+        {enviada && (
+          <div className="mt-6">
+            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
+              Orden marcada como enviada — cuando llega el camión registrá la recepción.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="flex h-12 flex-1 items-center gap-2 rounded-lg bg-white px-3 ring-1 ring-root/20 focus-within:ring-2 focus-within:ring-root">
+                <span className="whitespace-nowrap text-xs font-semibold text-warmgray">
+                  Unidades recibidas
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  max={orden.cantidad}
+                  value={recibida}
+                  onChange={(e) => setRecibida(e.target.value)}
+                  disabled={procesando}
+                  aria-label="Cantidad recibida"
+                  className="w-full bg-transparent text-right text-sm font-semibold text-grafito outline-none"
+                />
+                <span className="text-xs text-warmgray">/ {orden.cantidad}</span>
+              </label>
+              <button
+                onClick={() => onRecibir(orden, cantRecibir)}
+                disabled={procesando || !recibirValida}
+                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-root text-sm font-semibold text-white transition duration-200 ease-brand hover:-translate-y-0.5 hover:bg-root-dark hover:shadow-lift disabled:opacity-40"
+              >
+                {procesando ? (
+                  <>
+                    <LoaderCircle size={16} className="animate-spin" /> Recibiendo…
+                  </>
+                ) : (
+                  <>
+                    <PackageCheck size={16} strokeWidth={2.5} /> Registrar recepción
+                  </>
+                )}
+              </button>
+            </div>
+            {recibirValida && cantRecibir < orden.cantidad && (
+              <p className="mt-2 text-xs text-warmgray">
+                Recepción parcial — falta {orden.cantidad - cantRecibir}{' '}
+                {orden.cantidad - cantRecibir === 1 ? 'unidad' : 'unidades'} del pedido.
+              </p>
+            )}
+          </div>
+        )}
+        {!pendiente && !aprobada && !enviada && (
           <p className="mt-6 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
-            Esta orden ya fue procesada.
+            {orden.estado === 'RECIBIDA' && orden.cantidadRecibida != null
+              ? `Orden recibida — ingresaron ${orden.cantidadRecibida} de ${orden.cantidad} unidades al stock.`
+              : 'Esta orden ya fue procesada.'}
           </p>
         )}
       </div>

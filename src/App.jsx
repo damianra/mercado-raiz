@@ -11,10 +11,12 @@ import { formatMoney } from './data/orders.js';
 import { Link } from './lib/router.jsx';
 import {
   aprobarOrden,
+  enviarOrden,
   getDashboardStats,
   getDemandaStats,
   getOrdenes,
   mapOrden,
+  recibirOrden,
   rechazarOrden,
 } from './lib/api.js';
 import { logout } from './lib/auth.js';
@@ -113,6 +115,45 @@ export default function App({ usuario }) {
     }
   };
 
+  // SPEC-30 (T30.1): APROBADA→ENVIADA→RECIBIDA. La recepción suma
+  // stock en el backend — reflejamos estado + stock nuevo.
+  const transicionar = async (orden, accion, cantidadRecibida) => {
+    setProcesando(orden.id);
+    try {
+      if (accion === 'enviar') {
+        await enviarOrden(orden.id);
+        actualizar(orden.id, 'ENVIADA');
+        setDetalle((d) => (d?.id === orden.id ? null : d));
+        pushToast(`Orden ${orden.id} marcada como enviada`);
+      } else {
+        const res = await recibirOrden(orden.id, cantidadRecibida);
+        setOrdenes((prev) =>
+          prev.map((o) =>
+            o.id === orden.id
+              ? {
+                  ...o,
+                  estado: 'RECIBIDA',
+                  cantidadRecibida: res.data.cantidad_recibida,
+                  stockActual: res.data.stock_actual,
+                }
+              : o,
+          ),
+        );
+        setDetalle((d) => (d?.id === orden.id ? null : d));
+        const f = res.data.faltante;
+        pushToast(
+          `Orden ${orden.id} recibida — +${res.data.cantidad_recibida}u al stock` +
+            (f > 0 ? ` (faltante: ${f}u)` : ''),
+        );
+      }
+      getDashboardStats().then(setStatsApi).catch(() => {});
+    } catch (e) {
+      pushToast(`No se pudo ${accion} ${orden.id}: ${e.message}`, 'error');
+    } finally {
+      setProcesando(null);
+    }
+  };
+
   const stats = useMemo(() => {
     const pendientes = ordenes.filter((o) => o.estado === 'PENDIENTE_APROBACION');
     const local = {
@@ -181,6 +222,7 @@ export default function App({ usuario }) {
                 onVer={setDetalle}
                 onAprobar={(o) => resolver(o, true)}
                 onRechazar={(o) => resolver(o, false)}
+                onEnviar={(o) => transicionar(o, 'enviar')}
                 onNueva={() => setNuevaOpen(true)}
               />
             </>
@@ -201,6 +243,8 @@ export default function App({ usuario }) {
         onClose={() => setDetalle(null)}
         onAprobar={(o) => resolver(o, true)}
         onRechazar={(o) => resolver(o, false)}
+        onEnviar={(o) => transicionar(o, 'enviar')}
+        onRecibir={(o, cantidad) => transicionar(o, 'recibir', cantidad)}
       />
       <NewOrderModal
         open={nuevaOpen}
