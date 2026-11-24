@@ -2172,7 +2172,7 @@ Estas tareas convierten el sistema en herramienta diaria.
   pre-cargado en la pedida (parcial → muestra el faltante);
   filtros Enviadas/Recibidas nuevos.
 
-- **T30.2** Ventas y ajustes que mueven stock: `POST /api/ventas`
+- **T30.2** ✅ Ventas y ajustes que mueven stock: `POST /api/ventas`
   (punto de integración POS real) — descuenta `stock_actual` +
   `historial_stock` en tx. `POST /api/stock/ajuste` (merma,
   roturas, conteo físico en góndola/depósito) con motivo
