@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seedData } from './seed-data.js';
+import { seedHistorial } from './seed-historial.js';
 import { seedVentas } from './seed-ventas.js';
 
 const { Pool } = pg;
@@ -124,7 +125,12 @@ export async function openDb({ searchPath, connString, sembrar = true, sembrarVe
       // catálogo ya poblado — por eso van después del loop. En
       // schemas de test se saltea por defecto (~60k filas por
       // schema sería lento); los tests siembran fixtures propias.
-      if (sembrarVentas ?? !searchPath) await seedVentas(db);
+      // SPEC-30 (T30.3): el historial se deriva de las ventas —
+      // mismo path, mismo criterio de salteo en test.
+      if (sembrarVentas ?? !searchPath) {
+        await seedVentas(db);
+        await seedHistorial(db);
+      }
     }
     state = db;
     return state;
