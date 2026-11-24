@@ -88,4 +88,20 @@ export const config = {
    * z·σ_demanda·√lead_esperado. 1.65 ≈ 95% de nivel de servicio.
    */
   zSeguridad: Number(required('Z_SEGURIDAD', '1.65')),
+
+  /**
+   * Watchdog del agente (SPEC-30, T30.5): corrida automática cada
+   * N minutos. 0 = desactivado (el agente solo corre por POST /run
+   * o POST /trigger). No dispara si hay corrida en curso o pausada.
+   */
+  agenteIntervaloMin: Math.max(0, Number(required('AGENTE_INTERVALO_MIN', '60')) || 0),
+
+  /**
+   * Cooldown del trigger por evento (T30.5): un POST /trigger que
+   * llega a menos de N min del inicio de la última corrida se
+   * debouncea — un cierre de caja puede reportar muchos quiebres
+   * seguidos y la corrida reciente ya los cubrió o los verá la
+   * próxima. 0 = sin cooldown (cada trigger dispara).
+   */
+  triggerCooldownMin: Math.max(0, Number(required('AGENTE_TRIGGER_COOLDOWN_MIN', '15')) || 0),
 };

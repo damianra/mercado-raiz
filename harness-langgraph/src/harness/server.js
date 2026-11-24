@@ -16,6 +16,7 @@
 import express from 'express';
 import { config } from '../config/env.js';
 import { orchestrator } from './orchestrator.js';
+import { scheduler } from './scheduler.js';
 import { metrics } from './metrics.js';
 import { costTracker } from './cost-tracker.js';
 import { log } from '../utils/logger.js';
@@ -70,6 +71,14 @@ export function iniciarServidor() {
     const input = Number.isInteger(limite) && limite > 0 ? { limite } : {};
     orchestrator.iniciar(input).catch((err) => log(`corrida falló: ${err.message}`));
     res.status(202).json({ ok: true, ...input });
+  });
+
+  // SPEC-30 (T30.5): trigger por evento — el backend avisa acá
+  // cuando una venta deja stock <=0. El scheduler decide si dispara
+  // (debounce por cooldown + guard de corrida en curso/pausada).
+  app.post('/trigger', async (req, res) => {
+    const r = await scheduler.trigger(req.body ?? {});
+    res.status(202).json(r);
   });
 
   const server = app.listen(config.harnessPort, () =>

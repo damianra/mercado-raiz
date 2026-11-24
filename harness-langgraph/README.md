@@ -66,9 +66,13 @@ loguea ante el primer 401 y re-loguea si el token vence),
 `DEMANDA_BATCH` (default 5 — productos volátiles por llamada de
 demanda; los que el modelo omita o devuelva inválidos caen a
 llamada individual — SPEC-16), `DEMANDA_DIAS` (default 90, rango
-7–365 — ventana de `/api/estadisticas/demanda`, SPEC-26) y
+7–365 — ventana de `/api/estadisticas/demanda`, SPEC-26),
 `Z_SEGURIDAD` (default 1.65 ≈ 95% service level — factor z del
-stock de seguridad z·σ·√lead de `calcular-cantidad`, SPEC-26).
+stock de seguridad z·σ·√lead de `calcular-cantidad`, SPEC-26),
+`AGENTE_INTERVALO_MIN` (default 60, `0` = off — watchdog de
+corridas periódicas, SPEC-30 T30.5) y `AGENTE_TRIGGER_COOLDOWN_MIN`
+(default 15 — debounce del `POST /trigger` por evento: el backend
+avisa cuando una venta deja stock ≤0 vía `HARNESS_URL`).
 
 Runtime del LLM (`src/config/ollama.js`): `numCtx: 2048` y
 `numPredict` acotado por instancia — los prompts usan ~250 tokens y

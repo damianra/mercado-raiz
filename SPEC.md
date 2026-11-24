@@ -2253,10 +2253,21 @@ Estas tareas convierten el sistema en herramienta diaria.
   en el dashboard de aprobadores. Front: toast con el `OC-NNN`
   real; el PATCH leída del cliente ya no hace falta (server-side).
 
-- **T30.5** Agente con disparador propio: watchdog/schedule en el
-  harness (intervalo configurable + trigger por evento: venta
-  que deja stock en cero → candidato inmediato). Sin esto el
-  "automático" depende de un `POST /run` manual.
+- **T30.5** ✅ Agente con disparador propio
+  (`harness-langgraph/src/harness/scheduler.js`):
+  - **Schedule**: `setInterval` cada `AGENTE_INTERVALO_MIN`
+    (default 60; 0 = off) → corrida si no hay una `corriendo`
+    ni `pausada` (una pausada espera decisión humana — no se
+    le pisa el checkpoint).
+  - **Trigger por evento**: `POST :4110/trigger` — el backend
+    (`server/harness-trigger.js`) lo llama fire-and-forget
+    cuando `POST /api/ventas` o `/batch` deja `stock ≤ 0`
+    (quiebre recién nacido → candidato inmediato; la venta
+    nunca espera ni falla por el agente). Cooldown
+    `AGENTE_TRIGGER_COOLDOWN_MIN` (default 15) contra
+    `orchestrator.ultimaCorrida` — un cierre de caja con
+    varios quiebres no genera una corrida por cada uno.
+    El backend apunta con `HARNESS_URL` (default :4110).
 
 - **T30.6** Las alertas llegan sin entrar a mirar: canal fuera de
   la app (email/webhook) o al menos la campanita del Topbar

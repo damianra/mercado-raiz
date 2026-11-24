@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { avisarQuiebreAlAgente } from '../harness-trigger.js';
 
 // SPEC-26 (R26.2): ventas como hechos de negocio — lo consume el
 // harness (demanda) y el endpoint de estadísticas. `fecha` es DATE
@@ -97,7 +98,7 @@ async function aplicarVentaEnTx(t, p, { productoId, unidades, canal, fecha, refe
 export async function registrarVenta(item) {
   const db = await openDb();
   const ts = new Date().toISOString();
-  return db.tx(async (t) => {
+  const r = await db.tx(async (t) => {
     const p = await t.get(
       `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
       [item.productoId],
@@ -105,6 +106,13 @@ export async function registrarVenta(item) {
     if (!p) return { status: 404, error: 'producto no encontrado' };
     return { status: 201, data: await aplicarVentaEnTx(t, p, item, ts) };
   });
+  // T30.5: quiebre recién nacido → candidato inmediato del agente.
+  // Post-commit (el aviso refleja estado ya commiteado) y
+  // fire-and-forget — la venta nunca depende del harness.
+  if (r.status === 201 && r.data.stock_nuevo <= 0) {
+    avisarQuiebreAlAgente([item.productoId]);
+  }
+  return r;
 }
 
 // POST /ventas/batch (T30.2): lote POS en una sola request — todo o
@@ -118,7 +126,7 @@ export async function registrarVenta(item) {
 export async function registrarVentasBatch(items, usuario) {
   const db = await openDb();
   const ts = new Date().toISOString();
-  return db.tx(async (t) => {
+  const r = await db.tx(async (t) => {
     const ids = [...new Set(items.map((it) => it.productoId))].sort((a, b) => a - b);
     const existentes = new Set();
     for (const id of ids) {
@@ -142,4 +150,13 @@ export async function registrarVentasBatch(items, usuario) {
     }
     return { ventas };
   });
+  // T30.5: un cierre de caja puede dejar varios quiebres — un solo
+  // trigger con todos (el harness debuncea corridas por cooldown).
+  if (r.ventas) {
+    const quiebres = [
+      ...new Set(r.ventas.filter((v) => v.stock_nuevo <= 0).map((v) => v.producto_id)),
+    ];
+    avisarQuiebreAlAgente(quiebres);
+  }
+  return r;
 }
