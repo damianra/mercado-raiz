@@ -55,10 +55,32 @@ describe('R29.1 — lockdown del rol BUYER', () => {
     expect((await get('/alertas')).status).toBe(200);
   });
 
-  it('otros roles no entran a /api/alertas (GERENTE 403, ADMIN 200)', async () => {
+  it('T30.6: GET abierto a roles operativos; escrituras siguen siendo del comprador', async () => {
     const gerente = await loginComo(base, 'GERENTE');
-    expect((await get('/alertas', gerente)).status).toBe(403);
+    const aprobador = await loginComo(base, 'APROBADOR');
+    // La campanita del Topbar consume el GET — GERENTE/APROBADOR leen.
+    expect((await get('/alertas', gerente)).status).toBe(200);
+    expect((await get('/alertas', aprobador)).status).toBe(200);
     expect((await get('/alertas', admin)).status).toBe(200);
+    // Marcar/re-evaluar quedan para BUYER/ADMIN — su cola de trabajo.
+    expect(
+      (
+        await fetch(`${base}/api/alertas/evaluar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...gerente.headers },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${base}/api/alertas/1/leida`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...aprobador.headers },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(403);
     expect((await fetch(`${base}/api/alertas`)).status).toBe(401);
   });
 });

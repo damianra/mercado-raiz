@@ -2273,6 +2273,32 @@ Estas tareas convierten el sistema en herramienta diaria.
   la app (email/webhook) o al menos la campanita del Topbar
   funcional para GERENTE/APROBADOR con las alertas ALTA.
 
+  **Implementado**: la campanita del Topbar (`src/components/Topbar.jsx`)
+  se auto-abastece — fetch de `GET /api/alertas?leida=0` al montar y
+  poll cada 60s, filtrado a `severidad === 'ALTA'` (QUIEBRE y
+  RIESGO_LEAD de alta). El badge suma alertas ALTA + OCs urgentes,
+  deduplicado por producto (la OC urgente y su alerta QUIEBRE son
+  el mismo stock-out — la OC gana). El dropdown muestra dos
+  secciones ("Alertas de stock" — máx 6 + botón "+N más" que
+  navega — y "Órdenes urgentes" como antes). Click en una alerta
+  navega por tipo: QUIEBRE → `/quiebres` (stock ≤ 0 siempre está
+  en la tabla — ahí el GERENTE actúa: venta/ajuste/conteo de
+  T30.2); el resto (RIESGO_LEAD puede tener stock ≥ mínimo y no
+  figurar en quiebres) → `/metricas` (tabla de riesgo cobertura
+  < lead). El poll se gatea por `usuario.rol` — SERVICIO no
+  dispara un GET siempre-403. `sinNotificaciones` sigue ocultando
+  la campana en `/alertas` (la página entera del BUYER ES el
+  panel — no se pollea). Un fallo del fetch nunca rompe la página
+  (badge en 0).
+
+  Para que eso funcione, `GET /api/alertas` abre su lectura a
+  `BUYER|ADMIN|GERENTE|APROBADOR` (antes solo BUYER+ADMIN). Las
+  escrituras (`POST /evaluar`, `PATCH leer-todas`, `PATCH :id/leida`)
+  siguen siendo del comprador — son su cola de trabajo, no la del
+  gerente. Canal externo (email/webhook) queda fuera de scope: la
+  campanita con poll 60s cubre "llegar sin entrar a mirar" en la
+  demo.
+
 Fuera de scope (P3, anotado): vencimientos/lotes, depósito vs
 góndola como ubicaciones de stock, tickets/cesta, promos,
 multi-sucursal, locks multi-proceso (advisory lock si la app
