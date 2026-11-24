@@ -2254,7 +2254,7 @@ Estas tareas convierten el sistema en herramienta diaria.
   real; el PATCH leída del cliente ya no hace falta (server-side).
 
 - **T30.5** ✅ Agente con disparador propio
-  (`harness/src/harness/scheduler.js`):
+  (`harness-langgraph/src/harness/scheduler.js`):
   - **Schedule**: `setInterval` cada `AGENTE_INTERVALO_MIN`
     (default 60; 0 = off) → corrida si no hay una `corriendo`
     ni `pausada` (una pausada espera decisión humana — no se

@@ -23,6 +23,7 @@ export const scheduler = {
   _timer: null,
 
   iniciar() {
+    if (this._timer) return; // doble iniciar no duplica intervals
     const min = config.agenteIntervaloMin;
     if (!min) return log('watchdog del agente desactivado (AGENTE_INTERVALO_MIN=0)');
     this._timer = setInterval(() => this.disparar('schedule'), min * 60_000);
@@ -68,7 +69,11 @@ export const scheduler = {
     if (orchestrator.ultimaCorrida && desdeUltima < cooldownMs) {
       return { estado: 'cooldown', reintentar_en_min: Math.ceil((cooldownMs - desdeUltima) / 60_000) };
     }
-    const ids = payload.producto_ids ?? (payload.producto_id != null ? [payload.producto_id] : []);
+    const ids = Array.isArray(payload.producto_ids)
+      ? payload.producto_ids
+      : payload.producto_id != null
+        ? [payload.producto_id]
+        : [];
     await this.disparar(`trigger:${payload.motivo ?? 'evento'}${ids.length ? ` (productos ${ids.join(',')})` : ''}`);
     return { estado: 'disparado' };
   },

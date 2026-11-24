@@ -367,6 +367,23 @@ describe('trigger al agente cuando la venta quiebra el stock', () => {
     expect(llamadas[0].body.producto_ids.sort()).toEqual([a.id, b.id].sort());
   });
 
+  it('404 producto inexistente → nada commiteó, no emite', async () => {
+    const res = await vender({ id: 999999 }, { unidades: 1 });
+    expect(res.status).toBe(404);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('batch con faltante → rollback total, no emite', async () => {
+    const p = P(29);
+    const { stock_actual } = await stockDe(p.id);
+    const res = await post('/api/ventas/batch', [
+      { producto_id: p.id, unidades: stock_actual, canal: 'POS' }, // iría a 0
+      { producto_id: 999999, unidades: 1, canal: 'POS' }, // faltante
+    ]);
+    expect(res.status).toBe(400);
+    expect(llamadas).toHaveLength(0);
+  });
+
   it('el harness caído no rompe la venta (fire-and-forget)', async () => {
     vi.stubGlobal('fetch', (url, opts) => {
       if (String(url).includes('/trigger')) {
