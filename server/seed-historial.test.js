@@ -5,6 +5,7 @@
 // cuando la demanda agota antes de que llegue la reposición.
 import { describe, expect, it } from 'vitest';
 import { historialDeProducto, seedHistorial } from './seed-historial.js';
+import { estadisticasDemandaBulk } from './models/estadisticas.model.js';
 import { ventasDeProducto } from './seed-ventas.js';
 import { seedData } from './seed-data.js';
 import { closeDb, openDb } from './db.js';
@@ -152,6 +153,16 @@ describe('seedHistorial (integración, schema con seed completo)', () => {
         [fixtureIds],
       );
       expect(f).toBe(0);
+
+      // Las stats dejan de ser null end-to-end — el propósito de
+      // la tarea: con cadena para todo el catálogo, cada producto
+      // reporta dias_en_quiebre numérico (y hay quiebres reales).
+      const stats = await estadisticasDemandaBulk(90);
+      expect(stats).toHaveLength(cp);
+      expect(stats.every((s) => typeof s.dias_en_quiebre === 'number')).toBe(
+        true,
+      );
+      expect(stats.some((s) => s.dias_en_quiebre > 0)).toBe(true);
 
       // Idempotente: segunda corrida no duplica.
       expect(await seedHistorial(db)).toBe(0);
