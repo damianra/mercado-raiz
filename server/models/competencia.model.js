@@ -146,3 +146,91 @@ export async function resumenCompetitividad() {
       a.categoria.localeCompare(b.categoria)),
   };
 }
+
+// SPEC-32 (T32.3): tabla de pricing accionable — productos fuera del
+// rango de mercado con sugerido y diagnóstico (R32.4). Un muerto
+// caro NO es "bajar al mínimo": es liquidar. Uno ya barato no tiene
+// problema de precio → el sugerido es dejar de esperar.
+export async function pricingAccionable(dias = 90, limite = 15) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.categoria, p.precio_venta, p.stock_actual,
+            pp.costo_unitario,
+            MIN(pc.precio) AS min_mercado, MAX(pc.precio) AS max_mercado,
+            BOOL_OR(pc.precio < pc.precio_lista) AS promo_competencia,
+            ult.u::text AS ultima_venta
+       FROM productos p
+       LEFT JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
+       LEFT JOIN (
+         SELECT DISTINCT ON (producto_id, cadena)
+                producto_id, precio, precio_lista
+           FROM precios_competencia
+          ORDER BY producto_id, cadena, fecha_snapshot DESC
+       ) pc ON pc.producto_id = p.id
+       LEFT JOIN (SELECT producto_id, MAX(fecha) AS u FROM ventas GROUP BY producto_id) ult
+         ON ult.producto_id = p.id
+      GROUP BY p.id, p.sku, p.nombre, p.categoria, p.precio_venta,
+               p.stock_actual, pp.costo_unitario, ult.u`,
+  );
+  const { hoy } = await db.get(`SELECT CURRENT_DATE::text AS hoy`);
+  const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - dias * 86400000)
+    .toISOString().slice(0, 10);
+  const r2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
+
+  const items = [];
+  for (const r of rows) {
+    const zona = posicionPrecio(r.precio_venta, r.min_mercado, r.max_mercado);
+    if (zona === 'EN_RANGO' || zona === 'SIN_DATOS') continue;
+    const muerto = r.ultima_venta == null || r.ultima_venta <= corte;
+    let sugerido;
+    let accion;
+    if (muerto && r.stock_actual > 0) {
+      if (r.promo_competencia) {
+        sugerido = r.costo_unitario != null ? Math.min(r.costo_unitario, r.min_mercado) : r.min_mercado;
+        accion = 'Liquidar sin competir precio — la cadena también lo está limpiando';
+      } else if (zona === 'SOBRE_MAX' || r.precio_venta > r.min_mercado) {
+        sugerido = r.min_mercado;
+        accion = 'Promo al mínimo del mercado — te preció afuera';
+      } else {
+        sugerido = r.costo_unitario;
+        accion = 'Liquidación al costo — el precio no es el problema';
+      }
+    } else if (zona === 'SOBRE_MAX') {
+      sugerido = r2((r.min_mercado + r.max_mercado) / 2);
+      accion = 'Bajar al punto medio del mercado';
+    } else {
+      sugerido = r.min_mercado;
+      accion = 'Subir al mínimo — estás regalando margen';
+    }
+    items.push({
+      producto_id: r.id,
+      sku: r.sku,
+      nombre: r.nombre,
+      categoria: r.categoria,
+      precio_venta: r.precio_venta,
+      stock_actual: r.stock_actual,
+      costo_unitario: r.costo_unitario,
+      min_mercado: r.min_mercado,
+      max_mercado: r.max_mercado,
+      indice: indicePrecio(r.precio_venta, r.min_mercado),
+      zona,
+      muerto,
+      promo_competencia: r.promo_competencia === true,
+      sugerido: r2(sugerido),
+      accion,
+    });
+  }
+  // Caros primero (más índice = más fuera de mercado), luego los que
+  // regalan margen (menor índice primero).
+  items.sort((a, b) =>
+    a.zona === b.zona
+      ? a.zona === 'SOBRE_MAX'
+        ? b.indice - a.indice
+        : a.indice - b.indice
+      : a.zona === 'SOBRE_MAX'
+        ? -1
+        : 1,
+  );
+  return { dias, items: items.slice(0, limite), total_fuera_de_rango: items.length };
+}
