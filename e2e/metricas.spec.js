@@ -120,4 +120,16 @@ test('deep-link ?ajustar= abre el modal de precio directo (T32.8)', async ({
   // escalera de precios con datos de mercado.
   await expect(modal).toContainText('MR00001');
   await expect(modal).toContainText(/\$/);
+  await modal.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(modal).toBeHidden();
+
+  // Caso del review: ya parados en /metricas, la campanita hace
+  // pushState a /metricas?ajustar=N — pathname igual, la página no
+  // remonta; el modal tiene que abrir igual (suscripción a search).
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/metricas?ajustar=2');
+    window.dispatchEvent(new Event('app:navigate'));
+  });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect(modal).toContainText('MR00002');
 });

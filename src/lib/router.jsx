@@ -19,6 +19,24 @@ export function usePath() {
   return path;
 }
 
+// Espejo de usePath para la query string: T32.8 — una navegación
+// que solo cambia el search (/metricas → /metricas?ajustar=N) no
+// remonta la página, así que los efectos de deep-link se suscriben
+// a esto, no al mount.
+export function useSearch() {
+  const [search, setSearch] = useState(() => window.location.search);
+  useEffect(() => {
+    const onNav = () => setSearch(window.location.search);
+    window.addEventListener('popstate', onNav);
+    window.addEventListener(NAV_EVENT, onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener(NAV_EVENT, onNav);
+    };
+  }, []);
+  return search;
+}
+
 export function navigate(to) {
   window.history.pushState(null, '', to);
   window.dispatchEvent(new Event(NAV_EVENT));
