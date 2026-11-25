@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { indicePrecio, posicionPrecio } from './competencia.model.js';
 
 // SPEC-26 (R26.7): estadísticas de demanda por producto sobre la
 // tabla `ventas`. La serie diaria se arma contra CURRENT_DATE de la
@@ -55,7 +56,7 @@ function quiebreDesde(movs, fechas) {
 // El cálculo puro, compartido por la ruta individual y la bulk:
 // misma serie + mismos quiebres → mismas stats (una fuente de
 // verdad para agente y dashboard, R26.9).
-function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia }) {
+function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia, mercado }) {
   const quiebre = quiebreDesde(movs, fechas);
 
   // Días elegibles para los denominadores: todo menos quiebres.
@@ -129,7 +130,34 @@ function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia
             ((economia.venta - economia.costo) * demanda_diaria * quiebre.dias).toFixed(2),
           )
         : null,
+    // SPEC-32 (T32.5): posición competitiva del precio propio
+    // contra el snapshot vigente de precios_competencia — misma
+    // zona/índice que /api/competencia (posicionPrecio/indicePrecio
+    // compartidos, una sola fuente). El agente la usa en el guard
+    // anti-recompra y en el razonamiento de la OC.
+    zona_precio: posicionPrecio(economia?.venta, mercado?.min ?? null, mercado?.max ?? null),
+    indice_precio: indicePrecio(economia?.venta, mercado?.min ?? null),
   };
+}
+
+// T32.5: rango de mercado vigente por producto en UNA query
+// agregada — el snapshot vigente es la fila más reciente por
+// (producto, cadena) (DISTINCT ON ... fecha_snapshot DESC, mismo
+// criterio que competencia.model) y la zona se computa contra
+// min/max de los precios presentes. La ruta individual la reusa
+// con el filtro de producto para que bulk e individual devuelvan
+// los mismos campos (R26.9: una fuente de verdad).
+function queryRangoMercado(productoId) {
+  const filtro = productoId == null ? '' : 'AND pc.producto_id = ?';
+  return `
+    SELECT producto_id, MIN(precio) AS min_mercado, MAX(precio) AS max_mercado
+      FROM (SELECT DISTINCT ON (producto_id, cadena)
+                   producto_id, cadena, precio
+              FROM precios_competencia pc
+             WHERE 1=1 ${filtro}
+             ORDER BY producto_id, cadena, fecha_snapshot DESC) vig
+     WHERE precio IS NOT NULL
+     GROUP BY producto_id`;
 }
 
 export async function estadisticaDemanda(productoId, dias) {
@@ -138,7 +166,7 @@ export async function estadisticaDemanda(productoId, dias) {
   const prod = await db.get(
     `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
      LEFT JOIN producto_proveedor pp
-       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+       ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
      WHERE p.id = ?`,
     [productoId],
   );
@@ -165,8 +193,10 @@ export async function estadisticaDemanda(productoId, dias) {
     'SELECT MAX(fecha)::text AS ultima FROM ventas WHERE producto_id = ?',
     [productoId],
   );
+  const rango = await db.get(queryRangoMercado(productoId), [productoId]);
   return calcularStats({ productoId, dias, fechas, serie, movs, ultima,
-    economia: { venta: prod.precio_venta, costo: prod.costo } });
+    economia: { venta: prod.precio_venta, costo: prod.costo },
+    mercado: { min: rango?.min_mercado ?? null, max: rango?.max_mercado ?? null } });
 }
 
 // R26.9/T26.7 — las mismas estadísticas para TODOS los productos
@@ -177,11 +207,22 @@ export async function estadisticaDemanda(productoId, dias) {
 export async function estadisticasDemandaBulk(dias) {
   const db = await openDb();
   const { hoy } = await db.get('SELECT CURRENT_DATE::text AS hoy');
+  // costo_unitario del proveedor principal: es_principal=1 —
+  // equivalente a productos.proveedor_id (el principal está
+  // denormalizado ahí) y es el criterio explícito que también usa
+  // competencia.model (T32.5).
   const productos = await db.all(
     `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
      LEFT JOIN producto_proveedor pp
-       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+       ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
      ORDER BY p.id`,
+  );
+
+  // T32.5: UNA query agregada para el rango de mercado de todos los
+  // productos (no una por producto) — zona/índice se derivan en
+  // calcularStats con posicionPrecio/indicePrecio.
+  const rangos = new Map(
+    (await db.all(queryRangoMercado(null))).map((r) => [r.producto_id, r]),
   );
 
   const ventas = await db.all(
@@ -218,6 +259,7 @@ export async function estadisticasDemandaBulk(dias) {
   return productos.map((p) => {
     const porDia = ventasPor.get(p.id) ?? new Map();
     const { fechas, serie } = armarVentana(hoy, dias, porDia);
+    const rango = rangos.get(p.id);
     return calcularStats({
       productoId: p.id,
       dias,
@@ -226,6 +268,7 @@ export async function estadisticasDemandaBulk(dias) {
       movs: movsPor.get(p.id) ?? [],
       ultima: ultimas.get(p.id) ?? null,
       economia: { venta: p.precio_venta, costo: p.costo },
+      mercado: { min: rango?.min_mercado ?? null, max: rango?.max_mercado ?? null },
     });
   });
 }

@@ -22,6 +22,7 @@ const state = {
   cacheHits: 0, // llamadas LLM evitadas por cache incremental (SPEC-16)
   // Métricas de negocio — las escribe sincronizarEstadoGrafo()
   productosEvaluados: 0,
+  productosExcluidos: 0, // guard anti-recompra T32.5
   ordenesCreadas: 0,
   ordenesPausadas: 0,
   erroresNoCriticos: [],
@@ -38,6 +39,7 @@ export const metrics = {
     state.llmEvitadas = 0;
     state.cacheHits = 0;
     state.productosEvaluados = 0;
+    state.productosExcluidos = 0;
     state.ordenesCreadas = 0;
     state.ordenesPausadas = 0;
     state.erroresNoCriticos = [];
@@ -72,7 +74,11 @@ export const metrics = {
    */
   sincronizarEstadoGrafo(values) {
     if (!values) return;
-    state.productosEvaluados = values.productosBajos?.length ?? 0;
+    // T32.5: productosBajos llega ya recortada por el guard — los
+    // evaluados son candidatos + excluidos.
+    state.productosEvaluados =
+      (values.productosBajos?.length ?? 0) + (values.excluidos?.length ?? 0);
+    state.productosExcluidos = values.excluidos?.length ?? 0;
     state.ordenesCreadas = values.ordenesCreadas?.length ?? 0;
     state.ordenesPausadas = Object.values(values.decisionPorProducto ?? {}).filter(
       (d) => d?.requiere_aprobacion,
@@ -112,6 +118,7 @@ export const metrics = {
       reintentos: state.reintentos,
       // Métricas de negocio (SPEC-10 §2/§3)
       total_productos_evaluados: state.productosEvaluados,
+      productos_excluidos_guard: state.productosExcluidos,
       ordenes_creadas: state.ordenesCreadas,
       ordenes_pausadas_hith: state.ordenesPausadas,
       conteo_fallbacks: state.erroresFallback,

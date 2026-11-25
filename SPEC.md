@@ -2395,7 +2395,7 @@ escala).
 | T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ✅ |
 | T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ⏳ |
 | T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
-| T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ⏳ |
+| T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ✅ |
 | T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ⏳ |
 
 ### Reglas
@@ -2433,6 +2433,41 @@ Fuera de scope: motor de promos real (precio promocional vs base,
 bundles/2x1 — no existe el concepto en el schema); ingestión
 automática desde retail-radar (hoy es re-export manual del CSV);
 elasticidad precio-demanda estimada.
+
+**Implementado** (T32.5): `estadisticasDemandaBulk` (y la ruta
+individual, paridad R26.9) agrega `zona_precio` e `indice_precio`
+por producto — UNA query agregada `DISTINCT ON (producto_id,
+cadena) … fecha_snapshot DESC` sobre `precios_competencia` →
+min/max de mercado → `posicionPrecio`/`indicePrecio` de
+`competencia.model` (misma fuente que `/api/competencia`).
+`costo_unitario` ya viajaba; el join pasó a `es_principal = 1`
+(explícito, equivalente al `productos.proveedor_id`
+denormalizado).
+
+**Guard anti-recompra — criterio exacto** (`clasificarCandidato`
+en `analizar-demanda`, fase 0 antes de cualquier LLM; el agente
+ahora lee el bulk en UNA request y degrada a fetch por producto
+si falla):
+- `dias_con_venta === 0` en la ventana → `excluido_por:
+  'DEAD_STOCK'` (gana sobre SOBRE_MAX si aplica ambos).
+- `zona_precio === 'SOBRE_MAX'` → `excluido_por: 'SOBRE_MAX'`,
+  **salvo quiebre real**: `stock_actual ≤ 0 && demanda_diaria >
+  0` — la góndola vacía pierde ventas hoy, entonces sigue
+  candidato con `revision_precio: true` y la justificación de la
+  OC DEBE recomendar revisar el precio (instrucción en el prompt
+  + nota obligatoria en el template fallback).
+- Los excluidos salen de `productosBajos` (nunca llegan a OC) y
+  quedan auditados en el canal `excluidos` (`excluido_por` +
+  `detalle`), logueados por `fin` y contados en métricas
+  (`productos_excluidos_guard`).
+- La posición competitiva también entra a los prompts de demanda
+  (`statsTxt`) y viaja en el análisis (`zona_precio`/
+  `indice_precio`, strippeados junto a σ antes de comparar el
+  cache de justificaciones); `hashAnalisis` los incluye — un
+  cambio de zona invalida el cache como cualquier otro input.
+- Impacto medido en seed dev: de ~431 candidatos, ~53 DEAD_STOCK
+  + ~53 SOBRE_MAX excluidos (~25%), ~21 SOBRE_MAX en quiebre se
+  mantienen con nota de revisión.
 
 ## Anexo A — Trazabilidad plan → spec → código → tests
 

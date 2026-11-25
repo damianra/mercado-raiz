@@ -9,9 +9,17 @@ leer-inventario    → productosBajos: [ {id, sku, nombre, stock_actual,
                                         stock_minimo, precio_venta + costo_unitario (producto_proveedor),
                                         proveedor:{id,nombre,tiempo_entrega_dias,lead_dias_esperado}, estado} ]
                       (SPEC-14: pagina todas las páginas del backend, limit=100)
-analizar-demanda   → analisisPorProducto: { [id]: {demanda_diaria, tendencia, observacion, desvio_demanda} }
+analizar-demanda   → productosBajos: recortada por el guard (T32.5)
+                      excluidos: [ {producto_id, sku, nombre, excluido_por, detalle} ]
+                                 excluido_por ∈ DEAD_STOCK | SOBRE_MAX
+                      analisisPorProducto: { [id]: {demanda_diaria, tendencia, observacion,
+                                           desvio_demanda, zona_precio, indice_precio,
+                                           revision_precio?} }
                       hashPorProducto: { [id]: hash del input }  (SPEC-16: cache)
-                      (triage SPEC-12: sin ventas → 0 · ≥3d y CV < UMBRAL_CV → stats del backend sin LLM;
+                      (guard T32.5: sin ventas en la ventana → DEAD_STOCK, precio sobre el
+                       máximo de mercado → SOBRE_MAX, ambos fuera de la OC; SOBRE_MAX en
+                       quiebre real (stock ≤0 + demanda viva) sigue con revision_precio;
+                       triage SPEC-12: ≥3d y CV < UMBRAL_CV → stats del backend sin LLM;
                        SPEC-16: volátiles en lotes de DEMANDA_BATCH)
 calcular-cantidad  → decisionPorProducto: { [id]: {cantidad, monto_total} }
 decidir-aprobacion → decisionPorProducto: { [id]: {…, requiere_aprobacion} }
@@ -26,7 +34,7 @@ cualquier nodo     → errores: [string]  (acumulativo)
 | Desde | Endpoint | Para qué |
 |---|---|---|
 | leer-inventario | `GET /api/productos?estado=STOCK_BAJO` `?estado=CRITICO` (paginado: todas las páginas, limit=100 — SPEC-14) | qué reponer |
-| analizar-demanda | `GET /api/estadisticas/demanda?producto_id=N&dias=D` (SPEC-26) | materia prima del LLM |
+| analizar-demanda | `GET /api/estadisticas/demanda?dias=D` — bulk, TODOS los productos en 1 request (SPEC-26 + T32.5: trae `zona_precio`/`indice_precio`; fallback: `?producto_id=N` por producto) | materia prima del guard + del LLM |
 | crear-orden | `POST /api/ordenes/batch` (SPEC-16: hasta 100 por request, una transacción; si el lote falla → `POST /api/ordenes` por producto) | `{producto_id, cantidad, requiere_aprobacion, analisis_ia}` |
 | fin | `GET /api/dashboard/stats` | KPIs de cierre |
 
