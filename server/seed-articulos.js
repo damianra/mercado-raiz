@@ -42,6 +42,20 @@ const NORMALIZA_CATEGORIA = {
   'Desayuno y merienda': 'Desayuno y Merienda',
 };
 
+// SPEC-33 (T33.1): vida útil típica en días por categoría — alimenta
+// productos.vida_util_dias y el seed de lotes. null = no perecedero
+// (sus lotes nacen sin fecha_vencimiento y nunca alertan).
+export const VIDA_UTIL_CATEGORIA = {
+  'Almacén': 540,
+  'Desayuno y Merienda': 270,
+  Bebidas: 365,
+  'Perfumería': null,
+  Limpieza: null,
+  Frescos: 14,
+  Congelados: 365,
+  'Frutas y Verduras': 7,
+};
+
 // FNV-1a 32-bit → entero sin signo. Estable entre procesos.
 function hash32(str) {
   let h = 0x811c9dc5;
@@ -162,6 +176,7 @@ function articuloDeCsv(row, id) {
     proveedor_id: cat.proveedor_id,
     ubicacion: cat.ubicacion,
     estado,
+    vida_util_dias: VIDA_UTIL_CATEGORIA[row.categoria] ?? null,
   };
 }
 

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { closeDb, openDb, seedIfEmpty } from './db.js';
 import { seedData } from './seed-data.js';
+import { seedLotes } from './seed-lotes.js';
 import { seedVentas } from './seed-ventas.js';
 
 // Re-seed (SPEC-25): vacía las tablas del dominio y las repuebla con
@@ -8,6 +9,8 @@ import { seedVentas } from './seed-ventas.js';
 // RESTART IDENTITY reinicia las secuencias; CASCADE resuelve las FKs.
 const db = await openDb();
 const tablas = [
+  'lotes', // desglose físico del stock (SPEC-33) — explícita para
+  // el reporte; el CASCADE de productos ya la vaciaría igual.
   'alertas', // derivadas del dominio — el CASCADE ya las vacía,
   'alertas_meta', // pero la meta no tiene FKs: sin esto la lazy-eval
   // ve ultima_eval reciente y nunca regenera alertas tras el re-seed
@@ -26,7 +29,8 @@ for (const [table, rows] of Object.entries(seedData)) {
   await seedIfEmpty(db, table, rows);
 }
 await seedVentas(db); // generadas, no vienen en seedData
-for (const table of [...Object.keys(seedData), 'ventas']) {
+await seedLotes(db); // SPEC-33: desglose del stock en lotes
+for (const table of [...Object.keys(seedData), 'ventas', 'lotes']) {
   const { c } = await db.get(`SELECT COUNT(*) AS c FROM ${table}`);
   console.log(`${table}: ${c} filas`);
 }

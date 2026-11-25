@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seedData } from './seed-data.js';
 import { seedHistorial } from './seed-historial.js';
+import { seedLotes } from './seed-lotes.js';
 import { seedVentas } from './seed-ventas.js';
 
 const { Pool } = pg;
@@ -127,9 +128,12 @@ export async function openDb({ searchPath, connString, sembrar = true, sembrarVe
       // schema sería lento); los tests siembran fixtures propias.
       // SPEC-30 (T30.3): el historial se deriva de las ventas —
       // mismo path, mismo criterio de salteo en test.
+      // SPEC-33 (T33.1): los lotes se derivan del stock sembrado —
+      // mismo path, mismo salteo (los tests siembran fixtures).
       if (sembrarVentas ?? !searchPath) {
         await seedVentas(db);
         await seedHistorial(db);
+        await seedLotes(db);
       }
     }
     state = db;
