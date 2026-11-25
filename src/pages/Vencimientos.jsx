@@ -112,16 +112,23 @@ export default function Vencimientos({ usuario }) {
             : l,
         ),
       }));
-      setResumen((r2) =>
-        r2 && {
+      setResumen((r2) => {
+        // El resumen solo agrega VENCIDO+PROXIMO — un lote VIGENTE
+        // bajado no descuenta KPIs que no sumaba.
+        const enVentana =
+          lote.estado === 'VENCIDO' || lote.estado === 'PROXIMO';
+        return r2 && {
           ...r2,
           vencidas:
             lote.estado === 'VENCIDO' ? r2.vencidas - lote.cantidad_actual : r2.vencidas,
           porVencer:
             lote.estado === 'PROXIMO' ? r2.porVencer - lote.cantidad_actual : r2.porVencer,
-          valor: Math.max(0, r2.valor - (lote.valor_en_riesgo ?? 0)),
-        },
-      );
+          valor: enVentana
+            ? Math.max(0, r2.valor - (lote.valor_en_riesgo ?? 0))
+            : r2.valor,
+          lotes: enVentana ? r2.lotes - 1 : r2.lotes,
+        };
+      });
       pushToast(
         `Lote ${lote.codigo} dado de baja — −${r.data.unidades}u de ${lote.producto.sku}`,
       );
