@@ -2596,7 +2596,7 @@ si falla):
   ≤ vida total → ingreso jamás futuro. `seedLotes` corre tras
   seedHistorial en `openDb` (mismo salteo en schemas de test) y
   en `npm run seed` (que trunca `lotes` junto al dominio).
-- **T33.2** FEFO en el ciclo de vida: `aplicarVentaEnTx` descuenta
+- **T33.2** ✅ FEFO en el ciclo de vida: `aplicarVentaEnTx` descuenta
   por lote (FOR UPDATE, spillover entre lotes); `ajustarStock`
   negativo igual, positivo crea lote; `recibirOrden` acepta
   `fecha_vencimiento` opcional (default `hoy + vida_util_dias`)

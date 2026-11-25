@@ -253,7 +253,23 @@ export async function recibir(req, res) {
   if (!Number.isInteger(recibida) || recibida < 1 || recibida > orden.cantidad) {
     return badRequest(res, `cantidad_recibida debe ser un entero entre 1 y ${orden.cantidad}`);
   }
-  const o = await recibirOrden(req.params.orden_id, recibida, req.usuario.email);
+  // SPEC-33 (R33.4): el remito puede traer el vencimiento del lote —
+  // opcional; sin ella el model aplica hoy+vida_util_dias.
+  const venc = req.body?.fecha_vencimiento;
+  if (venc !== undefined) {
+    const d = typeof venc === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(venc)
+      ? new Date(`${venc}T00:00:00Z`)
+      : null;
+    if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== venc) {
+      return badRequest(res, 'fecha_vencimiento debe ser una fecha YYYY-MM-DD válida');
+    }
+  }
+  const o = await recibirOrden(
+    req.params.orden_id,
+    recibida,
+    req.usuario.email,
+    venc ?? undefined,
+  );
   // null → carrera: otra request ya la recibió → el stock NO se
   // duplicó y esta es la respuesta honesta.
   if (!o) {
