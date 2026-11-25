@@ -7,6 +7,9 @@ import {
   Clock,
   PackageX,
   ShoppingCart,
+  Tag,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
 } from 'lucide-react';
 import ComprarModal from '../components/ComprarModal.jsx';
@@ -28,6 +31,10 @@ const TIPOS = {
   RIESGO_LEAD: { label: 'Riesgo vs lead', icon: Clock },
   DEAD_STOCK: { label: 'Dead stock', icon: BellOff },
   ORDEN_PENDIENTE: { label: 'Orden pendiente', icon: CircleAlert },
+  // SPEC-32 (T32.4/T32.8): tipos de pricing del cruce de competencia.
+  PRESION_COMPETITIVA: { label: 'Presión competitiva', icon: TrendingDown },
+  PRECIO_FUERA_MERCADO: { label: 'Fuera de mercado', icon: TrendingUp },
+  OPORTUNIDAD_MARGEN: { label: 'Oportunidad margen', icon: Tag },
 };
 // SPEC-29 (R29.6): solo las alertas de falta de stock son
 // comprables — dead stock y OC pendiente no se resuelven pidiendo

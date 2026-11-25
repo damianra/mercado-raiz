@@ -2398,6 +2398,7 @@ escala).
 | T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ✅ |
 | T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ✅ |
 | T32.7 | Fuente de competencia detrás de un cliente "DWH": `server/integrations/competencia-dwh.js` consume la API externa (`COMPETENCIA_DWH_URL`) — hoy **simulada** leyendo `data/articles_sample.csv` — y `sincronizarCompetencia()` vuelca el snapshot en `precios_competencia` (idempotente por UNIQUE) + `POST /api/competencia/sync` (ADMIN/SERVICIO) | ✅ |
+| T32.8 | Alertas accionables end-to-end (follow-up review #67): labels + filtro para los 3 tipos nuevos en `Alertas.jsx` (BUYER veía el enum crudo) y **deep-link** — las alertas de pricing navegan a `/metricas?ajustar=<producto_id>` y la página abre `AjustePrecioModal` directo, resolviendo el dead-end de `DESTINO_ALERTA` (el producto puede no estar ni en `/quiebres` ni en la tabla de outliers) | ✅ |
 
 **Nota T32.6:** el replay se extrajo a `server/models/stock-serie.js`
 (`fechasVentana` + `seriePosicionStock`) — `quiebreDesde` ahora es un

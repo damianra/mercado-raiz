@@ -25,9 +25,11 @@ import {
   getCompetitividad,
   getMetricas,
   getPricing,
+  getProducto,
   getVentasDiarias,
 } from '../lib/api.js';
 import { logout } from '../lib/auth.js';
+import { useSearch } from '../lib/router.jsx';
 import { formatMoney } from '../data/orders.js';
 
 let toastKey = 0;
@@ -60,6 +62,28 @@ export default function Metricas({ usuario }) {
     () => () => timers.current.forEach(clearTimeout),
     [],
   );
+
+  // T32.8: deep-link de la campanita — /metricas?ajustar=<id> abre
+  // el modal "Ajustar precio" del producto aunque no esté listado
+  // en la tabla de outliers (alertas de pricing sobre in-range).
+  // Suscrito a useSearch: si el usuario YA está en /metricas, el
+  // pushState no remonta la página — el param llega igual.
+  const { search, nav } = useSearch();
+  useEffect(() => {
+    const raw = new URLSearchParams(search).get('ajustar');
+    if (raw == null) return;
+    // replaceState (no navigate): no queremos re-abrir el modal si
+    // el usuario recarga o vuelve con Back; también limpia params
+    // inválidos.
+    window.history.replaceState(null, '', '/metricas');
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) return;
+    getProducto(id)
+      .then((p) =>
+        setPrecio({ id: p.id, sku: p.sku, nombre: p.nombre, precio_venta: p.precio_venta }),
+      )
+      .catch(() => {}); // id inexistente → la página carga normal
+  }, [search, nav]);
 
   const cargar = useCallback(async () => {
     setCargando(true);

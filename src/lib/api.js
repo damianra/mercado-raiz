@@ -90,6 +90,8 @@ export const getOrdenes = () =>
 
 export const getProductos = () => apiFetch('/productos?limit=100');
 
+export const getProducto = (id) => apiFetch(`/productos/${id}`);
+
 // SPEC-27 T27.4: todos los productos STOCK_BAJO + CRITICO (vista de
 // quiebres). Mismo patrón de páginas paralelas que el client del
 // agente — el backend topea limit en 100.

@@ -29,11 +29,23 @@ const ROLES_LEEN_ALERTAS = ['BUYER', 'ADMIN', 'GERENTE', 'APROBADOR'];
 // QUIEBRE → /quiebres (stock ≤ 0 siempre está en la tabla);
 // RIESGO_LEAD puede tener stock ≥ mínimo → va a /metricas
 // (la tabla de riesgo cobertura < lead).
-// T32.4: PRESION_COMPETITIVA → /quiebres (el producto rota y ahí
-// está el modal "Ajustar precio" por fila); PRECIO_FUERA_MERCADO,
-// OPORTUNIDAD_MARGEN y DEAD_STOCK pueden no estar en la tabla de
-// quiebres → caen al default '/metricas'.
-const DESTINO_ALERTA = { QUIEBRE: '/quiebres', PRESION_COMPETITIVA: '/quiebres' };
+// T32.4/T32.8: las alertas de pricing (incl. DEAD_STOCK) deep-
+// linkean a /metricas?ajustar=<producto_id> — la página abre el
+// modal "Ajustar precio" directo; el producto puede no estar
+// listado ni en /quiebres ni en la tabla de outliers (review #67).
+const TIPOS_AJUSTE = new Set([
+  'PRESION_COMPETITIVA',
+  'PRECIO_FUERA_MERCADO',
+  'OPORTUNIDAD_MARGEN',
+  'DEAD_STOCK',
+]);
+const destinoAlerta = (a) => {
+  if (a.tipo === 'QUIEBRE') return '/quiebres';
+  if (TIPOS_AJUSTE.has(a.tipo) && a.producto_id) {
+    return `/metricas?ajustar=${a.producto_id}`;
+  }
+  return '/metricas';
+};
 
 export default function Topbar({
   urgentes = 0,
@@ -167,7 +179,7 @@ export default function Topbar({
                                 role="menuitem"
                                 onClick={() => {
                                   setOpen(false);
-                                  navigate(DESTINO_ALERTA[a.tipo] ?? '/metricas');
+                                  navigate(destinoAlerta(a));
                                 }}
                                 className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
                               >

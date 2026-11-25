@@ -106,3 +106,42 @@ test('secciones gráficas: ventas, competitividad, capital y pricing accionable'
   ).toBeVisible();
   await expect(page.getByLabel('Posición de precio en el mercado')).toBeVisible();
 });
+
+test('deep-link ?ajustar= abre el modal de precio directo (T32.8)', async ({
+  page,
+}) => {
+  await login(page, GERENTE);
+  // la campanita navega a /metricas?ajustar=<id> — el producto no
+  // necesita estar listado en la tabla de outliers.
+  await page.goto('/metricas?ajustar=1');
+  const modal = page.getByRole('dialog', { name: 'Ajustar precio' });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  // el modal hidrata producto + competencia: sku MR00001 y la
+  // escalera de precios con datos de mercado.
+  await expect(modal).toContainText('MR00001');
+  await expect(modal).toContainText(/\$/);
+  await modal.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(modal).toBeHidden();
+
+  // Caso del review: ya parados en /metricas, la campanita hace
+  // pushState a /metricas?ajustar=N — pathname igual, la página no
+  // remonta; el modal tiene que abrir igual (suscripción a search).
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/metricas?ajustar=2');
+    window.dispatchEvent(new Event('app:navigate'));
+  });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect(modal).toContainText('MR00002');
+  await modal.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(modal).toBeHidden();
+
+  // Nit del re-review: re-click a la MISMA alerta — el replaceState
+  // dejó el search stale en useSearch; sin el tick de nav el setState
+  // sería idéntico y el modal no reabriría.
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/metricas?ajustar=2');
+    window.dispatchEvent(new Event('app:navigate'));
+  });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect(modal).toContainText('MR00002');
+});
