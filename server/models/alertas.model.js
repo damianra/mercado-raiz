@@ -1,6 +1,7 @@
 import { openDb } from '../db.js';
 import { estadisticasDemandaBulk } from './estadisticas.model.js';
 import { competenciaBulk } from './competencia.model.js';
+import { diasAlertaVencimiento } from '../seed-lotes.js';
 
 // SPEC-29 (R29.3): motor de reglas determinísticas — sin LLM.
 // Misma fuente de stats que agente/dashboard/métricas
@@ -28,11 +29,23 @@ const money = (n) =>
   `$${Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 
 // Genera las alertas-candidata del momento. Función pura para
-// testear las reglas sin tocar la tabla.
-export function candidatas({ productos, stats, ordenes, corte, competencia }) {
+// testear las reglas sin tocar la tabla. `lotes` trae las filas con
+// cantidad > 0 y vencimiento ≤ hoy+30d (2× la ventana máxima — la
+// banda BAJA llega al doble; cada producto aplica la suya, relativa
+// a su vida útil).
+export function candidatas({ productos, stats, ordenes, corte, competencia, lotes }) {
   const statsPor = new Map(stats.map((s) => [s.producto_id, s]));
   const compPor = competencia ?? new Map();
   const out = [];
+
+  // SPEC-33 (T33.3): agrupación por producto — la alerta actúa
+  // sobre el SKU, no sobre la fila de lote (R33.6).
+  const lotesPor = new Map();
+  for (const l of lotes ?? []) {
+    const g = lotesPor.get(l.producto_id);
+    if (g) g.push(l);
+    else lotesPor.set(l.producto_id, [l]);
+  }
 
   // "Top seller" para PRESION_COMPETITIVA (T32.4): demanda_diaria
   // ≥ p80 de los productos con rotación real — criterio simple: el
@@ -51,6 +64,48 @@ export function candidatas({ productos, stats, ordenes, corte, competencia }) {
     const demanda = s.demanda_diaria ?? 0;
     const comp = compPor.get(p.id);
     const etiqueta = `${p.nombre} (${p.sku})`;
+
+    // T33.3 — VENCIMIENTO: el lote vence igual aunque el contador
+    // haya divergido por sobreventa, así que se evalúa antes del
+    // `continue` de stock≤0. Severidad relativa a la ventana del
+    // producto (SPEC-33): ALTA vencido o ≤ max(1, ventana/3)d,
+    // MEDIA ≤ ventana, BAJA ≤ el doble (awareness temprano).
+    // vida NULL → ventana 15, igual que PROXIMO en listarLotes.
+    const ventanaVto =
+      p.vida_util_dias != null ? diasAlertaVencimiento(p.vida_util_dias) : 15;
+    const enVentana = (lotesPor.get(p.id) ?? []).filter(
+      (l) => l.dias <= 2 * ventanaVto,
+    );
+    if (enVentana.length) {
+      const minDias = Math.min(...enVentana.map((l) => l.dias));
+      const vencidas = enVentana
+        .filter((l) => l.dias < 0)
+        .reduce((a, l) => a + l.cantidad, 0);
+      const proximas = enVentana.filter((l) => l.dias >= 0);
+      const porVencer = proximas.reduce((a, l) => a + l.cantidad, 0);
+      const altaHasta = Math.max(1, Math.floor(ventanaVto / 3));
+      const severidad =
+        minDias <= altaHasta ? 'ALTA' : minDias <= ventanaVto ? 'MEDIA' : 'BAJA';
+      const detalle = [
+        vencidas > 0 && `${vencidas}u vencidas`,
+        porVencer > 0 &&
+          `${porVencer}u por vencer (más próximo en ${Math.min(
+            ...proximas.map((l) => l.dias),
+          )}d)`,
+      ]
+        .filter(Boolean)
+        .join(' — ');
+      const capTxt =
+        comp?.costo != null
+          ? ` (~${money((vencidas + porVencer) * comp.costo)} en riesgo)`
+          : '';
+      out.push({
+        tipo: 'VENCIMIENTO',
+        severidad,
+        producto_id: p.id,
+        mensaje: `${etiqueta}: ${detalle}${capTxt}`,
+      });
+    }
 
     if (p.stock_actual <= 0) {
       // En cero (o negativo por un ajuste mal cargado) solo alerta
@@ -195,11 +250,12 @@ export function evaluarAlertas() {
 
 async function evaluarAhora() {
   const db = await openDb();
-  const [{ hoy }, stats, productos, ordenes, competencia] = await Promise.all([
+  const [{ hoy }, stats, productos, ordenes, competencia, lotes] = await Promise.all([
     db.get('SELECT CURRENT_DATE::text AS hoy'),
     estadisticasDemandaBulk(DIAS_VENTANA),
     db.all(
       `SELECT p.id, p.sku, p.nombre, p.stock_actual, p.precio_venta,
+              p.vida_util_dias,
               COALESCE((pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
                        pr.tiempo_entrega_dias)::double precision AS lead_esperado
        FROM productos p JOIN proveedores pr ON pr.id = p.proveedor_id`,
@@ -214,6 +270,19 @@ async function evaluarAhora() {
     // T32.4: una pasada — min/max de mercado, promos y costo
     // principal por producto (ver competenciaBulk).
     competenciaBulk(),
+    // T33.3: lotes vivos con vencimiento dentro del doble de la
+    // ventana máxima (2×15=30d — la banda BAJA llega hasta ahí;
+    // cada producto recorta la suya en candidatas). Lotes agotados
+    // o sin fecha nunca alertan.
+    db.all(
+      `SELECT producto_id,
+              (fecha_vencimiento - CURRENT_DATE)::int AS dias,
+              cantidad_actual AS cantidad
+       FROM lotes
+       WHERE cantidad_actual > 0
+         AND fecha_vencimiento IS NOT NULL
+         AND fecha_vencimiento <= CURRENT_DATE + 30`,
+    ),
   ]);
   const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - DIAS_VENTANA * 86400000)
     .toISOString()
@@ -224,6 +293,7 @@ async function evaluarAhora() {
     ordenes: ordenes.map((o) => ({ ...o, horas: Math.floor(o.horas_f) })),
     corte,
     competencia,
+    lotes,
   });
   const nuevas = await insertarNuevas(db, cands);
   await db.run(

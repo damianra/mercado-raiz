@@ -227,3 +227,86 @@ describe('lazy eval — throttle de 60min', () => {
     expect(Number.isFinite(Number(meta2.valor))).toBe(true);
   });
 });
+
+describe('SPEC-33 — alerta VENCIMIENTO', () => {
+  const dias = (n) =>
+    new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const lote = (pid, cod, cantIni, cantAct, vto) =>
+    db.run(
+      `INSERT INTO lotes
+         (producto_id, codigo, cantidad_inicial, cantidad_actual, fecha_vencimiento)
+       VALUES (?, ?, ?, ?, ?::date)`,
+      [pid, cod, cantIni, cantAct, vto],
+    );
+
+  it('severidad por el lote más próximo; bandas relativas a la vida útil', async () => {
+    // SPEC-33: ALTA vencido o ≤ max(1, ventana/3), MEDIA ≤ ventana,
+    // BAJA ≤ 2·ventana. Frescos 14d → ventana 5 (ALTA ≤1, BAJA 6–10);
+    // Almacén 540d → ventana 15 (ALTA ≤5, BAJA 16–30). Un producto
+    // por fixture — el dedup es por producto+tipo.
+    const [fA, fB, fC] = (
+      await db.all(
+        `SELECT id FROM productos WHERE categoria = 'Frescos'
+         ORDER BY id LIMIT 3`,
+      )
+    ).map((r) => r.id);
+    const [aA, aB, aC, aD, aE] = (
+      await db.all(
+        `SELECT id FROM productos WHERE categoria = 'Almacén'
+         ORDER BY id LIMIT 5`,
+      )
+    ).map((r) => r.id);
+    for (const pid of [fA, fB, fC, aA, aB, aC, aD, aE]) {
+      await db.run('UPDATE productos SET stock_actual = 10 WHERE id = ?', [pid]);
+    }
+    await lote(fA, 'L-VENC', 8, 8, dias(-2)); // vencido → ALTA
+    await lote(fB, 'L-4D', 10, 10, dias(4)); // 4 ≤ ventana 5 → MEDIA
+    await lote(fC, 'L-8D', 4, 4, dias(8)); // 6–10 → BAJA
+    await lote(aA, 'L-5D', 7, 7, dias(5)); // ≤ ventana/3 = 5 → ALTA
+    await lote(aB, 'L-10D', 6, 6, dias(10)); // ≤15 → MEDIA
+    await lote(aC, 'L-20D', 5, 5, dias(20)); // 16–30 → BAJA
+    await lote(aD, 'L-35D', 9, 9, dias(35)); // fuera de toda banda
+    await lote(aE, 'L-AGO', 5, 0, dias(-1)); // agotado: no alerta
+    await lote(aE, 'L-NULL', 4, 4, null); // sin fecha: no alerta
+
+    const { nuevas } = await (await post('/alertas/evaluar')).json();
+    expect(nuevas).toBeGreaterThanOrEqual(6);
+    const { data } = await (await get('/alertas?tipo=VENCIMIENTO')).json();
+    const por = new Map(data.map((a) => [a.producto_id, a]));
+
+    expect(por.get(fA).severidad).toBe('ALTA');
+    expect(por.get(fA).mensaje).toContain('8u vencidas');
+    expect(por.get(fB).severidad).toBe('MEDIA');
+    expect(por.get(fB).mensaje).toContain('10u por vencer');
+    expect(por.get(fC).severidad).toBe('BAJA');
+    expect(por.get(aA).severidad).toBe('ALTA');
+    expect(por.get(aB).severidad).toBe('MEDIA');
+    expect(por.get(aC).severidad).toBe('BAJA');
+    expect(por.get(aC).mensaje).toContain('5u por vencer');
+    expect(por.has(aD)).toBe(false);
+    expect(por.has(aE)).toBe(false);
+    // Dos lotes en un producto: la severidad la fija el más
+    // próximo (1d → ALTA) y las unidades se suman (3+2 = 5u).
+    const pMix = (
+      await db.get(
+        `SELECT id FROM productos WHERE categoria = 'Bebidas'
+         ORDER BY id LIMIT 1`,
+      )
+    ).id;
+    await db.run('UPDATE productos SET stock_actual = 20 WHERE id = ?', [pMix]);
+    await lote(pMix, 'L-LEJOS', 3, 3, dias(12));
+    await lote(pMix, 'L-CERCA', 2, 2, dias(1));
+    await post('/alertas/evaluar');
+    const { data: data2 } = await (await get('/alertas?tipo=VENCIMIENTO')).json();
+    const mix = data2.find((a) => a.producto_id === pMix);
+    expect(mix.severidad).toBe('ALTA');
+    expect(mix.mensaje).toContain('5u por vencer');
+    expect(mix.mensaje).toContain('más próximo en 1d');
+
+    // Dedup: re-evaluar no duplica VENCIMIENTO no leídas.
+    const antes = data2.length;
+    await post('/alertas/evaluar');
+    const { data: data3 } = await (await get('/alertas?tipo=VENCIMIENTO')).json();
+    expect(data3.length).toBe(antes);
+  });
+});

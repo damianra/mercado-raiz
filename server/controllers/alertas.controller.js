@@ -6,6 +6,7 @@ import {
 } from '../models/alertas.model.js';
 
 // SPEC-32 (T32.4): los tres tipos de pricing entran al filtro.
+// T33.3: VENCIMIENTO.
 const TIPOS = new Set([
   'QUIEBRE',
   'RIESGO_LEAD',
@@ -14,6 +15,7 @@ const TIPOS = new Set([
   'PRESION_COMPETITIVA',
   'PRECIO_FUERA_MERCADO',
   'OPORTUNIDAD_MARGEN',
+  'VENCIMIENTO',
 ]);
 
 // SPEC-29 (R29.4): GET /api/alertas?leida=0|1&tipo= — la evaluación

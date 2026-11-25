@@ -1,4 +1,4 @@
-import { ESTADOS_LOTE, listarLotes } from '../models/lotes.model.js';
+import { ESTADOS_LOTE, bajaLote, listarLotes } from '../models/lotes.model.js';
 
 const badRequest = (res, msg) => res.status(400).json({ error: msg });
 
@@ -25,4 +25,16 @@ export async function list(req, res) {
   }
 
   res.json(await listarLotes({ productoId, estado, page: p, limit: l }));
+}
+
+// SPEC-33 (R33.7): baja manual del lote — merma por vencimiento
+// confirmada por un humano (vencido no es auto-baja).
+export async function baja(req, res) {
+  // dígitos puros — mismo criterio que alertas/:id
+  if (!/^\d+$/.test(req.params.id)) {
+    return badRequest(res, 'id debe ser un entero positivo');
+  }
+  const r = await bajaLote(Number(req.params.id), req.usuario.email);
+  if (r.status === 200) return res.json({ success: true, data: r.data });
+  return res.status(r.status).json({ error: r.error });
 }

@@ -382,3 +382,27 @@ CREATE TABLE IF NOT EXISTS lotes (
 
 CREATE INDEX IF NOT EXISTS idx_lotes_producto ON lotes(producto_id);
 CREATE INDEX IF NOT EXISTS idx_lotes_vencimiento ON lotes(fecha_vencimiento);
+
+-- SPEC-33 (T33.3): la alerta VENCIMIENTO entra al CHECK de tipos —
+-- mismo patrón idempotente que los dos bloques de arriba (drop si
+-- la definición vieja no lo incluye, re-add solo si falta).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint c
+             JOIN pg_namespace n ON n.oid = c.connamespace
+             WHERE c.conname = 'alertas_tipo_check'
+               AND n.nspname = current_schema()
+               AND pg_get_constraintdef(c.oid) NOT LIKE '%VENCIMIENTO%') THEN
+    ALTER TABLE alertas DROP CONSTRAINT alertas_tipo_check;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c
+                 JOIN pg_namespace n ON n.oid = c.connamespace
+                 WHERE c.conname = 'alertas_tipo_check'
+                   AND n.nspname = current_schema()) THEN
+    ALTER TABLE alertas ADD CONSTRAINT alertas_tipo_check
+      CHECK (tipo IN ('QUIEBRE', 'RIESGO_LEAD', 'DEAD_STOCK', 'ORDEN_PENDIENTE',
+                      'PRESION_COMPETITIVA', 'PRECIO_FUERA_MERCADO',
+                      'OPORTUNIDAD_MARGEN', 'VENCIMIENTO'));
+  END IF;
+END $$;
