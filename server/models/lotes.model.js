@@ -65,6 +65,67 @@ export async function crearLoteEnTx(
   return id;
 }
 
+/**
+ * Baja manual de un lote (merma por vencimiento — R33.7). Orden de
+ * locks igual que ventas/ajustes (producto FOR UPDATE → lote FOR
+ * UPDATE) para no deadlockear con descontarFefo. En la misma tx:
+ * lote a 0, contador descontado e historial AJUSTE/MERMA con
+ * referencia al código de lote. Exige cantidad > 0: doble baja o
+ * lote agotado por ventas → 409.
+ */
+export async function bajaLote(loteId, usuario) {
+  const db = await openDb();
+  const ts = new Date().toISOString();
+  return db.tx(async (t) => {
+    const ref = await t.get('SELECT producto_id FROM lotes WHERE id = ?', [loteId]);
+    if (!ref) return { status: 404, error: 'lote no encontrado' };
+    await t.get('SELECT id FROM productos WHERE id = ? FOR UPDATE', [
+      ref.producto_id,
+    ]);
+    const lote = await t.get(
+      'SELECT id, codigo, cantidad_actual FROM lotes WHERE id = ? FOR UPDATE',
+      [loteId],
+    );
+    if (lote.cantidad_actual === 0) {
+      return {
+        status: 409,
+        error: 'el lote ya está en cero — nada que dar de baja',
+      };
+    }
+    const unidades = lote.cantidad_actual;
+    await t.run('UPDATE lotes SET cantidad_actual = 0 WHERE id = ?', [loteId]);
+    const p = await t.get(
+      `UPDATE productos SET stock_actual = stock_actual - ?, fecha_actualizacion = ?
+       WHERE id = ? RETURNING stock_actual`,
+      [unidades, ts, ref.producto_id],
+    );
+    const h = await t.get(
+      `INSERT INTO historial_stock
+         (producto_id, tipo_movimiento, cantidad_anterior, cantidad_nueva,
+          diferencia, referencia, usuario, motivo)
+       VALUES (?, 'AJUSTE', ?, ?, ?, ?, ?, 'MERMA') RETURNING id`,
+      [
+        ref.producto_id,
+        p.stock_actual + unidades,
+        p.stock_actual,
+        -unidades,
+        lote.codigo,
+        usuario,
+      ],
+    );
+    return {
+      status: 200,
+      data: {
+        lote_id: lote.id,
+        codigo: lote.codigo,
+        unidades,
+        movimiento_id: h.id,
+        stock_nuevo: p.stock_actual,
+      },
+    };
+  });
+}
+
 export const ESTADOS_LOTE = ['VIGENTE', 'PROXIMO', 'VENCIDO', 'AGOTADO'];
 
 const FROM_LOTES = `FROM lotes l

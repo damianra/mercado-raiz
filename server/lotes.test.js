@@ -338,3 +338,69 @@ describe('GET /api/lotes', () => {
     expect((await get('/lotes', buyer)).status).toBe(403);
   });
 });
+
+describe('Baja de lote (POST /api/lotes/:id/baja)', () => {
+  const loteId = async (pid, codigo) =>
+    (
+      await db.get(
+        'SELECT id FROM lotes WHERE producto_id = ? AND codigo = ?',
+        [pid, codigo],
+      )
+    ).id;
+
+  it('200: lote a 0, contador descontado e historial AJUSTE/MERMA', async () => {
+    const pid = P['Frescos'][11];
+    await setStock(pid, 9);
+    await insertLote(pid, 'L-VENC', 9, dias(-3));
+    const id = await loteId(pid, 'L-VENC');
+    const res = await post(`/lotes/${id}/baja`, {});
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.unidades).toBe(9);
+    expect(data.codigo).toBe('L-VENC');
+    // Contador: 9 − 9 = 0; invariante stock = Σ lotes.
+    const p = await db.get('SELECT stock_actual FROM productos WHERE id = ?', [pid]);
+    expect(p.stock_actual).toBe(0);
+    expect((await lotesDe(pid))[0].cantidad_actual).toBe(0);
+    const h = await db.get(
+      `SELECT tipo_movimiento, motivo, referencia, diferencia,
+              cantidad_anterior, cantidad_nueva
+       FROM historial_stock WHERE id = ?`,
+      [data.movimiento_id],
+    );
+    expect(h).toMatchObject({
+      tipo_movimiento: 'AJUSTE',
+      motivo: 'MERMA',
+      referencia: 'L-VENC',
+      diferencia: -9,
+      cantidad_anterior: 9,
+      cantidad_nueva: 0,
+    });
+  });
+
+  it('409 doble baja o lote agotado por ventas', async () => {
+    const pid = P['Frescos'][12];
+    await setStock(pid, 5);
+    await insertLote(pid, 'L-1', 5, dias(2));
+    const id = await loteId(pid, 'L-1');
+    expect((await post(`/lotes/${id}/baja`, {})).status).toBe(200);
+    // Segunda baja: nada que dar de baja.
+    expect((await post(`/lotes/${id}/baja`, {})).status).toBe(409);
+  });
+
+  it('404 inexistente, 400 id no entero', async () => {
+    expect((await post('/lotes/999999/baja', {})).status).toBe(404);
+    expect((await post('/lotes/abc/baja', {})).status).toBe(400);
+  });
+
+  it('403 APROBADOR y BUYER (matriz del ajuste de stock)', async () => {
+    const pid = P['Perfumería'][1];
+    await setStock(pid, 4);
+    await insertLote(pid, 'L-1', 4, null);
+    const id = await loteId(pid, 'L-1');
+    expect((await post(`/lotes/${id}/baja`, {}, aprobador)).status).toBe(403);
+    expect((await post(`/lotes/${id}/baja`, {}, buyer)).status).toBe(403);
+    // El lote sobrevive a los rechazos.
+    expect((await lotesDe(pid))[0].cantidad_actual).toBe(4);
+  });
+});

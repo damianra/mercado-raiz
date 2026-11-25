@@ -2603,7 +2603,7 @@ si falla):
   y crea el lote del ingreso. `GET /api/lotes` (filtros por
   producto y estado vigente/próximo/vencido/agotado + días).
   Tests: orden FEFO, spillover, recepción con/sin fecha, batch.
-- **T33.3** Alerta `VENCIMIENTO` (CHECK idempotente como T32.4) +
+- **T33.3** ✅ Alerta `VENCIMIENTO` (CHECK idempotente como T32.4) +
   `POST /api/lotes/:id/baja` (GERENTE/ADMIN: merma por
   vencimiento — lote a 0, descuento del contador e `historial_stock`
   AJUSTE motivo MERMA en la misma tx; 409 si ya está en 0).
