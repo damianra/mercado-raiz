@@ -16,7 +16,7 @@
 //   APROBADO_AUTO del front = APROBADA con requiere_aprobacion = 0
 //   y aprobado_por = 'auto'.
 
-import { generarArticulos, generarPreciosProveedor } from './seed-articulos.js';
+import { generarArticulos, generarCompetencia, generarPreciosProveedor } from './seed-articulos.js';
 
 const productos = generarArticulos();
 // SPEC-27: costo por proveedor (principal del artículo + alternativos
@@ -384,6 +384,10 @@ export const seedData = {
   productos,
 
   producto_proveedor,
+
+  // SPEC-32 (T32.1): snapshot de precios por cadena (retail-radar)
+  // — 4 filas por artículo, append-only por fecha_snapshot.
+  precios_competencia: generarCompetencia(),
 
   ordenes_compra,
 
