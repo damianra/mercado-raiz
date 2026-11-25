@@ -1,5 +1,6 @@
 import { openDb } from '../db.js';
 import { estadisticasDemandaBulk } from './estadisticas.model.js';
+import { competenciaBulk } from './competencia.model.js';
 
 // SPEC-29 (R29.3): motor de reglas determinísticas — sin LLM.
 // Misma fuente de stats que agente/dashboard/métricas
@@ -10,18 +11,45 @@ const EVAL_THROTTLE_MIN = 60;
 const ORDEN_HORAS_UMBRAL = 48;
 const DEDUP_HORAS = 24;
 
+// SPEC-32 (T32.4): umbrales de las reglas de pricing y del
+// DEAD_STOCK ponderado. Los de capital se midieron contra la base
+// dev (distribución real de capital inmovilizado de los muertos:
+// p50 ~$70k, p80 ~$159k, p90 ~$273k, p95 ~$380k, max ~$648k) —
+// ALTA > $350k queda en ~top 6% de los muertos, MEDIA > $150k en
+// ~p80. Documentados en SPEC.md (R32.5).
+const CAPITAL_DEAD_ALTA = 350_000;
+const CAPITAL_DEAD_MEDIA = 150_000;
+// Promo de cadena "agresiva": más de 15% bajo el precio de lista.
+const PROMO_ALTA_DESCUENTO = 0.15;
+// Oportunidad de margen: precio propio < 85% del mínimo de mercado.
+const FACTOR_OPORTUNIDAD = 0.85;
+
 const money = (n) =>
   `$${Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 
 // Genera las alertas-candidata del momento. Función pura para
 // testear las reglas sin tocar la tabla.
-export function candidatas({ productos, stats, ordenes, corte }) {
+export function candidatas({ productos, stats, ordenes, corte, competencia }) {
   const statsPor = new Map(stats.map((s) => [s.producto_id, s]));
+  const compPor = competencia ?? new Map();
   const out = [];
+
+  // "Top seller" para PRESION_COMPETITIVA (T32.4): demanda_diaria
+  // ≥ p80 de los productos con rotación real — criterio simple: el
+  // quintil superior del catálogo que se mueve. Un SKU sin demanda
+  // nunca entra aunque la cadena lo tenga en promo.
+  const demandas = stats
+    .map((s) => s.demanda_diaria ?? 0)
+    .filter((d) => d > 0)
+    .sort((a, b) => a - b);
+  const pisoTop = demandas.length
+    ? demandas[Math.floor(demandas.length * 0.8)]
+    : Infinity;
 
   for (const p of productos) {
     const s = statsPor.get(p.id) ?? {};
     const demanda = s.demanda_diaria ?? 0;
+    const comp = compPor.get(p.id);
     const etiqueta = `${p.nombre} (${p.sku})`;
 
     if (p.stock_actual <= 0) {
@@ -43,14 +71,29 @@ export function candidatas({ productos, stats, ordenes, corte }) {
       continue;
     }
 
+    // R32.5: capital inmovilizado = stock × costo del proveedor
+    // principal (es_principal + activo, viene en el bulk). Sin
+    // costo no se pondera — BAJA y el mensaje queda en unidades.
+    const capital = comp?.costo != null ? p.stock_actual * comp.costo : null;
+
     // Dead stock es por falta de ventas — independiente de la
     // demanda estimada (que justamente es 0 en los dormidos).
+    // T32.4: severidad ponderada por capital (ver umbrales arriba).
     if (s.ultima_venta == null || s.ultima_venta <= corte) {
+      const severidad =
+        capital == null
+          ? 'BAJA'
+          : capital > CAPITAL_DEAD_ALTA
+            ? 'ALTA'
+            : capital > CAPITAL_DEAD_MEDIA
+              ? 'MEDIA'
+              : 'BAJA';
+      const capTxt = capital != null ? ` (~${money(capital)} de capital)` : '';
       out.push({
         tipo: 'DEAD_STOCK',
-        severidad: 'BAJA',
+        severidad,
         producto_id: p.id,
-        mensaje: `${etiqueta}: sin ventas en ${DIAS_VENTANA}d — ${p.stock_actual}u inmovilizadas`,
+        mensaje: `${etiqueta}: sin ventas en ${DIAS_VENTANA}d — ${p.stock_actual}u inmovilizadas${capTxt}`,
       });
     } else if (demanda > 0) {
       const cobertura = p.stock_actual / demanda;
@@ -61,6 +104,43 @@ export function candidatas({ productos, stats, ordenes, corte }) {
           severidad: cobertura < lead / 2 ? 'ALTA' : 'MEDIA',
           producto_id: p.id,
           mensaje: `${etiqueta}: cobertura ${cobertura.toFixed(1)}d < lead ${lead}d — quiebra antes de que llegue el pedido`,
+        });
+      }
+    }
+
+    // T32.4 — reglas de pricing contra el snapshot vigente de
+    // competencia. Sin datos de cadena para el SKU no se inventa
+    // alerta (comp.min null = todas las filas sin precio o sin
+    // snapshot). Son ortogonales al estado de stock: un muerto con
+    // precio > max también recibe PRECIO_FUERA_MERCADO (diagnóstico
+    // de posición, R32.4); las que piden rotación exigen demanda.
+    if (comp?.min != null) {
+      // Cadena en promo sobre un top seller propio → presión
+      // competitiva donde más duele. promos[0] es la más profunda.
+      if (comp.promos.length > 0 && demanda >= pisoTop) {
+        const promo = comp.promos[0];
+        const pct = Math.round(promo.descuento * 100);
+        out.push({
+          tipo: 'PRESION_COMPETITIVA',
+          severidad: promo.descuento > PROMO_ALTA_DESCUENTO ? 'ALTA' : 'MEDIA',
+          producto_id: p.id,
+          mensaje: `${etiqueta}: ${promo.cadena} en promo a ${money(promo.precio)} (−${pct}% vs lista) sobre un top seller propio (~${demanda.toFixed(1)}u/día)`,
+        });
+      }
+      if (p.precio_venta > comp.max) {
+        out.push({
+          tipo: 'PRECIO_FUERA_MERCADO',
+          severidad: 'MEDIA',
+          producto_id: p.id,
+          mensaje: `${etiqueta}: precio ${money(p.precio_venta)} por encima del máximo de mercado (${money(comp.max)})`,
+        });
+      }
+      if (demanda > 0 && p.precio_venta < comp.min * FACTOR_OPORTUNIDAD) {
+        out.push({
+          tipo: 'OPORTUNIDAD_MARGEN',
+          severidad: 'BAJA',
+          producto_id: p.id,
+          mensaje: `${etiqueta}: ${money(p.precio_venta)} quedó >15% bajo el mínimo de mercado (${money(comp.min)}) — margen regalado en producto que rota`,
         });
       }
     }
@@ -115,11 +195,11 @@ export function evaluarAlertas() {
 
 async function evaluarAhora() {
   const db = await openDb();
-  const [{ hoy }, stats, productos, ordenes] = await Promise.all([
+  const [{ hoy }, stats, productos, ordenes, competencia] = await Promise.all([
     db.get('SELECT CURRENT_DATE::text AS hoy'),
     estadisticasDemandaBulk(DIAS_VENTANA),
     db.all(
-      `SELECT p.id, p.sku, p.nombre, p.stock_actual,
+      `SELECT p.id, p.sku, p.nombre, p.stock_actual, p.precio_venta,
               COALESCE((pr.tiempo_entrega_min_dias + pr.tiempo_entrega_max_dias) / 2.0,
                        pr.tiempo_entrega_dias)::double precision AS lead_esperado
        FROM productos p JOIN proveedores pr ON pr.id = p.proveedor_id`,
@@ -131,6 +211,9 @@ async function evaluarAhora() {
        WHERE o.estado = 'PENDIENTE_APROBACION'
          AND o.fecha_creacion < now() - interval '${ORDEN_HORAS_UMBRAL} hours'`,
     ),
+    // T32.4: una pasada — min/max de mercado, promos y costo
+    // principal por producto (ver competenciaBulk).
+    competenciaBulk(),
   ]);
   const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - DIAS_VENTANA * 86400000)
     .toISOString()
@@ -140,6 +223,7 @@ async function evaluarAhora() {
     stats,
     ordenes: ordenes.map((o) => ({ ...o, horas: Math.floor(o.horas_f) })),
     corte,
+    competencia,
   });
   const nuevas = await insertarNuevas(db, cands);
   await db.run(

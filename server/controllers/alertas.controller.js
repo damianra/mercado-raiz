@@ -5,7 +5,16 @@ import {
   marcarLeida,
 } from '../models/alertas.model.js';
 
-const TIPOS = new Set(['QUIEBRE', 'RIESGO_LEAD', 'DEAD_STOCK', 'ORDEN_PENDIENTE']);
+// SPEC-32 (T32.4): los tres tipos de pricing entran al filtro.
+const TIPOS = new Set([
+  'QUIEBRE',
+  'RIESGO_LEAD',
+  'DEAD_STOCK',
+  'ORDEN_PENDIENTE',
+  'PRESION_COMPETITIVA',
+  'PRECIO_FUERA_MERCADO',
+  'OPORTUNIDAD_MARGEN',
+]);
 
 // SPEC-29 (R29.4): GET /api/alertas?leida=0|1&tipo= — la evaluación
 // lazy corre dentro del model si pasaron >60min.
