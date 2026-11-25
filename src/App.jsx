@@ -117,7 +117,7 @@ export default function App({ usuario }) {
 
   // SPEC-30 (T30.1): APROBADA→ENVIADA→RECIBIDA. La recepción suma
   // stock en el backend — reflejamos estado + stock nuevo.
-  const transicionar = async (orden, accion, cantidadRecibida) => {
+  const transicionar = async (orden, accion, cantidadRecibida, fechaVencimiento) => {
     setProcesando(orden.id);
     try {
       if (accion === 'enviar') {
@@ -126,7 +126,7 @@ export default function App({ usuario }) {
         setDetalle((d) => (d?.id === orden.id ? null : d));
         pushToast(`Orden ${orden.id} marcada como enviada`);
       } else {
-        const res = await recibirOrden(orden.id, cantidadRecibida);
+        const res = await recibirOrden(orden.id, cantidadRecibida, fechaVencimiento);
         setOrdenes((prev) =>
           prev.map((o) =>
             o.id === orden.id
@@ -244,7 +244,7 @@ export default function App({ usuario }) {
         onAprobar={(o) => resolver(o, true)}
         onRechazar={(o) => resolver(o, false)}
         onEnviar={(o) => transicionar(o, 'enviar')}
-        onRecibir={(o, cantidad) => transicionar(o, 'recibir', cantidad)}
+        onRecibir={(o, cantidad, fecha) => transicionar(o, 'recibir', cantidad, fecha)}
       />
       <NewOrderModal
         open={nuevaOpen}

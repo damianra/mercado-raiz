@@ -10,6 +10,7 @@ import NotFound from './pages/NotFound.jsx';
 import Proveedores from './pages/Proveedores.jsx';
 import Quiebres from './pages/Quiebres.jsx';
 import Usuarios from './pages/Usuarios.jsx';
+import Vencimientos from './pages/Vencimientos.jsx';
 import { usePath } from './lib/router.jsx';
 import { getSession, onSesion, refrescarSesion } from './lib/auth.js';
 import './index.css';
@@ -76,6 +77,12 @@ function Root() {
   if (segmento === 'quiebres') {
     // SPEC-27 T27.4: vista operativa de quiebres — todos los roles.
     return <Quiebres usuario={sesion.usuario} />;
+  }
+
+  if (segmento === 'vencimientos') {
+    // SPEC-33 T33.4: cola de lotes por vencer — todos los roles
+    // no-BUYER (el BUYER ya cayó en su guard de arriba → 404).
+    return <Vencimientos usuario={sesion.usuario} />;
   }
 
   if (segmento === 'metricas') {

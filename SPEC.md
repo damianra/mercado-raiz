@@ -2529,7 +2529,7 @@ si falla):
   camión crea el lote con su fecha y lo que se vence en góndola se
   merma. Hoy ese capital en riesgo es invisible — se descubre
   cuando ya venció, si se descubre.
-- **Estado global:** ⏳ en progreso
+- **Estado global:** ✅ cerrada — 4/4 tareas mergeadas (PRs #71–#74)
 
 ### Decisiones
 
@@ -2608,7 +2608,7 @@ si falla):
   vencimiento — lote a 0, descuento del contador e `historial_stock`
   AJUSTE motivo MERMA en la misma tx; 409 si ya está en 0).
   Tests de reglas, severidades y baja.
-- **T33.4** Vista `/vencimientos` (todos los roles no-BUYER):
+- **T33.4** ✅ Vista `/vencimientos` (todos los roles no-BUYER):
   tabla de lotes con días restantes, valor en riesgo y estado;
   acciones por fila — "Dar de baja" (GERENTE/ADMIN) y "Liquidar"
   que abre `AjustePrecioModal` con motivo LIQUIDACION (SPEC-32 le
