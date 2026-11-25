@@ -7,10 +7,11 @@
 import { getSession, refrescarSesion } from './auth.js';
 
 export class ApiError extends Error {
-  constructor(message, status = 0) {
+  constructor(message, status = 0, body = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.body = body; // payload de error del server (p.ej. requiere_confirmacion)
   }
 }
 
@@ -39,7 +40,11 @@ async function apiFetch(path, options = {}, reintento = false) {
     // Respuesta sin JSON — se reporta por status abajo.
   }
   if (!res.ok) {
-    throw new ApiError(body?.error ?? `Error ${res.status} del servidor`, res.status);
+    throw new ApiError(
+      body?.error ?? `Error ${res.status} del servidor`,
+      res.status,
+      body,
+    );
   }
   return body;
 }
@@ -274,3 +279,20 @@ export const editarProveedor = (id, cambios) =>
 // llega en e.message para mostrarlo en toast.
 export const borrarProveedor = (id) =>
   apiFetch(`/proveedores/${id}`, { method: 'DELETE' });
+
+// SPEC-32 (T32.2) — posición competitiva del producto (alimenta el
+// modal Ajustar precio) + único write path de precio_venta. El 409
+// del guard de costo llega como error con body parseado por apiFetch
+// — el modal lo distingue por `requiere_confirmacion`.
+export const getCompetenciaProducto = (productoId) =>
+  apiFetch(`/productos/${productoId}/competencia`);
+
+export const actualizarPrecio = ({ productoId, precio, motivo, confirmarBajoCosto }) =>
+  apiFetch(`/productos/${productoId}/precio`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      precio,
+      motivo,
+      ...(confirmarBajoCosto ? { confirmar_bajo_costo: true } : {}),
+    }),
+  });

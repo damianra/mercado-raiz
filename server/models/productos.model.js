@@ -163,3 +163,53 @@ export async function getProducto(id) {
   );
   return { ...mapProducto(row), precios };
 }
+
+// SPEC-32 (T32.2) — único write path de `precio_venta`. Cambia el
+// precio + audita en `precios_historial` en la misma tx. Si el
+// precio propuesto queda por debajo del costo vigente del proveedor
+// principal, no escribe: devuelve `requiereConfirmacion` y el
+// controller responde 409 — el cliente reenvía con
+// `confirmarBajoCosto` (liquidación es decisión humana, R32.2).
+export const MOTIVOS_PRECIO = ['AJUSTE_MERCADO', 'PROMO', 'LIQUIDACION', 'OTRO'];
+
+export async function actualizarPrecio(
+  id,
+  { precio, motivo, usuarioEmail, confirmarBajoCosto = false },
+) {
+  const db = await openDb();
+  return db.tx(async (t) => {
+    const p = await t.get(
+      `SELECT id, precio_venta FROM productos WHERE id = ? FOR UPDATE`,
+      [id],
+    );
+    if (!p) return { noEncontrado: true };
+    const pp = await t.get(
+      `SELECT costo_unitario FROM producto_proveedor
+        WHERE producto_id = ? AND es_principal = 1 AND activo = 1
+        ORDER BY id LIMIT 1`,
+      [id],
+    );
+    const costoUnitario = pp?.costo_unitario ?? null;
+    if (costoUnitario != null && precio < costoUnitario && !confirmarBajoCosto) {
+      return { requiereConfirmacion: { costo_unitario: costoUnitario } };
+    }
+    await t.run(
+      `UPDATE productos SET precio_venta = ?, fecha_actualizacion = now() WHERE id = ?`,
+      [precio, id],
+    );
+    await t.run(
+      `INSERT INTO precios_historial
+         (producto_id, precio_anterior, precio_nuevo, motivo, usuario_email)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, p.precio_venta, precio, motivo, usuarioEmail],
+    );
+    return {
+      data: {
+        producto_id: id,
+        precio_anterior: p.precio_venta,
+        precio_nuevo: precio,
+        costo_unitario: costoUnitario,
+      },
+    };
+  });
+}

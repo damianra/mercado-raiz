@@ -4,12 +4,14 @@ import {
   ClipboardList,
   PackageX,
   ShoppingBag,
+  Tag,
   TriangleAlert,
   TrendingDown,
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar.jsx';
 import Topbar from '../components/Topbar.jsx';
 import Toasts from '../components/Toasts.jsx';
+import AjustePrecioModal from '../components/AjustePrecioModal.jsx';
 import AjusteStockModal from '../components/AjusteStockModal.jsx';
 import VentaModal from '../components/VentaModal.jsx';
 import { EmptyState, ErrorState } from '../components/ui.jsx';
@@ -32,6 +34,7 @@ export default function Quiebres({ usuario }) {
   const [toasts, setToasts] = useState([]);
   const [venta, setVenta] = useState(null);
   const [ajuste, setAjuste] = useState(null);
+  const [precio, setPrecio] = useState(null);
   const timers = useRef([]);
 
   const pushToast = useCallback((mensaje, tipo = 'ok') => {
@@ -293,14 +296,24 @@ export default function Quiebres({ usuario }) {
                             <ShoppingBag size={16} strokeWidth={1.5} />
                           </button>
                           {puedeAjustar && (
-                            <button
-                              onClick={() => setAjuste(f)}
-                              title="Ajustar stock (conteo / merma)"
-                              aria-label={`Ajustar stock de ${f.sku}`}
-                              className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
-                            >
-                              <ClipboardList size={16} strokeWidth={1.5} />
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setPrecio(f)}
+                                title="Ajustar precio (mercado y costo)"
+                                aria-label={`Ajustar precio de ${f.sku}`}
+                                className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
+                              >
+                                <Tag size={16} strokeWidth={1.5} />
+                              </button>
+                              <button
+                                onClick={() => setAjuste(f)}
+                                title="Ajustar stock (conteo / merma)"
+                                aria-label={`Ajustar stock de ${f.sku}`}
+                                className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
+                              >
+                                <ClipboardList size={16} strokeWidth={1.5} />
+                              </button>
+                            </>
                           )}
                         </span>
                       </td>
@@ -324,6 +337,18 @@ export default function Quiebres({ usuario }) {
           producto={ajuste}
           onClose={() => setAjuste(null)}
           onHecho={(res) => movimientoHecho(ajuste, res, 'Ajuste')}
+        />
+      )}
+      {precio && (
+        <AjustePrecioModal
+          producto={precio}
+          onClose={() => setPrecio(null)}
+          onHecho={(res) => {
+            setPrecio(null);
+            pushToast(
+              `Precio de ${precio.sku}: ${formatMoney(res.precio_anterior)} → ${formatMoney(res.precio_nuevo)}`,
+            );
+          }}
         />
       )}
       <Toasts toasts={toasts} />

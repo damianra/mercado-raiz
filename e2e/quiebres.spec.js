@@ -100,12 +100,35 @@ test('ajustar stock con conteo fija la cantidad absoluta', async ({ page }) => {
   await expect(page.getByText(/Ajuste registrado — .* 99/)).toBeVisible();
 });
 
-test('APROBADOR ve "Registrar venta" pero no "Ajustar stock" (rol)', async ({ page }) => {
+// SPEC-32 (T32.2) — ajuste de precio con contexto de mercado:
+// el modal muestra la escalera (banda + cadenas + piso de costo) y
+// los sugeridos precargan un precio accionable.
+test('ajustar precio desde la fila muestra la escalera de mercado y confirma', async ({
+  page,
+}) => {
+  await irAQuiebres(page, GERENTE);
+  const fila = page.locator(FILAS_Q).first();
+  const sku = await fila.locator('td').first().locator('.text-xs').innerText();
+
+  await fila.getByLabel(`Ajustar precio de ${sku}`).click();
+  const modal = page.getByRole('dialog', { name: 'Ajustar precio' });
+  await expect(modal).toBeVisible();
+  await expect(modal.getByLabel('Posición de precio en el mercado')).toBeVisible();
+  await expect(modal.getByText(/precios al 2026-11-20/)).toBeVisible();
+
+  await modal.getByRole('button', { name: /Punto medio/ }).click();
+  await modal.getByRole('button', { name: 'Guardar precio' }).click();
+
+  await expect(page.getByText(/Precio de .* →/)).toBeVisible();
+});
+
+test('APROBADOR ve "Registrar venta" pero no "Ajustar stock" ni "Ajustar precio" (rol)', async ({ page }) => {
   await irAQuiebres(page, APROBADOR);
   const fila = page.locator(FILAS_Q).first();
   const sku = await fila.locator('td').first().locator('.text-xs').innerText();
   await expect(fila.getByLabel(`Registrar venta de ${sku}`)).toBeVisible();
   await expect(fila.getByLabel(`Ajustar stock de ${sku}`)).toHaveCount(0);
+  await expect(fila.getByLabel(`Ajustar precio de ${sku}`)).toHaveCount(0);
 });
 
 test('la navegación del sidebar vuelve al dashboard', async ({ page }) => {

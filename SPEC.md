@@ -2392,7 +2392,7 @@ escala).
 | # | Tarea | Estado |
 |---|---|---|
 | T32.1 | Persistir snapshot de competencia: tabla `precios_competencia` (producto, cadena, sku_cadena, precio, precio_lista, fecha_snapshot) poblada desde el CSV + modelo de lectura (índice propio vs min/max por SKU y agregados por cadena/categoría) | ✅ |
-| T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ⏳ |
+| T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ✅ |
 | T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ⏳ |
 | T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
 | T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ⏳ |
