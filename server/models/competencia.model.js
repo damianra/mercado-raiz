@@ -82,6 +82,50 @@ export async function competenciaProducto(productoId) {
   };
 }
 
+// SPEC-32 (T32.4): versión bulk para el motor de alertas — una sola
+// pasada trae TODO el catálogo (min/max del snapshot vigente, promos
+// activas por cadena y costo del proveedor principal), en vez de
+// competenciaProducto() por SKU (serían 2 queries × 1.471).
+// Devuelve Map(producto_id → { min, max, costo, promos }) donde
+// `promos` son las cadenas con precio < lista del snapshot vigente,
+// ordenadas por profundidad de descuento desc ([0] = la más
+// agresiva). Productos sin filas de competencia quedan con
+// min/max null (nunca inventado — las reglas los saltean).
+export async function competenciaBulk() {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id AS producto_id, pc.cadena, pc.precio, pc.precio_lista,
+            pp.costo_unitario AS costo
+       FROM productos p
+       LEFT JOIN (SELECT DISTINCT ON (producto_id, cadena)
+                    producto_id, cadena, precio, precio_lista
+                    FROM precios_competencia
+                   ORDER BY producto_id, cadena, fecha_snapshot DESC) pc
+         ON pc.producto_id = p.id
+       LEFT JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1`,
+  );
+  const out = new Map();
+  for (const r of rows) {
+    let e = out.get(r.producto_id);
+    if (!e) out.set(r.producto_id, (e = { min: null, max: null, costo: r.costo ?? null, promos: [] }));
+    if (e.costo == null && r.costo != null) e.costo = r.costo;
+    if (r.cadena == null || r.precio == null) continue; // sin dato del SKU
+    if (e.min == null || r.precio < e.min) e.min = r.precio;
+    if (e.max == null || r.precio > e.max) e.max = r.precio;
+    if (r.precio_lista != null && r.precio < r.precio_lista) {
+      e.promos.push({
+        cadena: r.cadena,
+        precio: r.precio,
+        precio_lista: r.precio_lista,
+        descuento: (r.precio_lista - r.precio) / r.precio_lista,
+      });
+    }
+  }
+  for (const e of out.values()) e.promos.sort((a, b) => b.descuento - a.descuento);
+  return out;
+}
+
 // Resumen de competitividad del catálogo contra el snapshot vigente:
 // - vsMercado: conteo por zona (band min–max entre cadenas)
 // - porCadena: en cuántos artículos somos más baratos/iguales que esa

@@ -29,7 +29,11 @@ const ROLES_LEEN_ALERTAS = ['BUYER', 'ADMIN', 'GERENTE', 'APROBADOR'];
 // QUIEBRE → /quiebres (stock ≤ 0 siempre está en la tabla);
 // RIESGO_LEAD puede tener stock ≥ mínimo → va a /metricas
 // (la tabla de riesgo cobertura < lead).
-const DESTINO_ALERTA = { QUIEBRE: '/quiebres' };
+// T32.4: PRESION_COMPETITIVA → /quiebres (el producto rota y ahí
+// está el modal "Ajustar precio" por fila); PRECIO_FUERA_MERCADO,
+// OPORTUNIDAD_MARGEN y DEAD_STOCK pueden no estar en la tabla de
+// quiebres → caen al default '/metricas'.
+const DESTINO_ALERTA = { QUIEBRE: '/quiebres', PRESION_COMPETITIVA: '/quiebres' };
 
 export default function Topbar({
   urgentes = 0,

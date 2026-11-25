@@ -2394,7 +2394,7 @@ escala).
 | T32.1 | Persistir snapshot de competencia: tabla `precios_competencia` (producto, cadena, sku_cadena, precio, precio_lista, fecha_snapshot) poblada desde el CSV + modelo de lectura (índice propio vs min/max por SKU y agregados por cadena/categoría) | ✅ |
 | T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ✅ |
 | T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ✅ |
-| T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
+| T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ✅ |
 | T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ✅ |
 | T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ✅ |
 | T32.7 | Fuente de competencia detrás de un cliente "DWH": `server/integrations/competencia-dwh.js` consume la API externa (`COMPETENCIA_DWH_URL`) — hoy **simulada** leyendo `data/articles_sample.csv` — y `sincronizarCompetencia()` vuelca el snapshot en `precios_competencia` (idempotente por UNIQUE) + `POST /api/competencia/sync` (ADMIN/SERVICIO) | ✅ |
@@ -2434,6 +2434,30 @@ columna Acciones (todos los roles operativos — es lectura).
   (tabla `alertas`, severidad, `DESTINO_ALERTA` por tipo,
   campanita 60s). Severidad de `DEAD_STOCK` pondera `stock ×
   costo` (umbrales documentados en la tarea).
+- **T32.4 — umbrales y criterios implementados** (medidos contra
+  la base dev, distribución real del capital inmovilizado de los
+  171 muertos: p50 ~$70k, p80 ~$159k, p90 ~$273k, p95 ~$380k,
+  max ~$648k):
+  - `DEAD_STOCK`: capital = `stock_actual × costo_unitario` del
+    proveedor principal (`es_principal=1 AND activo=1`). ALTA si
+    capital > **$350.000** (~top 6% de los muertos, 10 SKUs en
+    dev), MEDIA si > **$150.000** (~p80), si no BAJA; sin costo
+    principal → BAJA y el mensaje queda en unidades. El mensaje
+    lleva el capital en plata.
+  - `PRESION_COMPETITIVA`: la cadena tiene promo activa
+    (`precio < precio_lista` del snapshot vigente) y el producto
+    es top seller — criterio: `demanda_diaria ≥ p80` de los
+    productos con demanda > 0. ALTA si la promo más profunda supera
+    **15% bajo lista**, si no MEDIA.
+  - `PRECIO_FUERA_MERCADO`: `precio_venta > MAX(cadenas)` del
+    snapshot vigente → MEDIA (incluye muertos — es diagnóstico de
+    posición, R32.4).
+  - `OPORTUNIDAD_MARGEN`: `precio_venta < MIN(cadenas) × 0.85`
+    con demanda > 0 → BAJA. En el seed actual no dispara (el
+    `precio_venta` se generó ±15% del punto medio del mercado) —
+    la regla queda para datos reales.
+  - Datos de competencia en una sola pasada (`competenciaBulk()`):
+    sin filas de cadena para el SKU no se inventa alerta.
 - **R32.6** Los gráficos respetan la guía de diseño: paleta
   neutra, `root`/`terra` como únicos acentos, `rounded-2xl
   ring-1` en contenedores, tooltips con `formatMoney`.

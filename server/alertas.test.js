@@ -37,23 +37,27 @@ const post = (path, sesion = buyer) =>
   fetch(`${base}/api${path}`, { method: 'POST', headers: sesion.headers });
 
 describe('R29.1 — lockdown del rol BUYER', () => {
-  it('BUYER solo accede a /api/alertas: 403 en todo el dominio', async () => {
-    for (const ruta of [
-      '/ordenes',
-      '/productos',
-      '/proveedores',
-      '/usuarios',
-      '/ventas',
-      '/estadisticas/demanda?dias=30',
-      '/estadisticas/metricas?dias=30',
-      '/dashboard/stats',
-    ]) {
-      const r = await get(ruta);
-      expect(r.status, ruta).toBe(403);
-    }
-    // y sí entra a alertas
-    expect((await get('/alertas')).status).toBe(200);
-  });
+  it(
+    'BUYER solo accede a /api/alertas: 403 en todo el dominio',
+    { timeout: 60_000 }, // el GET dispara la lazy-eval: ~1.5k inserts
+    async () => {
+      for (const ruta of [
+        '/ordenes',
+        '/productos',
+        '/proveedores',
+        '/usuarios',
+        '/ventas',
+        '/estadisticas/demanda?dias=30',
+        '/estadisticas/metricas?dias=30',
+        '/dashboard/stats',
+      ]) {
+        const r = await get(ruta);
+        expect(r.status, ruta).toBe(403);
+      }
+      // y sí entra a alertas
+      expect((await get('/alertas')).status).toBe(200);
+    },
+  );
 
   it('T30.6: GET abierto a roles operativos; escrituras siguen siendo del comprador', async () => {
     const gerente = await loginComo(base, 'GERENTE');
