@@ -98,10 +98,29 @@ export async function openDb({ searchPath, connString, sembrar = true, sembrarVe
       connectionString: connString ?? connectionString(),
       ...(searchPath ? { options: `-c search_path=${searchPath}` } : {}),
     });
-    if (searchPath) await pool.query(`CREATE SCHEMA IF NOT EXISTS ${searchPath}`);
-    const schemaPath = join(here, 'schema.sql');
-    if (existsSync(schemaPath)) {
-      await pool.query(readFileSync(schemaPath, 'utf8'));
+    // Lock de DDL (advisory, cluster-wide): los tests abren schemas
+    // paralelos y closeDb los dropea con CASCADE — un DROP concurrente
+    // puede tumbar el schema.sql de otra sesión ("could not open
+    // relation with OID" al resolver constraints en pg_constraint).
+    // El lock serializa DDL inicial y drops entre todos los pools.
+    // En prod es no-op práctico (un solo pool, un solo openDb).
+    const DDL_LOCK_KEY = 0x4d524c44; // 'MRLD'
+    const ddlClient = await pool.connect();
+    try {
+      await ddlClient.query('SELECT pg_advisory_lock($1)', [DDL_LOCK_KEY]);
+      if (searchPath) {
+        await ddlClient.query(`CREATE SCHEMA IF NOT EXISTS ${searchPath}`);
+      }
+      const schemaPath = join(here, 'schema.sql');
+      if (existsSync(schemaPath)) {
+        await ddlClient.query(readFileSync(schemaPath, 'utf8'));
+      }
+    } finally {
+      try {
+        await ddlClient.query('SELECT pg_advisory_unlock($1)', [DDL_LOCK_KEY]);
+      } finally {
+        ddlClient.release();
+      }
     }
     const db = { pool, ...wrap(pool.query.bind(pool)) };
     db.tx = async (fn) => {
@@ -180,7 +199,20 @@ export async function closeDb(dropSchema = false) {
   if (dropSchema) {
     const schema = options.match(/search_path=(\S+)/)?.[1];
     if (schema && IDENT_RE.test(schema)) {
-      await db.pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      // Mismo lock de DDL que openDb: el DROP CASCADE compite con
+      // el schema.sql de otro archivo de test en paralelo.
+      const DDL_LOCK_KEY = 0x4d524c44; // 'MRLD'
+      const client = await db.pool.connect();
+      try {
+        await client.query('SELECT pg_advisory_lock($1)', [DDL_LOCK_KEY]);
+        await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      } finally {
+        try {
+          await client.query('SELECT pg_advisory_unlock($1)', [DDL_LOCK_KEY]);
+        } finally {
+          client.release();
+        }
+      }
     }
   }
   await db.pool.end();
