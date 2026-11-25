@@ -56,10 +56,14 @@ mocks. El orquestador lo ejecutó en 6 pasos → los SPECs 01–07 mapean
 - **R1.1** Paleta del brief como tokens Tailwind: `root #2D5F3F`,
   `terra #C8553D`, `cream #F5F1E8`, `ocre #D4A574`, `grafito #2C2C2C`,
   `warmgray #8B8680`, `success #4A7C59`, `info #5B7B8F`.
+  → superseded por SPEC-31 (valores retokenizados a base stone;
+  los nombres de clase se conservan).
 - **R1.2** Tipografía: `font-display` = Playfair Display (títulos),
   `font-sans` = Inter (UI), `font-mono` = JetBrains Mono (SKUs/datos).
+  → superseded por SPEC-31 (`font-display` eliminado; Inter en todo).
 - **R1.3** Sombras `soft`/`lift` con tinte verde raíz; easing
   `ease-brand` = `cubic-bezier(0.4, 0, 0.2, 1)`; radius 8px.
+  → sombras superseded por SPEC-31 (tinte neutro stone).
 - **R1.4** Layout: sidebar fija 240px (colapsable mobile con overlay +
   Escape) + contenido fluido con topbar.
 - **R1.5** Solo se renderizan ítems de navegación con destino real
