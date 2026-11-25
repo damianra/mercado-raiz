@@ -116,7 +116,9 @@ test('ajustar precio desde la fila muestra la escalera de mercado y confirma', a
   await expect(modal.getByLabel('Posición de precio en el mercado')).toBeVisible();
   await expect(modal.getByText(/precios al 2026-11-20/)).toBeVisible();
 
-  await modal.getByRole('button', { name: /Punto medio/ }).click();
+  // "Al costo" es determinísticamente ≠ precio vigente (el seed
+  // garantiza margen > 0) y nunca cae bajo costo → Guardar habilita.
+  await modal.getByRole('button', { name: /Al costo/ }).click();
   await modal.getByRole('button', { name: 'Guardar precio' }).click();
 
   await expect(page.getByText(/Precio de .* →/)).toBeVisible();

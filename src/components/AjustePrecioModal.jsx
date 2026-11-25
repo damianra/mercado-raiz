@@ -56,7 +56,9 @@ export default function AjustePrecioModal({ producto, onClose, onHecho }) {
   }, [producto.id]);
 
   const n = valor === '' ? null : Number(valor);
-  const valido = n != null && Number.isFinite(n) && n > 0 && n !== producto.precio_venta;
+  // el precio vigente lo dice la competencia fresca, no la prop de la fila
+  const vigente = comp?.precio_venta ?? producto.precio_venta;
+  const valido = n != null && Number.isFinite(n) && n > 0 && n !== vigente;
   const costo = comp?.costo_unitario ?? null;
   const bajoCosto = valido && costo != null && n < costo;
   const zona = comp ? zonaPropuesta(n, { costo, min: comp.min_mercado, max: comp.max_mercado }) : null;
@@ -93,6 +95,9 @@ export default function AjustePrecioModal({ producto, onClose, onHecho }) {
       // Backstop del server: si el 409 llega igual, pasamos a modo
       // confirmación en vez de mostrar un error muerto.
       if (e.status === 409 && e.body?.requiere_confirmacion) {
+        // El costo pudo cambiar desde el GET: hidratar para que el
+        // checkbox de salvataje renderice (si no, resubmit → mismo 409).
+        setComp((c) => ({ ...c, costo_unitario: e.body.costo_unitario }));
         setConfirmarSalvataje(false);
         setErrorEnvio(null);
       } else {

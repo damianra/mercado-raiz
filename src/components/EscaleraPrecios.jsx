@@ -19,7 +19,8 @@ export default function EscaleraPrecios({ propio, propuesto, min, max, costo, ca
   // Dominio con aire a ambos lados para que los extremos respiren.
   const lo = Math.min(...valores) * 0.94;
   const hi = Math.max(...valores) * 1.06;
-  const x = (v) => `${((v - lo) / (hi - lo)) * 100}%`;
+  const span = hi - lo || 1; // todos los valores idénticos → no NaN
+  const x = (v) => `${((v - lo) / span) * 100}%`;
 
   return (
     <div aria-label="Posición de precio en el mercado">

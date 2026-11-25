@@ -345,6 +345,25 @@ export default function Quiebres({ usuario }) {
           onClose={() => setPrecio(null)}
           onHecho={(res) => {
             setPrecio(null);
+            // El margen de la fila depende del precio — lo recalculo
+            // local como hace movimientoHecho para el stock.
+            setFilas((fs) =>
+              fs.map((x) =>
+                x.id === precio.id
+                  ? {
+                      ...x,
+                      margen:
+                        res.costo_unitario != null
+                          ? res.precio_nuevo - res.costo_unitario
+                          : x.margen,
+                      perdidaDia:
+                        x.stock_actual <= 0 && res.costo_unitario != null && x.demanda > 0
+                          ? x.demanda * (res.precio_nuevo - res.costo_unitario)
+                          : x.perdidaDia,
+                    }
+                  : x,
+              ),
+            );
             pushToast(
               `Precio de ${precio.sku}: ${formatMoney(res.precio_anterior)} → ${formatMoney(res.precio_nuevo)}`,
             );
