@@ -16,6 +16,7 @@ export async function ajustarStock({
   cantidadNueva,
   delta,
   referencia,
+  fechaVencimiento,
   usuario,
 }) {
   const db = await openDb();
@@ -32,6 +33,15 @@ export async function ajustarStock({
       return {
         status: 400,
         error: 'el ajuste dejaría el stock negativo — registrar un conteo (cantidad_nueva)',
+      };
+    }
+    // Una fecha informada no se puede honrar en una baja (nada que
+    // etiquetar — la merma sale FEFO); rechazar antes de escribir:
+    // un return dentro de tx COMMITea el update/historial.
+    if (fechaVencimiento !== undefined && nuevo <= anterior) {
+      return {
+        status: 400,
+        error: 'fecha_vencimiento solo aplica a ajustes positivos (crea el lote encontrado)',
       };
     }
     await t.run(
@@ -56,6 +66,7 @@ export async function ajustarStock({
         productoId,
         codigo: `AJU-${h.id}`,
         cantidad: nuevo - anterior,
+        fechaVencimiento,
         origen: 'AJUSTE',
       });
     }

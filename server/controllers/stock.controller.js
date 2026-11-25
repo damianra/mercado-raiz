@@ -34,12 +34,25 @@ export async function ajustar(req, res) {
     return badRequest(res, 'enviar exactamente uno de cantidad_nueva (conteo) o delta (merma/rotura)');
   }
 
+  // SPEC-33: un ajuste positivo puede informar el vencimiento del
+  // lote creado (el operario lo lee del empaque); sin ella queda NULL.
+  const venc = req.body?.fecha_vencimiento;
+  if (venc !== undefined) {
+    const d = typeof venc === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(venc)
+      ? new Date(`${venc}T00:00:00Z`)
+      : null;
+    if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== venc) {
+      return badRequest(res, 'fecha_vencimiento debe ser una fecha YYYY-MM-DD válida');
+    }
+  }
+
   const r = await ajustarStock({
     productoId: producto_id,
     motivo,
     cantidadNueva: cn,
     delta: d,
     referencia: referencia ? capString(referencia, 120) : undefined,
+    fechaVencimiento: venc ?? undefined,
     usuario: req.usuario.email,
   });
   if (r.status === 201) return res.status(201).json({ success: true, data: r.data });

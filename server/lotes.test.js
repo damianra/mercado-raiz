@@ -175,6 +175,46 @@ describe('Ajustes (POST /api/stock/ajuste)', () => {
     expect(nuevo.vto).toBeNull();
     expect(nuevo.codigo).toMatch(/^AJU-\d+$/);
   });
+
+  it('el conteo con fecha_vencimiento informada crea el lote con esa fecha', async () => {
+    const pid = P['Frescos'][9];
+    await setStock(pid, 3);
+    await insertLote(pid, 'L-1', 3, dias(5));
+    const res = await post('/stock/ajuste', {
+      producto_id: pid,
+      motivo: 'CONTEO',
+      cantidad_nueva: 8,
+      fecha_vencimiento: dias(10),
+    });
+    expect(res.status).toBe(201);
+    const nuevo = (await lotesDe(pid)).find((l) => l.origen === 'AJUSTE');
+    expect(nuevo.cantidad_actual).toBe(5);
+    expect(nuevo.vto).toBe(dias(10));
+  });
+
+  it('400 si la fecha viene en una baja o es inválida', async () => {
+    const pid = P['Frescos'][10];
+    await setStock(pid, 10);
+    await insertLote(pid, 'L-1', 10, dias(5));
+    const baja = await post('/stock/ajuste', {
+      producto_id: pid,
+      motivo: 'MERMA',
+      delta: -3,
+      fecha_vencimiento: dias(9),
+    });
+    expect(baja.status).toBe(400);
+    // Nada se escribió: contador y lote intactos.
+    const p = await db.get('SELECT stock_actual FROM productos WHERE id = ?', [pid]);
+    expect(p.stock_actual).toBe(10);
+    expect((await lotesDe(pid))[0].cantidad_actual).toBe(10);
+    const mala = await post('/stock/ajuste', {
+      producto_id: pid,
+      motivo: 'CONTEO',
+      cantidad_nueva: 12,
+      fecha_vencimiento: '2025-13-40',
+    });
+    expect(mala.status).toBe(400);
+  });
 });
 
 describe('Recepción de OC (POST /api/ordenes/:id/recibir)', () => {
