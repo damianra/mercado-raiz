@@ -8,8 +8,10 @@
 // - 1–3 lotes por producto con stock > 0, sumando exacto.
 // - Perecederos (vida_util_dias != null): ~2% de los productos con
 //   un lote YA vencido (alerta ALTA desde el primer eval) y ~10%
-//   con uno ≤ 15 días; el resto repartido sano en [25%, 100%] de la
-//   vida útil. fecha_ingreso = vencimiento − vida_util.
+//   dentro de su ventana de alerta (relativa a la vida útil — ver
+//   diasAlertaVencimiento); el resto sano en [45%, 100%] de la
+//   vida. vida restante ≤ vida_util SIEMPRE → fecha_ingreso =
+//   vencimiento − vida_util nunca queda a futuro.
 // - No perecederos: fecha_vencimiento NULL (nunca alertan), ingreso
 //   reciente 1–60 días.
 
@@ -31,17 +33,29 @@ const dia = (hoy, offsetDias) => {
 const ymd = (d) => d.toISOString().slice(0, 10);
 
 // Reparte `total` en `n` porciones positivas determinísticas
-// (pesos ∊ [0.3, 1.3) normalizados; el resto va a la última).
+// (pesos ∊ [0.3, 1.3) sobre el excedente total−n; cada parte pisa
+// en 1 y el resto — siempre ≥0 — va a la última). Requiere
+// total ≥ n: con pesos muy dispares, un Math.max(1, …) por parte
+// podía dejar la última en 0 y violar el CHECK cantidad_inicial.
 function repartir(semilla, total, n) {
   const pesos = Array.from(
     { length: n },
     (_, i) => 0.3 + rand(semilla, `lotes:w:${i}`),
   );
   const suma = pesos.reduce((a, w) => a + w, 0);
-  const partes = pesos.map((w) => Math.max(1, Math.floor((total * w) / suma)));
+  const partes = pesos.map(
+    (w) => 1 + Math.floor(((total - n) * w) / suma),
+  );
   partes[n - 1] += total - partes.reduce((a, q) => a + q, 0);
   return partes;
 }
+
+// Ventana de alerta por vida útil (SPEC-33, T33.3 la usa igual):
+// min(15d, 40% de la vida) — un F&V de 7d alerta a 2d, un Almacén
+// a 15d; el umbral absoluto dejaría a los perecederos cortos en
+// alerta permanente. Exportada: alertas.model la reutiliza.
+export const diasAlertaVencimiento = (vida) =>
+  Math.min(15, Math.max(1, Math.floor(vida * 0.4)));
 
 /**
  * Lotes de UN producto para el stock inicial. Pura (sin DB) —
@@ -72,11 +86,15 @@ export function lotesDeProducto(p, hoy = new Date()) {
       if (i === 0 && rCaso < 0.02) {
         diasRestantes = -(1 + Math.floor(rand(semilla, 'lotes:vencido') * 10));
       } else if (i === 0 && rCaso < 0.12) {
-        diasRestantes = 1 + Math.floor(rand(semilla, 'lotes:proximo') * 15);
+        // Dentro de la ventana de alerta del producto (relativa a su
+        // vida útil — un F&V no puede "estar por vencer a 12d").
+        diasRestantes =
+          1 + Math.floor(rand(semilla, 'lotes:proximo') * diasAlertaVencimiento(vida));
       } else {
-        diasRestantes = Math.max(
-          16,
-          Math.floor(vida * (0.25 + rand(semilla, `lotes:vida:${i}`) * 0.75)),
+        // Sano: 45%–100% de la vida restante — fuera de la ventana
+        // y con ingreso ≤ hoy (nunca más vida que la útil total).
+        diasRestantes = Math.floor(
+          vida * (0.45 + rand(semilla, `lotes:vida:${i}`) * 0.55),
         );
       }
       const v = dia(hoy, diasRestantes);

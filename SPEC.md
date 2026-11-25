@@ -2561,11 +2561,15 @@ si falla):
   el conteo de T30.2: el dato físico lo confirma una persona, el
   sistema no inventa mermas.
 - **Alerta `VENCIMIENTO`** en el motor de reglas (mismo lazy-eval
-  de SPEC-29): una por producto con unidades en riesgo — ALTA si
-  ya venció o ≤ 3 días, MEDIA ≤ 7, BAJA ≤ 15; el mensaje lleva las
-  unidades y el valor a costo. Ventana de 15 días: afuera es ruido
-  para la demo (un Almacén con vida útil de 2 años no necesita
-  monitoreo diario). El dedup 24h existente aplica igual.
+  de SPEC-29): una por producto con unidades en riesgo. Ventana
+  **relativa a la vida útil**: `min(15d, floor(vida_util × 0.4))` —
+  un F&V de 7d alerta a 2d, un Almacén a 15d; el umbral absoluto
+  pondría a los perecederos cortos en alerta permanente. Severidad:
+  ALTA si ya venció o vence dentro de `max(1, ventana/3)` días,
+  MEDIA dentro de la ventana, BAJA dentro del doble (awareness
+  temprano). El mensaje lleva unidades y valor a costo; el dedup
+  24h existente aplica igual (`diasAlertaVencimiento` en
+  seed-lotes.js la comparten seed y motor).
 - **Ajuste positivo sin fecha**: un conteo que encuentra unidades
   (ajuste hacia arriba) crea lote `origen='AJUSTE'` con
   `fecha_vencimiento NULL` salvo que venga informada — el físico
@@ -2577,19 +2581,21 @@ si falla):
   determinístico (`seed-lotes.js`, post-catálogo como
   seed-ventas): todo `stock_actual > 0` se descompone en 1–3
   lotes que suman exacto; perecederos con ~10% de productos con un
-  lote ≤ 15 días de vencer y ~2% ya vencidos (la alerta ALTA tiene
-  datos reales); no perecederos con fecha NULL. Tests:
-  determinismo por EAN, suma = stock_actual, NULLs por categoría.
+  lote dentro de su ventana de alerta (relativa a la vida útil) y
+  ~2% ya vencidos (la alerta ALTA tiene datos reales); no
+  perecederos con fecha NULL. Tests: determinismo por EAN, suma =
+  stock_actual, NULLs por categoría, ingreso ≤ hoy, ninguna parte
+  en 0 con stock chico.
   **Implementado**: `VIDA_UTIL_CATEGORIA` en seed-articulos
   (F&V 7d → Almacén 540d; Perfumería/Limpieza NULL) alimenta
-  `productos.vida_util_dias`; `lotesDeProducto` (pura, hash FNV-1a
-  del EAN) reparte el stock en pesos determinísticos —
-  `fecha_ingreso = vencimiento − vida_util` para perecederos,
-  ingreso 1–60d y fecha NULL para secos. `seedLotes` corre tras
+  `productos.vida_util_dias` (+ backfill UPDATE idempotente en
+  schema.sql para bases ya pobladas); `lotesDeProducto` (pura,
+  hash FNV-1a del EAN) reparte el excedente sobre piso 1 por parte
+  — nunca una parte en 0 (el CHECK lo haría caer el boot);
+  `fecha_ingreso = vencimiento − vida_util` con vida restante
+  ≤ vida total → ingreso jamás futuro. `seedLotes` corre tras
   seedHistorial en `openDb` (mismo salteo en schemas de test) y
-  en `npm run seed` (que trunca `lotes` junto al dominio). Medido
-  en dev: 2.652 lotes, 24 vencidos, 103 ≤15d, 707 sin vencimiento,
-  0 divergentes contra `stock_actual`.
+  en `npm run seed` (que trunca `lotes` junto al dominio).
 - **T33.2** FEFO en el ciclo de vida: `aplicarVentaEnTx` descuenta
   por lote (FOR UPDATE, spillover entre lotes); `ajustarStock`
   negativo igual, positivo crea lote; `recibirOrden` acepta

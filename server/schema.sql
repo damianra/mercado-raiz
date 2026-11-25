@@ -345,6 +345,18 @@ END $$;
 -- por categoría; la recepción la usa como default de vencimiento.
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS vida_util_dias INTEGER;
 
+-- Backfill para bases ya pobladas (seedIfEmpty no re-sembraría):
+-- misma tabla VIDA_UTIL_CATEGORIA de seed-articulos.js. Idempotente
+-- — tras la primera pasada ninguna fila cumple el WHERE.
+UPDATE productos SET vida_util_dias = CASE categoria
+  WHEN 'Frutas y Verduras' THEN 7 WHEN 'Frescos' THEN 14
+  WHEN 'Congelados' THEN 365 WHEN 'Bebidas' THEN 365
+  WHEN 'Desayuno y Merienda' THEN 270 WHEN 'Almacén' THEN 540
+END
+WHERE vida_util_dias IS NULL
+  AND categoria IN ('Frutas y Verduras', 'Frescos', 'Congelados',
+                    'Bebidas', 'Desayuno y Merienda', 'Almacén');
+
 -- SPEC-33 (T33.1): desglose físico de stock_actual por lote con
 -- fecha de vencimiento (FEFO en ventas/mermas, alerta VENCIMIENTO).
 -- fecha_vencimiento NULL = el lote no vence (no perecedero o fecha
