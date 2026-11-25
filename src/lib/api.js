@@ -287,6 +287,12 @@ export const borrarProveedor = (id) =>
 export const getCompetenciaProducto = (productoId) =>
   apiFetch(`/productos/${productoId}/competencia`);
 
+// SPEC-32 (T32.6): sierra de stock — serie diaria de posición
+// reconstruida desde historial_stock. `serie` puede venir null si
+// el producto no tiene movimientos (R26.7) — el chart la honra.
+export const getHistorialProducto = (productoId, dias = 90) =>
+  apiFetch(`/productos/${productoId}/historial?dias=${dias}`);
+
 export const actualizarPrecio = ({ productoId, precio, motivo, confirmarBajoCosto }) =>
   apiFetch(`/productos/${productoId}/precio`, {
     method: 'PATCH',
