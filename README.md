@@ -143,6 +143,8 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-27 | Precios por proveedor y margen (`producto_proveedor`, `precio_venta`/`costo`, agente elige proveedor, vista `/quiebres`) |
 | SPEC-28 | Scorecard de métricas retail (`/api/estadisticas/metricas` + vista `/metricas`) |
 | SPEC-29 | Alertas operativas + rol BUYER (`/api/alertas`, reglas determinísticas, dashboard exclusivo `/alertas`) |
+| SPEC-30→32 | Inventario vivo (ciclo OC→recepción, ventas/ajustes, watchdog), rediseño visual, competitividad de precios — en `SPEC.md` |
+| SPEC-33 | Vencimientos y lotes (`lotes`, FEFO en ventas, `productos.vida_util_dias`) — en progreso |
 
 ## Usuarios demo
 

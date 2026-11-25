@@ -2520,6 +2520,142 @@ si falla):
   + ~53 SOBRE_MAX excluidos (~25%), ~21 SOBRE_MAX en quiebre se
   mantienen con nota de revisión.
 
+## SPEC-33 · Vencimientos y lotes — FEFO y merma por vencimiento
+
+- **Fecha:** 2026-11-25
+- **Origen:** pedido del usuario — P3 anotado en SPEC-30. El stock
+  es un solo contador; el supermercado real trabaja por lote: la
+  venta descarga lo que vence antes (FEFO), la recepción del
+  camión crea el lote con su fecha y lo que se vence en góndola se
+  merma. Hoy ese capital en riesgo es invisible — se descubre
+  cuando ya venció, si se descubre.
+- **Estado global:** ⏳ en progreso
+
+### Decisiones
+
+- **`lotes` descompone `stock_actual`, no lo reemplaza**: el
+  contador sigue siendo la fuente operativa (lo leen alertas,
+  agente, métricas y dashboard — no se migra nada); los lotes son
+  su desglose físico. Invariante: `stock_actual =
+  SUM(lotes.cantidad_actual)` por producto, **salvo divergencia
+  por sobreventa** — T30.2 permite `stock_actual < 0` (la venta es
+  un hecho físico, no se rechaza) y los lotes no bajan de 0; el
+  remanente no cubierto por lotes es la misma señal de
+  divergencia, ahora medible. Toda mutación de stock actualiza
+  lotes en la MISMA transacción que actualiza `stock_actual`.
+- **`productos.vida_util_dias INTEGER NULL`**: NULL = no
+  perecedero (Perfumería, Limpieza) → sus lotes nacen con
+  `fecha_vencimiento NULL` y nunca alertan. Las categorías
+  comestibles traen vida útil típica por categoría (seed,
+  determinística); el dato vive en la columna — administrable, y
+  el default de vencimiento en la recepción se calcula de ahí.
+- **FEFO** (`descontarFefo`): las salidas por venta y por merma
+  descuentan lotes en `fecha_vencimiento ASC NULLS LAST,
+  fecha_ingreso ASC` — lo que vence antes sale primero; el lote
+  sin vencimiento sale último (no hay apuro por rotarlo). Si la
+  salida supera la suma de lotes, se consume todo y el resto va al
+  contador (divergencia documentada arriba).
+- **Vencido ≠ baja automática**: un lote vencido con cantidad > 0
+  no se auto-descuenta — genera alerta `VENCIMIENTO` ALTA y se
+  merma por acción humana (`POST /api/lotes/:id/baja`), igual que
+  el conteo de T30.2: el dato físico lo confirma una persona, el
+  sistema no inventa mermas.
+- **Alerta `VENCIMIENTO`** en el motor de reglas (mismo lazy-eval
+  de SPEC-29): una por producto con unidades en riesgo. Ventana
+  **relativa a la vida útil**: `min(15d, floor(vida_util × 0.4))` —
+  un F&V de 7d alerta a 2d, un Almacén a 15d; el umbral absoluto
+  pondría a los perecederos cortos en alerta permanente. Severidad:
+  ALTA si ya venció o vence dentro de `max(1, ventana/3)` días,
+  MEDIA dentro de la ventana, BAJA dentro del doble (awareness
+  temprano). El mensaje lleva unidades y valor a costo; el dedup
+  24h existente aplica igual (`diasAlertaVencimiento` en
+  seed-lotes.js la comparten seed y motor).
+- **Ajuste positivo sin fecha**: un conteo que encuentra unidades
+  (ajuste hacia arriba) crea lote `origen='AJUSTE'` con
+  `fecha_vencimiento NULL` salvo que venga informada — el físico
+  encontrado no trae etiqueta; el operario puede cargarla.
+
+### Tareas
+
+- **T33.1** ✅ Schema `lotes` + `productos.vida_util_dias` + seed
+  determinístico (`seed-lotes.js`, post-catálogo como
+  seed-ventas): todo `stock_actual > 0` se descompone en 1–3
+  lotes que suman exacto; perecederos con ~10% de productos con un
+  lote dentro de su ventana de alerta (relativa a la vida útil) y
+  ~2% ya vencidos (la alerta ALTA tiene datos reales); no
+  perecederos con fecha NULL. Tests: determinismo por EAN, suma =
+  stock_actual, NULLs por categoría, ingreso ≤ hoy, ninguna parte
+  en 0 con stock chico.
+  **Implementado**: `VIDA_UTIL_CATEGORIA` en seed-articulos
+  (F&V 7d → Almacén 540d; Perfumería/Limpieza NULL) alimenta
+  `productos.vida_util_dias` (+ backfill UPDATE idempotente en
+  schema.sql para bases ya pobladas); `lotesDeProducto` (pura,
+  hash FNV-1a del EAN) reparte el excedente sobre piso 1 por parte
+  — nunca una parte en 0 (el CHECK lo haría caer el boot);
+  `fecha_ingreso = vencimiento − vida_util` con vida restante
+  ≤ vida total → ingreso jamás futuro. `seedLotes` corre tras
+  seedHistorial en `openDb` (mismo salteo en schemas de test) y
+  en `npm run seed` (que trunca `lotes` junto al dominio).
+- **T33.2** FEFO en el ciclo de vida: `aplicarVentaEnTx` descuenta
+  por lote (FOR UPDATE, spillover entre lotes); `ajustarStock`
+  negativo igual, positivo crea lote; `recibirOrden` acepta
+  `fecha_vencimiento` opcional (default `hoy + vida_util_dias`)
+  y crea el lote del ingreso. `GET /api/lotes` (filtros por
+  producto y estado vigente/próximo/vencido/agotado + días).
+  Tests: orden FEFO, spillover, recepción con/sin fecha, batch.
+- **T33.3** Alerta `VENCIMIENTO` (CHECK idempotente como T32.4) +
+  `POST /api/lotes/:id/baja` (GERENTE/ADMIN: merma por
+  vencimiento — lote a 0, descuento del contador e `historial_stock`
+  AJUSTE motivo MERMA en la misma tx; 409 si ya está en 0).
+  Tests de reglas, severidades y baja.
+- **T33.4** Vista `/vencimientos` (todos los roles no-BUYER):
+  tabla de lotes con días restantes, valor en riesgo y estado;
+  acciones por fila — "Dar de baja" (GERENTE/ADMIN) y "Liquidar"
+  que abre `AjustePrecioModal` con motivo LIQUIDACION (SPEC-32 le
+  da a ese motivo su caso de uso real); input de fecha en la
+  recepción de la OC cuando el producto es perecedero; la
+  campanita del Topbar suma VENCIMIENTO ALTA y navega a
+  `/vencimientos`. e2e de la vista y de las acciones.
+
+### Requisitos
+
+- **R33.1** `lotes(id, producto_id, codigo, cantidad_inicial,
+  cantidad_actual, fecha_vencimiento NULL, fecha_ingreso, origen,
+  orden_id NULL)` — `UNIQUE(producto_id, codigo)`, FK a productos
+  y a ordenes_compra (la OC que lo trajo, trazabilidad).
+- **R33.2** `stock_actual` y la suma de lotes se escriben juntos —
+  jamás una actualización del contador sin su espejo en lotes
+  dentro de la misma tx.
+- **R33.3** FEFO = `fecha_vencimiento ASC NULLS LAST,
+  fecha_ingreso ASC`; spillover: se consume el lote completo antes
+  de pasar al siguiente; un lote nunca queda negativo.
+- **R33.4** La recepción de OC crea exactamente un lote por la
+  `cantidad_recibida`, con `fecha_vencimiento` del body o el
+  default `fecha_recepcion + vida_util_dias` (NULL si el producto
+  no es perecedero); la OC queda linkeada en `orden_id`.
+- **R33.5** `GET /api/lotes` pagina y calcula `dias_restantes` y
+  `valor_en_riesgo` (cantidad × costo del proveedor principal)
+  server-side — el front no hace la cuenta.
+- **R33.6** La alerta VENCIMIENTO es por producto (el buyer/
+  gerente actúa sobre el SKU, no sobre la fila de lote) y el dedup
+  existente la cubre sin código nuevo.
+- **R33.7** La baja de lote exige cantidad > 0 — doble baja o lote
+  agotado por ventas → 409; en la misma tx: lote a 0, contador
+  descontado e historial con `referencia` al código de lote.
+- **R33.8** Roles como el resto del inventario: lectura de lotes
+  para todo no-BUYER; la baja comparte la matriz del ajuste de
+  stock (GERENTE/ADMIN — el APROBADOR firma compras, no mermas).
+- **R33.9** El agente no cambia: opera a nivel producto
+  (`stock_actual` ya refleja la baja). Las unidades por vencer NO
+  cuentan como cobertura sana — anotado; ponderarlas en la
+  recomendación de OC queda fuera de scope.
+
+Fuera de scope: recall por lote del proveedor (el `codigo` queda
+para esa trazabilidad futura); baja masiva por fecha; ubicación
+depósito vs góndola por lote (sigue P3); FEFO sugerido al picker
+(antes hay picking); integración del agente con la porción por
+vencer de la cobertura (R33.9).
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
