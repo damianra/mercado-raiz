@@ -90,7 +90,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-grafito">
+            <h2 className="flex items-center gap-2 font-sans tracking-tight text-2xl font-bold text-grafito">
               <ShoppingCart size={22} className="text-root" strokeWidth={1.5} />
               Solicitar pedido
             </h2>
@@ -135,7 +135,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
               submit();
             }}
           >
-            <div className="rounded-lg bg-white p-4 ring-1 ring-root/10">
+            <div className="rounded-lg bg-white p-4 ring-1 ring-grafito/10">
               <p className="text-sm font-semibold text-grafito">{data.producto.nombre}</p>
               <p className="mt-0.5 font-mono text-xs text-warmgray">
                 {data.producto.sku} · stock {data.producto.stock_actual}/
@@ -146,7 +146,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
             </div>
 
             {data.precios.length === 0 ? (
-              <p className="rounded-lg bg-white p-4 text-center text-sm text-warmgray ring-1 ring-root/10">
+              <p className="rounded-lg bg-white p-4 text-center text-sm text-warmgray ring-1 ring-grafito/10">
                 Este producto no tiene proveedores con precio activo — cargá
                 uno antes de solicitar el pedido.
               </p>
@@ -163,7 +163,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
                         className={`flex cursor-pointer items-center gap-3 rounded-lg bg-white p-3 ring-1 transition ${
                           provSel === p.proveedor_id
                             ? 'ring-2 ring-root'
-                            : 'ring-root/10 hover:ring-root/30'
+                            : 'ring-grafito/10 hover:ring-grafito/30'
                         }`}
                       >
                         <input
@@ -208,7 +208,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
                     step="1"
                     value={cantidad}
                     onChange={(e) => setCantidad(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+                    className="mt-1 h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
                   />
                   {sel && (
                     <p className="mt-1 text-xs text-warmgray">
@@ -218,7 +218,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
                 </div>
 
                 {total != null && (
-                  <div className="flex items-center justify-between rounded-lg bg-white p-4 ring-1 ring-root/10">
+                  <div className="flex items-center justify-between rounded-lg bg-white p-4 ring-1 ring-grafito/10">
                     <span className="text-sm text-warmgray">Total estimado</span>
                     <span className="font-mono text-lg font-bold text-grafito">
                       {formatMoney(total)}
@@ -238,7 +238,7 @@ export default function ComprarModal({ alerta, onClose, onPedido }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="h-12 flex-1 rounded-lg border border-root/20 text-sm font-semibold text-root transition hover:bg-root/10"
+                className="h-12 flex-1 rounded-lg border border-grafito/15 text-sm font-semibold text-root transition hover:bg-root/10"
               >
                 Cancelar
               </button>

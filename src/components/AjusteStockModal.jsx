@@ -70,7 +70,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-grafito">
+            <h2 className="flex items-center gap-2 font-sans tracking-tight text-2xl font-bold text-grafito">
               <ClipboardList size={22} className="text-root" strokeWidth={1.5} />
               Ajustar stock
             </h2>
@@ -95,7 +95,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
             submit();
           }}
         >
-          <div className="rounded-lg bg-white p-4 ring-1 ring-root/10">
+          <div className="rounded-lg bg-white p-4 ring-1 ring-grafito/10">
             <p className="text-sm font-semibold text-grafito">{producto.nombre}</p>
             <p className="mt-0.5 font-mono text-xs text-warmgray">
               {producto.sku} · stock {producto.stock_actual}/{producto.stock_minimo}
@@ -111,7 +111,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
                 <label
                   key={m.id}
                   className={`flex cursor-pointer flex-col rounded-lg bg-white p-3 ring-1 transition ${
-                    motivo === m.id ? 'ring-2 ring-root' : 'ring-root/10 hover:ring-root/30'
+                    motivo === m.id ? 'ring-2 ring-root' : 'ring-grafito/10 hover:ring-grafito/30'
                   }`}
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold text-grafito">
@@ -148,7 +148,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
               value={valor}
               onChange={(e) => setValor(e.target.value)}
               placeholder={esConteo ? 'ej: 37' : 'ej: -2'}
-              className="mt-1 h-11 w-full rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+              className="mt-1 h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
             />
             <p className="mt-1 text-xs text-warmgray">
               {esConteo
@@ -171,12 +171,12 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
               value={nota}
               onChange={(e) => setNota(e.target.value)}
               placeholder="ej: conteo semanal góndola 4"
-              className="mt-1 h-11 w-full rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+              className="mt-1 h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
             />
           </div>
 
           {resultante != null && (
-            <div className="flex items-center justify-between rounded-lg bg-white p-4 ring-1 ring-root/10">
+            <div className="flex items-center justify-between rounded-lg bg-white p-4 ring-1 ring-grafito/10">
               <span className="text-sm text-warmgray">Stock resultante</span>
               <span
                 className={`font-mono text-lg font-bold ${
@@ -198,7 +198,7 @@ export default function AjusteStockModal({ producto, onClose, onHecho }) {
             <button
               type="button"
               onClick={onClose}
-              className="h-12 flex-1 rounded-lg border border-root/20 text-sm font-semibold text-root transition hover:bg-root/10"
+              className="h-12 flex-1 rounded-lg border border-grafito/15 text-sm font-semibold text-root transition hover:bg-root/10"
             >
               Cancelar
             </button>

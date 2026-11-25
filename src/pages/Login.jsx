@@ -33,10 +33,10 @@ export default function Login() {
     <main className="grid min-h-screen place-items-center px-6 py-12">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
-          <span className="grid h-14 w-14 place-items-center rounded-lg bg-terra/90">
-            <Leaf size={26} className="text-cream" strokeWidth={1.5} />
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-root shadow-lift">
+            <Leaf size={26} className="text-white" strokeWidth={1.5} />
           </span>
-          <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-grafito">
+          <h1 className="mt-4 font-sans tracking-tight text-2xl font-bold text-grafito">
             MERCADO RAÍZ
           </h1>
           <p className="mt-1 text-sm text-warmgray">
@@ -46,7 +46,7 @@ export default function Login() {
 
         <form
           onSubmit={onSubmit}
-          className="mt-8 space-y-4 rounded-lg bg-white p-8 shadow-soft ring-1 ring-root/10"
+          className="mt-8 space-y-4 rounded-2xl bg-white p-8 shadow-lift ring-1 ring-grafito/10"
         >
           <label className="block">
             <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-warmgray">
@@ -61,7 +61,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="usuario@mercadorai.com"
-              className="h-11 w-full rounded-lg border border-root/15 bg-cream/40 px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/20"
+              className="h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/25"
             />
           </label>
 
@@ -77,7 +77,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"
-              className="h-11 w-full rounded-lg border border-root/15 bg-cream/40 px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/20"
+              className="h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/25"
             />
           </label>
 

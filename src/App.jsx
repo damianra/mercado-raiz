@@ -229,7 +229,7 @@ export default function App({ usuario }) {
           )}
         </main>
 
-        <footer className="border-t border-root/10 px-8 py-4 text-center text-xs text-warmgray">
+        <footer className="border-t border-grafito/10 px-8 py-4 text-center text-xs text-warmgray">
           MERCADO RAÍZ · Del campo a tu mesa, con inteligencia · Desde 1952 ·{' '}
           <Link to="/privacidad" className="font-semibold text-root hover:underline">
             Privacidad
@@ -264,7 +264,7 @@ function SkeletonDashboard() {
           <div key={i} className="skeleton h-28 rounded-lg" />
         ))}
       </div>
-      <div className="mt-6 rounded-lg bg-white p-4 ring-1 ring-root/10">
+      <div className="mt-6 rounded-lg bg-white p-4 ring-1 ring-grafito/10">
         <div className="skeleton h-10 w-full rounded-lg" />
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="skeleton mt-3 h-14 rounded-lg" />

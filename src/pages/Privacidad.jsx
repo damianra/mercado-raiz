@@ -31,13 +31,13 @@ const SECCIONES = [
 export default function Privacidad() {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-root/10 bg-cream/90">
+      <header className="border-b border-grafito/10 bg-cream/90">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-5">
           <span className="grid h-10 w-10 place-items-center rounded-lg bg-terra/90">
             <Leaf size={20} className="text-cream" strokeWidth={1.5} />
           </span>
           <div>
-            <p className="font-display text-lg font-bold leading-tight text-grafito">
+            <p className="font-sans tracking-tight text-lg font-bold leading-tight text-grafito">
               MERCADO RAÍZ
             </p>
             <p className="text-[11px] font-medium tracking-wide text-warmgray">
@@ -55,7 +55,7 @@ export default function Privacidad() {
           <ArrowLeft size={15} strokeWidth={1.5} /> Volver al panel
         </Link>
 
-        <h1 className="mt-6 flex items-center gap-3 font-display text-3xl font-bold tracking-tight text-grafito sm:text-4xl">
+        <h1 className="mt-6 flex items-center gap-3 font-sans tracking-tight text-3xl font-bold text-grafito sm:text-4xl">
           <ShieldCheck size={30} className="text-root" strokeWidth={1.5} />
           Política de privacidad
         </h1>
@@ -68,9 +68,9 @@ export default function Privacidad() {
           {SECCIONES.map(({ title, body }) => (
             <section
               key={title}
-              className="rounded-lg bg-white p-6 shadow-soft ring-1 ring-root/10"
+              className="rounded-lg bg-white p-6 shadow-soft ring-1 ring-grafito/10"
             >
-              <h2 className="font-display text-lg font-semibold text-grafito">
+              <h2 className="font-sans tracking-tight text-lg font-semibold text-grafito">
                 {title}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-grafito/80">{body}</p>
@@ -79,7 +79,7 @@ export default function Privacidad() {
         </div>
       </main>
 
-      <footer className="border-t border-root/10 px-8 py-4 text-center text-xs text-warmgray">
+      <footer className="border-t border-grafito/10 px-8 py-4 text-center text-xs text-warmgray">
         MERCADO RAÍZ · Del campo a tu mesa, con inteligencia · Desde 1952 ·{' '}
         <Link to="/privacidad" className="font-semibold text-root hover:underline">
           Privacidad

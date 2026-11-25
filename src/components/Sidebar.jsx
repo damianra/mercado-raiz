@@ -67,34 +67,34 @@ export default function Sidebar({ urgentes = 0, open, onClose, usuario, activeId
 
         {/* Logo */}
         <div className="flex items-center gap-3 px-2">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-terra/90">
-            <Leaf size={20} className="text-cream" strokeWidth={1.5} />
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">
+            <Leaf size={18} className="text-white" strokeWidth={1.5} />
           </span>
           <div>
-            <p className="font-display text-lg font-bold leading-tight text-white">
+            <p className="font-sans tracking-tight text-base font-bold leading-tight text-white">
               MERCADO RAÍZ
             </p>
-            <p className="text-[11px] font-medium tracking-wide text-root-light">
+            <p className="text-[11px] font-medium tracking-wide text-white/50">
               Sistema de Aprovisionamiento
             </p>
           </div>
         </div>
 
         {/* Menú */}
-        <nav className="mt-8 flex flex-col gap-1">
+        <nav className="mt-7 flex flex-col gap-0.5">
           {items.map(({ id, label, icon: Icon, to }) => {
             const active = id === activeId;
-            const cls = `relative flex h-12 items-center gap-3 rounded-lg px-4 text-sm font-medium transition-colors duration-200 ease-brand ${
+            const cls = `relative flex h-10 items-center gap-3 rounded-lg px-3.5 text-sm font-medium transition-colors duration-200 ease-brand ${
               active
-                ? 'bg-root-light/40 text-white before:absolute before:left-0 before:top-1/2 before:h-8 before:w-1 before:-translate-y-1/2 before:rounded-r before:bg-ocre'
-                : 'text-white/70 hover:bg-white/10 hover:text-white'
+                ? 'bg-white/10 text-white before:absolute before:left-0 before:top-1/2 before:h-6 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-white'
+                : 'text-white/60 hover:bg-white/5 hover:text-white'
             }`;
             const inner = (
               <>
                 <Icon size={18} strokeWidth={1.5} />
                 {label}
                 {id === 'ordenes' && urgentes > 0 && (
-                  <span className="ml-auto rounded-full bg-terra px-2 py-0.5 font-mono text-xs font-bold text-white">
+                  <span className="ml-auto rounded-full bg-terra px-1.5 py-px font-mono text-[11px] font-bold leading-4 text-white">
                     {urgentes}
                   </span>
                 )}
@@ -125,11 +125,11 @@ export default function Sidebar({ urgentes = 0, open, onClose, usuario, activeId
         </nav>
 
         {/* Footer de marca */}
-        <div className="mt-auto rounded-lg bg-white/5 p-4">
-          <p className="font-display text-sm italic text-ocre">
+        <div className="mt-auto rounded-lg bg-white/5 p-3.5 ring-1 ring-white/10">
+          <p className="text-xs font-medium italic text-white/80">
             "Del campo a tu mesa, con inteligencia"
           </p>
-          <p className="mt-1 text-[11px] text-white/50">Desde 1952</p>
+          <p className="mt-1 text-[11px] text-white/40">Desde 1952</p>
         </div>
       </aside>
     </>

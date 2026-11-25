@@ -168,7 +168,7 @@ export default function Alertas({ usuario }) {
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
               aria-label="Filtrar por tipo"
-              className="h-10 rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+              className="h-10 rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
             >
               <option value="">Todos los tipos</option>
               {Object.entries(TIPOS).map(([k, v]) => (
@@ -233,7 +233,7 @@ export default function Alertas({ usuario }) {
                   <li
                     key={a.id}
                     data-alerta-id={a.id}
-                    className={`flex items-start gap-3 rounded-2xl bg-white p-4 ring-1 ring-root/10 ${
+                    className={`flex items-start gap-3 rounded-2xl bg-white p-4 ring-1 ring-grafito/10 ${
                       a.leida ? 'opacity-60' : ''
                     }`}
                   >
@@ -274,7 +274,7 @@ export default function Alertas({ usuario }) {
                         <button
                           onClick={() => marcar(a.id)}
                           disabled={marcandoId === a.id}
-                          className="rounded-lg border border-root/20 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-lg border border-grafito/15 px-3 py-1.5 text-xs font-semibold text-root transition hover:bg-root/10 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={`Marcar leída la alerta ${a.id}`}
                         >
                           Marcar leída
@@ -302,12 +302,12 @@ export default function Alertas({ usuario }) {
 
 function Stat({ icon: Icon, label, valor, cls = 'text-grafito' }) {
   return (
-    <div className="rounded-2xl bg-white p-5 ring-1 ring-root/10">
+    <div className="rounded-2xl bg-white p-5 ring-1 ring-grafito/10">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-warmgray">
         <Icon size={14} strokeWidth={1.5} />
         {label}
       </div>
-      <div className={`mt-2 text-2xl font-bold tracking-tight ${cls}`}>{valor}</div>
+      <div className={`mt-2 text-2xl font-bold ${cls}`}>{valor}</div>
     </div>
   );
 }

@@ -53,7 +53,7 @@ export function Navbar({ brand, links = [], accent = 'indigo' }) {
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
       <nav className="max-w-6xl mx-auto px-6 h-14 flex items-center gap-6">
-        <a href="#top" className="font-bold tracking-tight text-slate-900 flex items-center gap-2">
+        <a href="#top" className="font-bold text-slate-900 flex items-center gap-2">
           <Sparkles size={16} className={a(accent).text} /> {brand}
         </a>
         <div className="ml-auto flex items-center gap-4">
@@ -78,7 +78,7 @@ export function Hero({ badge, title, subtitle, cta, accent = 'indigo' }) {
             <Sparkles size={13} /> {badge}
           </span>
         )}
-        <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="mt-4 text-4xl sm:text-5xl font-bold text-slate-900">{title}</h1>
         {subtitle && <p className="mt-4 text-base text-slate-600 max-w-2xl mx-auto">{subtitle}</p>}
         {cta && (
           <a
@@ -112,7 +112,7 @@ export function StatCard({ label, value, icon: Icon, accent = 'indigo' }) {
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
         {Icon && <Icon size={16} className={a(accent).text} />}
       </div>
-      <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -173,7 +173,7 @@ export function CTA({ title, subtitle, cta, accent = 'indigo' }) {
   return (
     <section className={`${a(accent).bg}`}>
       <div className="max-w-6xl mx-auto px-6 py-16 text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-white">{title}</h2>
+        <h2 className="text-2xl font-bold text-white">{title}</h2>
         {subtitle && <p className="mt-2 text-white/80 text-sm">{subtitle}</p>}
         {cta && (
           <a

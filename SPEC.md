@@ -56,10 +56,14 @@ mocks. El orquestador lo ejecutó en 6 pasos → los SPECs 01–07 mapean
 - **R1.1** Paleta del brief como tokens Tailwind: `root #2D5F3F`,
   `terra #C8553D`, `cream #F5F1E8`, `ocre #D4A574`, `grafito #2C2C2C`,
   `warmgray #8B8680`, `success #4A7C59`, `info #5B7B8F`.
+  → superseded por SPEC-31 (valores retokenizados a base stone;
+  los nombres de clase se conservan).
 - **R1.2** Tipografía: `font-display` = Playfair Display (títulos),
   `font-sans` = Inter (UI), `font-mono` = JetBrains Mono (SKUs/datos).
+  → superseded por SPEC-31 (`font-display` eliminado; Inter en todo).
 - **R1.3** Sombras `soft`/`lift` con tinte verde raíz; easing
   `ease-brand` = `cubic-bezier(0.4, 0, 0.2, 1)`; radius 8px.
+  → sombras superseded por SPEC-31 (tinte neutro stone).
 - **R1.4** Layout: sidebar fija 240px (colapsable mobile con overlay +
   Escape) + contenido fluido con topbar.
 - **R1.5** Solo se renderizan ítems de navegación con destino real
@@ -2298,6 +2302,59 @@ Estas tareas convierten el sistema en herramienta diaria.
   gerente. Canal externo (email/webhook) queda fuera de scope: la
   campanita con poll 60s cubre "llegar sin entrar a mirar" en la
   demo.
+
+## SPEC-31 · Rediseño visual corporativo
+
+La estética actual ("campo cálido": crema + terracota + Playfair
+serif) vende bien el negocio pero lee rústica en la demo. Se pasa a
+un sistema visual corporativo moderno **manteniendo la identidad**:
+el verde `root` sigue siendo el acento de marca, sobre una base
+neutra limpia (stone/slate) y con densidad de dashboard SaaS.
+
+Decisiones (del usuario): **moderna con identidad** + **Inter en
+todo** — se elimina Playfair Display por completo (`font-display`
+→ `font-sans font-bold tracking-tight` en todos los usos, ~13
+archivos).
+
+- **T31.1** Design tokens: `tailwind.config.js` — base neutra
+  (fondo `stone-100`, texto `stone-800`), verde `root` como acento,
+  `terra` solo para lo destructivo/crítico; `cream`/`ocre`/`warmgray`
+  se mapean a neutros o se retiran del uso común. Sombras más
+  sutiles (`ring-1` + shadow-xs en vez de lift pesado). `index.css`
+  sin los radiales cálidos.
+- **T31.2** Sidebar + Topbar: ítems con indicador de activo, badges
+  con dot, densidad compacta, campana rediseñada.
+- **T31.3** Sweep de superficies: Login (hero con identidad pero
+  Inter), tablas (encabezados compactos, hover, sticky si aplica),
+  cards/KPIs, chips de estado con dot, modales y formularios,
+  empty/error states. Todas las páginas.
+
+Fuera de scope: dark mode, rebranding (logo/nombre/colores de marca
+cambian — solo se moderniza la ejecución), librería de componentes
+externa.
+
+**Implementado** (T31.1+T31.2+T31.3): retokenización completa —
+`cream`→stone-100, `warmgray`→stone-500, `grafito`→stone-900,
+`ocre`→amber-700; `font-display` eliminado (Playfair fuera del
+bundle y del HTML — `font-sans tracking-tight` en los ~21 usos);
+sombras neutras; body sin radiales. Sidebar: items h-10,
+indicador activo blanco, badge compacto, logo con ring.
+Topbar: h-14, fondo blanco translúcido, avatar 32px con ring.
+Badges de OC: chips con dot (`dot:` en `ESTADOS`). KPI cards con
+chip de ícono tintado y valor en `text-grafito`. Login: bloque de
+marca verde, card rounded-2xl. CTAs primarios en `root` (terra
+solo para crítico/destructivo). Rings/borders estructurales a
+`grafito` — `root` queda reservado como acento (focus, links,
+activos).
+
+**Bug encontrado por la suite**: race condition en `cargar` de
+Usuarios y Proveedores — StrictMode dispara el listado x2 y el
+debounce de búsqueda un tercero; ganaba el último *response* (no
+el último request) → una respuesta sin filtrar podía pisar el
+resultado filtrado (la latencia extra del lazy-eval de alertas
+post-seed lo hizo visible en e2e). Fix: guard de secuencia
+`reqSeq` — solo el request más reciente escribe `lista`/`error`/
+`cargando`.
 
 Fuera de scope (P3, anotado): vencimientos/lotes, depósito vs
 góndola como ubicaciones de stock, tickets/cesta, promos,

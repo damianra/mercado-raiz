@@ -63,7 +63,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-grafito">
+            <h2 className="flex items-center gap-2 font-sans tracking-tight text-2xl font-bold text-grafito">
               <ShoppingBag size={22} className="text-root" strokeWidth={1.5} />
               Registrar venta
             </h2>
@@ -87,7 +87,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
             submit();
           }}
         >
-          <div className="rounded-lg bg-white p-4 ring-1 ring-root/10">
+          <div className="rounded-lg bg-white p-4 ring-1 ring-grafito/10">
             <p className="text-sm font-semibold text-grafito">{producto.nombre}</p>
             <p className="mt-0.5 font-mono text-xs text-warmgray">
               {producto.sku} · stock {producto.stock_actual}/{producto.stock_minimo}
@@ -110,7 +110,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
                 step="1"
                 value={unidades}
                 onChange={(e) => setUnidades(e.target.value)}
-                className="mt-1 h-11 w-full rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+                className="mt-1 h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
               />
             </div>
             <div>
@@ -124,7 +124,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
                 id="venta-canal"
                 value={canal}
                 onChange={(e) => setCanal(e.target.value)}
-                className="mt-1 h-11 w-full rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+                className="mt-1 h-11 w-full rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
               >
                 {CANALES.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -136,7 +136,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
           </div>
 
           {resultante != null && (
-            <div className="rounded-lg bg-white p-4 ring-1 ring-root/10">
+            <div className="rounded-lg bg-white p-4 ring-1 ring-grafito/10">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-warmgray">Stock resultante</span>
                 <span
@@ -167,7 +167,7 @@ export default function VentaModal({ producto, onClose, onHecho }) {
             <button
               type="button"
               onClick={onClose}
-              className="h-12 flex-1 rounded-lg border border-root/20 text-sm font-semibold text-root transition hover:bg-root/10"
+              className="h-12 flex-1 rounded-lg border border-grafito/15 text-sm font-semibold text-root transition hover:bg-root/10"
             >
               Cancelar
             </button>

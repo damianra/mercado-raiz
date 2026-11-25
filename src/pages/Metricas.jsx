@@ -57,7 +57,7 @@ export default function Metricas({ usuario }) {
         <Topbar usuario={usuario} onMenu={() => setMenuOpen(true)} onLogout={logout} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
           <header className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight text-grafito">
+            <h1 className="text-3xl font-bold text-grafito">
               Métricas del negocio
             </h1>
             <p className="mt-1 text-sm text-warmgray">
@@ -121,7 +121,7 @@ export default function Metricas({ usuario }) {
               </div>
 
               <div className="mb-6 grid gap-4 lg:grid-cols-2">
-                <section className="rounded-2xl bg-white p-5 ring-1 ring-root/10">
+                <section className="rounded-2xl bg-white p-5 ring-1 ring-grafito/10">
                   <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-warmgray">
                     <TriangleAlert size={14} strokeWidth={1.5} />
                     Riesgo de quiebre (cobertura vs lead)
@@ -135,7 +135,7 @@ export default function Metricas({ usuario }) {
                   </div>
                 </section>
 
-                <section className="rounded-2xl bg-white p-5 ring-1 ring-root/10">
+                <section className="rounded-2xl bg-white p-5 ring-1 ring-grafito/10">
                   <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-warmgray">
                     <Boxes size={14} strokeWidth={1.5} />
                     Inventario
@@ -157,14 +157,14 @@ export default function Metricas({ usuario }) {
                 </section>
               </div>
 
-              <section className="overflow-x-auto rounded-2xl bg-white ring-1 ring-root/10">
+              <section className="overflow-x-auto rounded-2xl bg-white ring-1 ring-grafito/10">
                 <h2 className="flex items-center gap-2 px-5 pt-5 text-sm font-semibold uppercase tracking-wide text-warmgray">
                   <Truck size={14} strokeWidth={1.5} />
                   Scorecard de proveedores
                 </h2>
                 <table className="mt-3 w-full min-w-[820px] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-root/10 text-xs uppercase tracking-wide text-warmgray">
+                    <tr className="border-b border-grafito/10 text-xs uppercase tracking-wide text-warmgray">
                       <th className="px-5 py-3">Proveedor</th>
                       <th className="px-4 py-3 text-right">SKUs</th>
                       <th className="px-4 py-3 text-right">Lead esp.</th>
@@ -177,7 +177,7 @@ export default function Metricas({ usuario }) {
                   </thead>
                   <tbody>
                     {m.proveedores.map((p) => (
-                      <tr key={p.id} className="border-b border-root/5 last:border-0 hover:bg-root/5">
+                      <tr key={p.id} className="border-b border-grafito/5 last:border-0 hover:bg-root/5">
                         <td className="px-5 py-3 font-medium text-grafito">{p.nombre}</td>
                         <td className="px-4 py-3 text-right text-grafito">{p.skus}</td>
                         <td className="px-4 py-3 text-right text-grafito">
@@ -209,12 +209,12 @@ export default function Metricas({ usuario }) {
 
 function Stat({ icon: Icon, label, valor, detalle }) {
   return (
-    <div className="rounded-2xl bg-white p-5 ring-1 ring-root/10">
+    <div className="rounded-2xl bg-white p-5 ring-1 ring-grafito/10">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-warmgray">
         <Icon size={14} strokeWidth={1.5} />
         {label}
       </div>
-      <div className="mt-2 text-2xl font-bold tracking-tight text-grafito">{valor}</div>
+      <div className="mt-2 text-2xl font-bold text-grafito">{valor}</div>
       <div className="mt-1 text-xs text-warmgray">{detalle}</div>
     </div>
   );

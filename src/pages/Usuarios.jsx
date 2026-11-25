@@ -58,16 +58,22 @@ export default function Usuarios({ usuario }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const timers = useRef([]);
   const debounce = useRef(null);
+  // Guard de secuencia: con fetches solapados (StrictMode x2 +
+  // debounce de búsqueda) gana el último request, no el último
+  // response — un response viejo nunca pisa el resultado nuevo.
+  const reqSeq = useRef(0);
 
   const cargar = useCallback(async (pagina = page, q = search, rol = filtroRol) => {
+    const reqId = ++reqSeq.current;
     setCargando(true);
     setError(null);
     try {
-      setLista(await getUsuarios({ page: pagina, search: q, rol }));
+      const r = await getUsuarios({ page: pagina, search: q, rol });
+      if (reqId === reqSeq.current) setLista(r);
     } catch (e) {
-      setError(e);
+      if (reqId === reqSeq.current) setError(e);
     }
-    setCargando(false);
+    if (reqId === reqSeq.current) setCargando(false);
   }, [page, search, filtroRol]);
 
   useEffect(() => {
@@ -132,7 +138,7 @@ export default function Usuarios({ usuario }) {
         <main className="flex-1 space-y-6 p-4 sm:p-8">
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="font-display text-2xl font-bold tracking-tight text-grafito">
+              <h1 className="font-sans tracking-tight text-2xl font-bold text-grafito">
                 Gestión de usuarios
               </h1>
               <p className="mt-1 text-sm text-warmgray">
@@ -161,7 +167,7 @@ export default function Usuarios({ usuario }) {
                 onChange={(e) => onSearch(e.target.value)}
                 placeholder="Buscar por nombre o email…"
                 aria-label="Buscar usuarios"
-                className="h-10 w-full rounded-lg border border-root/15 bg-white pl-9 pr-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/20"
+                className="h-10 w-full rounded-lg border border-grafito/15 bg-white pl-9 pr-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-grafito/15"
               />
             </label>
             <select
@@ -171,7 +177,7 @@ export default function Usuarios({ usuario }) {
                 setPage(1);
               }}
               aria-label="Filtrar por rol"
-              className="h-10 rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+              className="h-10 rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
             >
               <option value="">Todos los roles</option>
               {ROLES.map((r) => (
@@ -194,7 +200,7 @@ export default function Usuarios({ usuario }) {
               }
             />
           ) : cargando ? (
-            <div aria-busy="true" aria-label="Cargando usuarios" className="rounded-2xl bg-white p-4 ring-1 ring-root/10">
+            <div aria-busy="true" aria-label="Cargando usuarios" className="rounded-2xl bg-white p-4 ring-1 ring-grafito/10">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="skeleton mb-3 h-12 rounded-lg" />
               ))}
@@ -210,10 +216,10 @@ export default function Usuarios({ usuario }) {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-root/10">
+            <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-grafito/10">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-root/10 text-xs font-semibold uppercase tracking-wide text-warmgray">
+                  <tr className="border-b border-grafito/10 text-xs font-semibold uppercase tracking-wide text-warmgray">
                     <th className="px-4 py-3">Usuario</th>
                     <th className="px-4 py-3">Rol</th>
                     <th className="px-4 py-3">Estado</th>
@@ -225,7 +231,7 @@ export default function Usuarios({ usuario }) {
                   {usuarios.map((u) => {
                     const esSelf = u.id === usuario.id;
                     return (
-                      <tr key={u.id} className="border-b border-root/5 last:border-0">
+                      <tr key={u.id} className="border-b border-grafito/5 last:border-0">
                         <td className="px-4 py-3">
                           <p className="font-semibold text-grafito">
                             {u.nombre}
@@ -300,7 +306,7 @@ export default function Usuarios({ usuario }) {
               </table>
 
               {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between border-t border-root/10 px-4 py-3 text-sm text-warmgray">
+                <div className="flex items-center justify-between border-t border-grafito/10 px-4 py-3 text-sm text-warmgray">
                   <span>
                     Página {pagination.page} de {pagination.totalPages}
                   </span>
@@ -308,14 +314,14 @@ export default function Usuarios({ usuario }) {
                     <button
                       onClick={() => { setPage(page - 1); cargar(page - 1); }}
                       disabled={page <= 1}
-                      className="rounded-lg border border-root/15 px-3 py-1.5 font-semibold transition hover:bg-root/10 disabled:opacity-40"
+                      className="rounded-lg border border-grafito/15 px-3 py-1.5 font-semibold transition hover:bg-root/10 disabled:opacity-40"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => { setPage(page + 1); cargar(page + 1); }}
                       disabled={page >= pagination.totalPages}
-                      className="rounded-lg border border-root/15 px-3 py-1.5 font-semibold transition hover:bg-root/10 disabled:opacity-40"
+                      className="rounded-lg border border-grafito/15 px-3 py-1.5 font-semibold transition hover:bg-root/10 disabled:opacity-40"
                     >
                       Siguiente
                     </button>
@@ -326,7 +332,7 @@ export default function Usuarios({ usuario }) {
           )}
         </main>
 
-        <footer className="border-t border-root/10 px-8 py-4 text-center text-xs text-warmgray">
+        <footer className="border-t border-grafito/10 px-8 py-4 text-center text-xs text-warmgray">
           MERCADO RAÍZ · Del campo a tu mesa, con inteligencia · Desde 1952 ·{' '}
           <Link to="/privacidad" className="font-semibold text-root hover:underline">
             Privacidad
@@ -429,7 +435,7 @@ function UsuarioModal({ usuario, esSelf, onClose, onSaved }) {
   };
 
   const inputCls =
-    'h-11 w-full rounded-lg border border-root/15 bg-cream/40 px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-root/20 disabled:opacity-60';
+    'h-11 w-full rounded-lg border border-grafito/15 bg-cream/40 px-3 text-sm text-grafito outline-none transition placeholder:text-warmgray/70 focus:border-root focus:ring-2 focus:ring-grafito/15 disabled:opacity-60';
 
   return (
     <div
@@ -445,10 +451,10 @@ function UsuarioModal({ usuario, esSelf, onClose, onSaved }) {
           submit();
         }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-lift ring-1 ring-root/10"
+        className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-lift ring-1 ring-grafito/10"
       >
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-lg font-bold text-grafito">
+          <h3 className="font-sans tracking-tight text-lg font-bold text-grafito">
             {esEdicion ? `Editar ${usuario.nombre}` : 'Nuevo usuario'}
           </h3>
           <button

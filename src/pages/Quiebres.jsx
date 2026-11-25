@@ -154,7 +154,7 @@ export default function Quiebres({ usuario }) {
         <Topbar usuario={usuario} onMenu={() => setMenuOpen(true)} onLogout={logout} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
           <header className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight text-grafito">
+            <h1 className="text-3xl font-bold text-grafito">
               Quiebres de stock
             </h1>
             <p className="mt-1 text-sm text-warmgray">
@@ -189,7 +189,7 @@ export default function Quiebres({ usuario }) {
               value={filtro}
               onChange={(e) => setFiltro(e.target.value)}
               aria-label="Filtrar por estado"
-              className="h-10 rounded-lg border border-root/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-root/20"
+              className="h-10 rounded-lg border border-grafito/15 bg-white px-3 text-sm text-grafito outline-none focus:border-root focus:ring-2 focus:ring-grafito/15"
             >
               <option value="">Sin stock + en riesgo</option>
               <option value="stock0">Solo sin stock</option>
@@ -214,7 +214,7 @@ export default function Quiebres({ usuario }) {
             <div
               aria-busy="true"
               aria-label="Cargando quiebres"
-              className="rounded-2xl bg-white p-4 ring-1 ring-root/10"
+              className="rounded-2xl bg-white p-4 ring-1 ring-grafito/10"
             >
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="skeleton mb-3 h-12 rounded-lg" />
@@ -227,10 +227,10 @@ export default function Quiebres({ usuario }) {
               message="Ningún producto está sin stock ni por debajo del mínimo."
             />
           ) : (
-            <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-root/10">
+            <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-grafito/10">
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-root/10 text-xs uppercase tracking-wide text-warmgray">
+                  <tr className="border-b border-grafito/10 text-xs uppercase tracking-wide text-warmgray">
                     <th className="px-4 py-3">Producto</th>
                     <th className="px-4 py-3">Categoría</th>
                     <th className="px-4 py-3 text-right">Stock</th>
@@ -246,7 +246,7 @@ export default function Quiebres({ usuario }) {
                   {visibles.map((f) => (
                     <tr
                       key={f.id}
-                      className="border-b border-root/5 last:border-0 hover:bg-root/5"
+                      className="border-b border-grafito/5 last:border-0 hover:bg-root/5"
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-grafito">{f.nombre}</div>
@@ -333,12 +333,12 @@ export default function Quiebres({ usuario }) {
 
 function Stat({ icon: Icon, label, valor, detalle }) {
   return (
-    <div className="rounded-2xl bg-white p-5 ring-1 ring-root/10">
+    <div className="rounded-2xl bg-white p-5 ring-1 ring-grafito/10">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-warmgray">
         <Icon size={14} strokeWidth={1.5} />
         {label}
       </div>
-      <div className="mt-2 text-2xl font-bold tracking-tight text-grafito">{valor}</div>
+      <div className="mt-2 text-2xl font-bold text-grafito">{valor}</div>
       <div className="mt-1 text-xs text-warmgray">{detalle}</div>
     </div>
   );

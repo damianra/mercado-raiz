@@ -14,6 +14,7 @@ export default function StatsCards({ stats }) {
       value: stats.pendientes,
       icon: Clock,
       iconColor: 'text-ocre',
+      iconBg: 'bg-ocre/10',
       trend:
         stats.tendenciaPendientes == null
           ? { dir: 'up', text: 'Aprobar hoy' }
@@ -29,6 +30,7 @@ export default function StatsCards({ stats }) {
       value: stats.aprobadas,
       icon: CheckCircle2,
       iconColor: 'text-success',
+      iconBg: 'bg-success/10',
       trend: { dir: 'up', text: 'Esta semana' },
     },
     {
@@ -36,6 +38,7 @@ export default function StatsCards({ stats }) {
       value: stats.valorTotal,
       icon: Banknote,
       iconColor: 'text-root',
+      iconBg: 'bg-root/10',
       trend: { dir: 'up', text: 'Este mes' },
     },
     {
@@ -43,24 +46,27 @@ export default function StatsCards({ stats }) {
       value: stats.stockBajo,
       icon: Package,
       iconColor: 'text-terra',
+      iconBg: 'bg-terra/10',
       trend: { dir: 'down', text: 'Productos en mínimo' },
     },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {cards.map(({ label, value, icon: Icon, iconColor, trend }) => (
+      {cards.map(({ label, value, icon: Icon, iconColor, iconBg, trend }) => (
         <div
           key={label}
-          className="rounded-lg bg-white p-5 shadow-soft ring-1 ring-root/10 transition-all duration-200 ease-brand hover:shadow-lift sm:p-6"
+          className="rounded-xl bg-white p-5 shadow-soft ring-1 ring-grafito/10 transition-shadow duration-200 ease-brand hover:shadow-lift"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-warmgray">
               {label}
             </span>
-            <Icon size={20} strokeWidth={1.5} className={iconColor} />
+            <span className={`grid h-8 w-8 place-items-center rounded-lg ${iconBg}`}>
+              <Icon size={16} strokeWidth={1.75} className={iconColor} />
+            </span>
           </div>
-          <p className="tabular mt-2 font-display text-3xl font-bold text-root sm:text-4xl">
+          <p className="tabular mt-2.5 font-sans tracking-tight text-3xl font-bold text-grafito">
             {value}
           </p>
           <p
