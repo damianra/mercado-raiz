@@ -2369,7 +2369,7 @@ escala).
   Día, Coto, Carrefour y La Anónima para los 1.471 artículos) con
   ventas/costos/stock propios para generar accionables; además
   gráficos que comuniquen el valor (no solo números).
-- **Estado global:** 🚧 en progreso
+- **Estado global:** ✅ cerrada — 8/8 tareas mergeadas (PRs #62–#69)
 - **Contexto:** SPEC-22 dejó el CSV como asset de referencia sin
   vínculo en DB y fijó `precio_venta` con factor 0.88–1.18 sobre
   el punto medio del mercado (~8% bajo el mínimo, ~71% en rango,
