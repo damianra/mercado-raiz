@@ -106,3 +106,18 @@ test('secciones gráficas: ventas, competitividad, capital y pricing accionable'
   ).toBeVisible();
   await expect(page.getByLabel('Posición de precio en el mercado')).toBeVisible();
 });
+
+test('deep-link ?ajustar= abre el modal de precio directo (T32.8)', async ({
+  page,
+}) => {
+  await login(page, GERENTE);
+  // la campanita navega a /metricas?ajustar=<id> — el producto no
+  // necesita estar listado en la tabla de outliers.
+  await page.goto('/metricas?ajustar=1');
+  const modal = page.getByRole('dialog', { name: 'Ajustar precio' });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  // el modal hidrata producto + competencia: sku MR00001 y la
+  // escalera de precios con datos de mercado.
+  await expect(modal).toContainText('MR00001');
+  await expect(modal).toContainText(/\$/);
+});

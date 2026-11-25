@@ -25,6 +25,7 @@ import {
   getCompetitividad,
   getMetricas,
   getPricing,
+  getProducto,
   getVentasDiarias,
 } from '../lib/api.js';
 import { logout } from '../lib/auth.js';
@@ -60,6 +61,22 @@ export default function Metricas({ usuario }) {
     () => () => timers.current.forEach(clearTimeout),
     [],
   );
+
+  // T32.8: deep-link de la campanita — /metricas?ajustar=<id> abre
+  // el modal "Ajustar precio" del producto aunque no esté listado
+  // en la tabla de outliers (alertas de pricing sobre in-range).
+  useEffect(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('ajustar'));
+    if (!Number.isInteger(id) || id <= 0) return;
+    // replaceState (no navigate): no queremos re-abrir el modal si
+    // el usuario recarga o vuelve con Back.
+    window.history.replaceState(null, '', '/metricas');
+    getProducto(id)
+      .then((p) =>
+        setPrecio({ id: p.id, sku: p.sku, nombre: p.nombre, precio_venta: p.precio_venta }),
+      )
+      .catch(() => {}); // id inexistente → la página carga normal
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);

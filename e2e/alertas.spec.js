@@ -130,11 +130,11 @@ test('otros roles no ven /alertas (ADMIN → 404)', async ({ page }) => {
 // donde actúa (venta/ajuste/conteo).
 const GERENTE = { email: 'carlos.martinez@mercadorai.com', password: 'demo-gerente-2026' };
 
-test('la campanita lleva las alertas ALTA al GERENTE y navega a Quiebres', async ({
+test('la campanita lleva las alertas ALTA al GERENTE y navega al destino correcto', async ({
   page,
 }) => {
   await login(page, GERENTE);
-  // Badge sin abrir: las ALTA no leídas del seed (QUIEBRE, lazy eval)
+  // Badge sin abrir: las ALTA no leídas del seed (lazy eval)
   const campana = page.getByRole('button', { name: /Notificaciones/ });
   await expect(campana.locator('span')).toBeVisible();
 
@@ -142,10 +142,25 @@ test('la campanita lleva las alertas ALTA al GERENTE y navega a Quiebres', async
   const menu = page.locator('div[role="menu"]');
   await expect(menu.getByText('Alertas de stock')).toBeVisible();
 
-  // La primera sección son las ALTA — click navega a /quiebres.
-  await menu.locator('ul').first().getByRole('menuitem').first().click();
-  await expect(page).toHaveURL(/\/quiebres/);
-  await expect(
-    page.getByRole('heading', { name: 'Quiebres de stock' }),
-  ).toBeVisible();
+  // T32.8: el destino depende del tipo — QUIEBRE → /quiebres;
+  // pricing (PRESION/FUERA_MERCADO/OPORTUNIDAD/DEAD_STOCK) →
+  // /metricas?ajustar=<id> y el modal "Ajustar precio" se abre.
+  const item = menu.locator('ul').first().getByRole('menuitem').first();
+  const esQuiebre = ((await item.textContent()) ?? '').includes('sin stock');
+  await item.click();
+  if (esQuiebre) {
+    await expect(page).toHaveURL(/\/quiebres/);
+    await expect(
+      page.getByRole('heading', { name: 'Quiebres de stock' }),
+    ).toBeVisible();
+  } else {
+    await expect(page).toHaveURL(/\/metricas/);
+    // pricing con producto → modal abierto; ORDEN_PENDIENTE →
+    // la página sin modal. Ambos son destinos válidos.
+    await expect(
+      page
+        .getByRole('dialog', { name: 'Ajustar precio' })
+        .or(page.getByRole('heading', { name: 'Métricas del negocio' })),
+    ).toBeVisible({ timeout: 15_000 });
+  }
 });
