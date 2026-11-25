@@ -79,7 +79,7 @@ export async function resumenCompetitividad() {
     `SELECT p.id AS producto_id, p.precio_venta, p.categoria,
             pc.cadena, pc.precio, pc.precio_lista, pc.fecha_snapshot::text AS fecha_snapshot
        FROM productos p
-       JOIN (SELECT DISTINCT ON (producto_id, cadena)
+       LEFT JOIN (SELECT DISTINCT ON (producto_id, cadena)
                     producto_id, cadena, precio, precio_lista, sku_cadena, fecha_snapshot
                FROM precios_competencia
               ORDER BY producto_id, cadena, fecha_snapshot DESC) pc
@@ -111,6 +111,7 @@ export async function resumenCompetitividad() {
     cat[zona]++;
     porCategoria.set(categoria, cat);
     for (const r of lista) {
+      if (r.cadena == null) continue; // LEFT JOIN: producto sin snapshot
       const agg = cadenaAgg.get(r.cadena);
       if (r.precio == null) continue; // cadena sin dato del SKU
       agg.con_dato_n++;

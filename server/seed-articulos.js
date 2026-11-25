@@ -98,7 +98,10 @@ function parseCsv() {
     if (c.length !== COLUMNAS_CSV) {
       throw new Error(`CSV fila ${i + 2}: ${c.length} columnas, esperadas ${COLUMNAS_CSV}`);
     }
-    const num = (v) => (v === '' ? null : Number(v));
+    const num = (v) => {
+      const n = v === '' ? null : Number(v);
+      return Number.isFinite(n) ? n : null; // NaN jamás llega a la DB
+    };
     const txt = (v) => (v === '' ? null : v.trim());
     return {
       nombre: c[1].trim(),
