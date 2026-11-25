@@ -5,6 +5,7 @@
 // los re-imports conviven (R32.1), así que siempre se consulta la
 // más nueva, nunca "la tabla entera".
 import { openDb } from '../db.js';
+import { fetchSnapshotCompetencia } from '../integrations/competencia-dwh.js';
 
 export const CADENAS = ['DIA', 'COTO', 'CARREFOUR', 'LA_ANONIMA'];
 
@@ -242,7 +243,6 @@ export async function pricingAccionable(dias = 90, limite = 15) {
 // re-sync de la misma fecha no toca nada, una fecha nueva
 // agrega filas sin pisar el historial.
 export async function sincronizarCompetencia() {
-  const { fetchSnapshotCompetencia } = await import('../integrations/competencia-dwh.js');
   const snap = await fetchSnapshotCompetencia();
   const db = await openDb();
   const eanAId = new Map(

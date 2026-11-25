@@ -15,7 +15,9 @@
 // items cuyo ean no matchea se reportan como `sin_match`.
 import { FECHA_SNAPSHOT_COMPETENCIA, parseCsv } from '../seed-articulos.js';
 
-const TIMEOUT_MS = Number(process.env.COMPETENCIA_DWH_TIMEOUT_MS) || 10_000;
+// Config leída por llamada (no a nivel módulo): permite cambiar
+// la fuente sin restart — y a los tests apuntar a un stub.
+const timeoutMs = () => Number(process.env.COMPETENCIA_DWH_TIMEOUT_MS) || 10_000;
 
 // La URL configurada es el endpoint del snapshot completo
 // (GET → JSON con el contrato de arriba).
@@ -57,7 +59,7 @@ function validarPayload(payload) {
 // externa esté disponible: el resto del pipeline es idéntico.
 async function snapshotRemoto(url) {
   const res = await fetch(url, {
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs()),
     headers: { accept: 'application/json' },
   });
   if (!res.ok) throw new Error(`DWH competencia respondió ${res.status}`);
