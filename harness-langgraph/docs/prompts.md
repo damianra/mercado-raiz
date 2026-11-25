@@ -11,7 +11,11 @@ un solo trabajo por llamada, y NUNCA aritmética libre.
 
 **Entrada**: nombre, SKU, categoría, stock actual/mínimo y las
 estadísticas de demanda del backend (SPEC-26): media ponderada,
-desvío σ, CV, pendiente, días con venta/quiebre y última venta.
+desvío σ, CV, pendiente, días con venta/quiebre, última venta y
+posición competitiva del precio (T32.5: `zona_precio` +
+`indice_precio` — más barato del mercado / en rango / sobre el
+máximo — para que el modelo la mencione en `observacion` cuando
+es relevante para la reposición).
 
 **Salida esperada** (validada con zod):
 
@@ -63,7 +67,10 @@ respuesta ↔ producto). **Salida esperada**:
 `src/langgraph/prompts/generar-analisis.js`
 
 **Entrada**: todos los números YA decididos (demanda, cantidad,
-monto, proveedor, lead time).
+monto, proveedor, lead time) + posición competitiva (T32.5: si el
+análisis trae `revision_precio` — SOBRE_MAX en quiebre real — la
+justificación DEBE recomendar revisar el precio antes de reponer;
+el template fallback la agrega siempre).
 
 **Salida**: texto libre de 2-3 oraciones para `analisis_ia` de la
 orden — lo que lee el humano en el modal del dashboard.

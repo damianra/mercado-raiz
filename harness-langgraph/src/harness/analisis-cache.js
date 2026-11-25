@@ -97,6 +97,11 @@ export function hashAnalisis(producto, stats) {
       stats.dias_con_venta,
       stats.dias_en_quiebre,
       stats.ultima_venta,
+      // T32.5: la zona/índice competitivo entran al prompt — un
+      // cambio de posición de precio invalida el cache como
+      // cualquier otro input.
+      stats.zona_precio,
+      stats.indice_precio,
     ],
     producto: [
       producto.sku,

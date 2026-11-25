@@ -20,10 +20,17 @@ import { config } from '../../config/env.js';
 import { log } from '../../utils/logger.js';
 
 function fallbackTexto(p, analisis, cantidad, monto) {
+  // T32.5: la nota de revisión de precio es obligatoria en la OC
+  // de un SOBRE_MAX en quiebre real — en el template va siempre
+  // (es determinista, no depende de que el LLM la recuerde).
+  const notaPrecio = analisis.revision_precio
+    ? ' Precio sobre el máximo del mercado: revisar precio antes de reponer.'
+    : '';
   return (
     `Stock en ${p.stock_actual} unidades (mínimo ${p.stock_minimo}). ` +
     `Demanda estimada: ${analisis.demanda_diaria} u/día (${analisis.tendencia}). ` +
-    `Se recomienda ordenar ${cantidad} unidades por $${monto.toFixed(2)}.`
+    `Se recomienda ordenar ${cantidad} unidades por $${monto.toFixed(2)}.` +
+    notaPrecio
   );
 }
 
@@ -43,11 +50,18 @@ async function justificarUno(state, p) {
   // demanda → misma cantidad/monto) → la justificación también es
   // la misma; reusarla ahorra la llamada más cara del grafo.
   const hash = state.hashPorProducto?.[p.id];
-  // σ es dato del backend adjuntado al estado (SPEC-26), no output
-  // del LLM — el cache solo persiste {demanda_diaria,tendencia,
-  // observacion}: sin strip, mismoAnalisis nunca matchea y los dos
-  // caches quedan ciegos para los productos volátiles.
-  const { desvio_demanda: _sigma, ...analisisBase } = analisis;
+  // σ y la posición competitiva son datos del backend adjuntados
+  // al estado (SPEC-26/T32.5), no output del LLM — el cache solo
+  // persiste {demanda_diaria,tendencia,observacion}: sin strip,
+  // mismoAnalisis nunca matchea y los dos caches quedan ciegos
+  // para los productos volátiles.
+  const {
+    desvio_demanda: _sigma,
+    zona_precio: _zona,
+    indice_precio: _indice,
+    revision_precio: _rev,
+    ...analisisBase
+  } = analisis;
   // Cache fail-soft: un read caído es un miss, no aborta la corrida.
   const cacheada = hash ? await buscarJustificacion(p.id, hash, analisisBase).catch(() => null) : null;
   if (cacheada) {

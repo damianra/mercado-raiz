@@ -1,13 +1,31 @@
 /**
  * NODO 2 — ANALIZAR DEMANDA (nodo con LLM)
  *
- * Lee del estado: productosBajos. Corre en dos fases:
+ * Lee del estado: productosBajos. Escribe: productosBajos (recortado
+ * por el guard), excluidos, analisisPorProducto, hashPorProducto,
+ * errores. Corre en tres fases:
  *
- *  Fase A (paralela, `prepararUno`): por cada producto trae las
- *  estadísticas de demanda del backend (estadisticas.client →
- *  GET /api/estadisticas/demanda, SPEC-26), calcula el hash del
- *  input (cache, SPEC-16) y aplica el triage (SPEC-12/R26.8):
- *   - sin ventas en la ventana → demanda 0 determinística, sin LLM;
+ *  Fase 0 — stats + guard (T32.5): `cargarStats` trae las
+ *  estadísticas de demanda de TODOS los productos en UNA request
+ *  (GET /api/estadisticas/demanda bulk — si falla, degrada al
+ *  fetch por producto). Con ellas `clasificarCandidato` aplica el
+ *  guard anti-recompra antes de cualquier LLM:
+ *   - DEAD_STOCK (dias_con_venta === 0 en la ventana): excluido —
+ *     re-poner stock muerto inmoviliza más capital;
+ *   - SOBRE_MAX (precio sobre el máximo del mercado): excluido —
+ *     re-poner un producto sobre-preciado alimenta ventas lentas;
+ *   - EXCEPCIÓN: SOBRE_MAX en quiebre real (stock ≤0 con demanda
+ *     viva, demanda_diaria > 0) SIGUE candidato — la góndola vacía
+ *     pierde ventas hoy — pero la OC marca `revision_precio` para
+ *     que el análisis/justificación recomiende revisar el precio.
+ *  Los excluidos salen de productosBajos (nunca llegan a
+ *  calcular-cantidad) y quedan registrados en `excluidos` con
+ *  `excluido_por` + detalle — decisión auditable, no descarte
+ *  silencioso.
+ *
+ *  Fase A (paralela, `prepararUno`): por cada candidato calcula el
+ *  hash del input (cache, SPEC-16) y aplica el triage
+ *  (SPEC-12/R26.8):
  *   - ≥3 días con venta y CV < umbral → estimado heurístico: la
  *     demanda ponderada del backend se usa tal cual, sin LLM;
  *   - resto (volátiles o pocos datos) → quedan `pendiente` para el
@@ -24,13 +42,13 @@
  *  Si el LLM falla también en la llamada individual, usa la
  *  demanda del backend como fallback. Todos los caminos adjuntan
  *  `desvio_demanda` al análisis — calcular-cantidad lo usa en el
- *  stock de seguridad (z·σ·√lead). Escribe: analisisPorProducto +
- *  hashPorProducto (y concatena en errores cuando hubo fallback).
+ *  stock de seguridad (z·σ·√lead) — y `zona_precio`/`indice_precio`
+ *  (T32.5: generar-analisis lo menciona en la justificación).
  */
 import { z } from 'zod';
 import { config } from '../../config/env.js';
 import { llmJson, llmJsonBatch } from '../../config/ollama.js';
-import { estadisticaDemanda } from '../../integrations/estadisticas.client.js';
+import { estadisticaDemanda, estadisticasDemandaBulk } from '../../integrations/estadisticas.client.js';
 import { conReintentos } from '../../harness/error-handler.js';
 import { costTracker } from '../../harness/cost-tracker.js';
 import { metrics } from '../../harness/metrics.js';
@@ -73,21 +91,83 @@ function fallbackDesdeStats(stats) {
 }
 
 /**
- * Fase A — por producto: trae stats, calcula hash, aplica el
- * triage y el cache. Devuelve el análisis resuelto o marca
- * `pendiente` con el contexto para la fase de LLM.
+ * Fase 0 — stats de todos los productos en UNA request bulk
+ * (T32.5). Devuelve Map producto_id → { stats } | { error }; si el
+ * bulk falla degrada al fetch individual por producto (el path
+ * previo) — un backend caído registra el error por producto, no
+ * tira la corrida.
  */
-async function prepararUno(p) {
-  let stats;
+async function cargarStats(productos) {
   try {
-    stats = await estadisticaDemanda(p.id);
+    const data = await estadisticasDemandaBulk();
+    return new Map(data.map((s) => [s.producto_id, { stats: s }]));
   } catch (err) {
+    metrics.fallback();
+    log(`  estadísticas bulk fallaron (${err.message}) — fetch individual por producto`);
+    const pares = await conLimite(productos, config.concurrencia, async (p) => {
+      try {
+        return [p.id, { stats: await estadisticaDemanda(p.id) }];
+      } catch (e) {
+        return [p.id, { error: e.message }];
+      }
+    });
+    return new Map(pares);
+  }
+}
+
+/**
+ * Guard anti-recompra (T32.5) — pura y exportada para tests.
+ * Decide si un producto bajo entra como candidato de OC según sus
+ * stats del bulk:
+ *  - DEAD_STOCK: sin ventas en la ventana (dias_con_venta === 0)
+ *    → excluido: re-poner stock muerto inmoviliza más capital.
+ *  - SOBRE_MAX: precio propio sobre el máximo de mercado →
+ *    excluido: re-poner un sobre-preciado alimenta ventas lentas.
+ *  - Salvo quiebre real: SOBRE_MAX con stock ≤0 Y demanda viva
+ *    (demanda_diaria > 0) sigue candidato pero con
+ *    `revision_precio` — la OC anota la revisión de precio.
+ * Sin stats (fila ausente en el bulk) no se decide acá: el error
+ * path de prepararUno lo maneja.
+ */
+export function clasificarCandidato(p, stats) {
+  if (!stats) return {};
+  if (stats.dias_con_venta === 0) {
+    return {
+      excluido_por: 'DEAD_STOCK',
+      detalle: `sin ventas en ${config.demandaDias}d — re-poner inmoviliza capital`,
+    };
+  }
+  if (stats.zona_precio === 'SOBRE_MAX') {
+    const quiebreReal = (p.stock_actual ?? 0) <= 0 && (stats.demanda_diaria ?? 0) > 0;
+    if (!quiebreReal) {
+      return {
+        excluido_por: 'SOBRE_MAX',
+        detalle:
+          `precio sobre el máximo del mercado` +
+          (stats.indice_precio != null ? ` (índice ${stats.indice_precio})` : '') +
+          ' — revisar precio antes de reponer',
+      };
+    }
+    return { revision_precio: true };
+  }
+  return {};
+}
+
+/**
+ * Fase A — por candidato: calcula hash, aplica el triage y el
+ * cache. `entrada` es lo que resolvió cargarStats: { stats },
+ * { error } o undefined (producto ausente del bulk).
+ */
+async function prepararUno(p, entrada) {
+  const stats = entrada?.stats;
+  if (!stats) {
     // Un producto borrado o un endpoint caído no debe tumbar la
     // corrida: demanda 0 + error visible, el pedido mínimo lo
     // decide calcular-cantidad. hash null → generar-analisis
     // saltea el cache (no hay input que comparar).
+    const msg = entrada?.error ?? 'sin fila en estadísticas bulk';
     metrics.fallback();
-    log(`  ${p.sku}: sin estadísticas (${err.message}) — demanda 0`);
+    log(`  ${p.sku}: sin estadísticas (${msg}) — demanda 0`);
     return {
       id: p.id,
       hash: null,
@@ -97,29 +177,15 @@ async function prepararUno(p) {
         observacion: 'Estadísticas de demanda no disponibles',
         desvio_demanda: 0,
       },
-      error: `analizar-demanda(${p.sku}): ${err.message} — se usó demanda 0`,
+      error: `analizar-demanda(${p.sku}): ${msg} — se usó demanda 0`,
     };
   }
   // SPEC-16: el hash cubre stats + producto + config — generar-
   // analisis lo reusa para cachear la justificación (mismo input).
   const hash = hashAnalisis(p, stats);
 
-  // Sin ventas en la ventana: la demanda es 0 — el LLM no tiene
-  // nada que estimar. calcular-cantidad asegura el pedido mínimo.
-  if (stats.dias_con_venta === 0) {
-    metrics.llmEvitada();
-    log(`  ${p.sku}: sin ventas en ${config.demandaDias}d — demanda 0, sin LLM`);
-    return {
-      id: p.id,
-      hash,
-      analisis: {
-        demanda_diaria: 0,
-        tendencia: 'estable',
-        observacion: `Sin ventas en ${config.demandaDias} días`,
-        desvio_demanda: 0,
-      },
-    };
-  }
+  // (Los sin-ventas de la ventana ya quedaron excluidos por el
+  // guard DEAD_STOCK — no llegan a esta fase.)
 
   // SPEC-12/R26.8: muestra suficiente (≥3 días) y demanda estable
   // (CV < umbral) → el estimado ponderado del backend se usa tal
@@ -233,9 +299,43 @@ async function analizarLote(lote) {
 }
 
 export async function analizarDemanda(state) {
+  if (!state.productosBajos?.length) {
+    return { productosBajos: [], excluidos: [], errores: [] };
+  }
+  // Fase 0 — stats bulk + guard anti-recompra (T32.5): los
+  // excluidos salen de productosBajos ANTES de cualquier llamada
+  // al LLM y quedan auditados en `excluidos`.
+  const statsPorId = await cargarStats(state.productosBajos);
+  const candidatos = [];
+  const excluidos = [];
+  const conRevisionPrecio = new Set();
+  for (const p of state.productosBajos) {
+    const c = clasificarCandidato(p, statsPorId.get(p.id)?.stats);
+    if (c.excluido_por) {
+      excluidos.push({
+        producto_id: p.id,
+        sku: p.sku,
+        nombre: p.nombre,
+        excluido_por: c.excluido_por,
+        detalle: c.detalle,
+      });
+      log(`  ${p.sku}: excluido de la reposición (${c.excluido_por}) — ${c.detalle}`);
+      continue;
+    }
+    if (c.revision_precio) {
+      conRevisionPrecio.add(p.id);
+      log(`  ${p.sku}: SOBRE_MAX pero en quiebre real — sigue candidato, la OC anota revisión de precio`);
+    }
+    candidatos.push(p);
+  }
+  if (excluidos.length) {
+    log(`  guard anti-recompra: ${excluidos.length} producto(s) excluido(s), ${candidatos.length} candidato(s) siguen`);
+  }
+
   // SPEC-16: hasta `concurrencia` tareas en vuelo — gana si
   // Ollama corre con OLLAMA_NUM_PARALLEL >= ese valor.
-  const preparados = await conLimite(state.productosBajos, config.concurrencia, prepararUno);
+  const preparados = await conLimite(candidatos, config.concurrencia, (p) =>
+    prepararUno(p, statsPorId.get(p.id)));
 
   // Los pendientes se agrupan en lotes de `demandaBatch`; cada
   // lote es una sola llamada al LLM.
@@ -261,10 +361,27 @@ export async function analizarDemanda(state) {
     ...individuales,
   ];
   for (const r of resueltos) {
-    analisis[r.id] = r.analisis;
+    const stats = statsPorId.get(r.id)?.stats;
+    // T32.5: la posición competitiva viaja con el análisis — el
+    // prompt de justificación la menciona y revision_precio fuerza
+    // la nota de "revisar precio" en la OC (quiebre real sobre
+    // el máximo de mercado). Son datos del backend, no output del
+    // LLM: generar-analisis los strippea antes de comparar cache.
+    analisis[r.id] = {
+      ...r.analisis,
+      zona_precio: stats?.zona_precio ?? null,
+      indice_precio: stats?.indice_precio ?? null,
+      ...(conRevisionPrecio.has(r.id) ? { revision_precio: true } : {}),
+    };
     hashes[r.id] = r.hash;
     if (r.error) errores.push(r.error);
   }
 
-  return { analisisPorProducto: analisis, hashPorProducto: hashes, errores };
+  return {
+    productosBajos: candidatos,
+    excluidos,
+    analisisPorProducto: analisis,
+    hashPorProducto: hashes,
+    errores,
+  };
 }

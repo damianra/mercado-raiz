@@ -51,7 +51,7 @@ Tres beneficios concretos:
 | Nodo | Piensa con | Qué hace |
 |---|---|---|
 | leer-inventario | código | trae productos bajos/críticos del backend |
-| analizar-demanda | **LLM** (condicional) | estima demanda desde `/api/estadisticas/demanda` (SPEC-26); triage por CV/días: sin ventas → demanda 0, estables → demanda del backend, sin LLM (SPEC-12); cache por hash de input (SPEC-16); volátiles en lotes de `DEMANDA_BATCH` por llamada, faltantes → llamada individual (SPEC-16) |
+| analizar-demanda | **LLM** (condicional) | stats de TODOS los productos en 1 request bulk a `/api/estadisticas/demanda` (SPEC-26/T32.5, fallback por producto); **guard anti-recompra** (T32.5): sin ventas en la ventana → `DEAD_STOCK`, precio sobre el máximo → `SOBRE_MAX`, ambos excluidos y auditados en `excluidos` — salvo SOBRE_MAX en quiebre real, que sigue con `revision_precio`; triage por CV: estables → demanda del backend, sin LLM (SPEC-12); cache por hash de input (SPEC-16); volátiles en lotes de `DEMANDA_BATCH` por llamada, faltantes → llamada individual (SPEC-16) |
 | calcular-cantidad | código | fórmula: demanda × (lead esperado + 7 días) + stock de seguridad z·σ·√lead (SPEC-26) |
 | decidir-aprobacion | código | regla: monto ≥ umbral → requiere humano |
 | generar-analisis | **LLM** (condicional) | prosa solo si requiere_aprobacion; auto-aprobadas → template (SPEC-12) |

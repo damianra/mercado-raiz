@@ -23,6 +23,8 @@ export function promptAnalisisDemandaBatch(lote) {
 
 ${bloques}
 
+Si la posición de precio de un producto es relevante para reponer, mencionala en su 'observacion' (más barato del mercado → prioridad; sobre el máximo → sugerir revisar precio).
+
 Respondé SOLO un JSON válido con EXACTAMENTE esta forma — un objeto "resultados" con UN análisis por producto, mismo orden, cada uno repite su id:
 {"resultados": [{"producto_id": <id>, "demanda_diaria": <numero>, "tendencia": "subiendo"|"estable"|"bajando", "observacion": "<frase corta, máx 12 palabras>"}]}`;
 }
