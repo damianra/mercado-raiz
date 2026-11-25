@@ -39,8 +39,16 @@ export const EstadoGrafo = Annotation.Root({
    */
   limite: ultimoGana(),
 
-  /** Escribe: leer-inventario. Leen: analizar-demanda, calcular-cantidad, generar-analisis, crear-orden. */
+  /** Escribe: leer-inventario; analizar-demanda la recorta con el guard (T32.5). Leen: analizar-demanda, calcular-cantidad, generar-analisis, crear-orden. */
   productosBajos: listaVacia(),
+
+  /**
+   * Candidatos descartados por el guard anti-recompra (T32.5):
+   * [{ producto_id, sku, nombre, excluido_por, detalle }] —
+   * excluido_por ∈ 'DEAD_STOCK' | 'SOBRE_MAX'. Escribe:
+   * analizar-demanda. Lee: fin (resumen) y metrics.
+   */
+  excluidos: listaVacia(),
 
   /**
    * { [productoId]: { demanda_diaria, tendencia, observacion, desvio_demanda } }

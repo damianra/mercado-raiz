@@ -78,11 +78,12 @@ Escenario de ejemplo: 2 productos bajos → 2 órdenes → 1 supera $50.000.
 | | |
 |---|---|
 | **Lee** | `productosBajos` |
-| **Por cada producto** | `GET /api/estadisticas/demanda?producto_id=N&dias=DEMANDA_DIAS` → **triage** (`SPEC-12`/R26.8): `dias_con_venta=0` → demanda 0 sin LLM · `CV < UMBRAL_CV` → demanda ponderada del backend, sin LLM (`llm_evitadas+1`) → **cache** (`SPEC-16`): hash del input ya visto → respuesta reusada (`cache_hits+1`) · si no → queda pendiente → **lote** (`SPEC-16`): hasta `DEMANDA_BATCH` por llamada `llmJsonBatch` → array validado item a item, matcheo por `producto_id` → `costTracker.registrar(r)` · todo camino adjunta `desvio_demanda` al análisis |
+| **Fase 0** | `GET /api/estadisticas/demanda?dias=DEMANDA_DIAS` **bulk** — una request para todo el catálogo (T32.5; si falla, degrada a `?producto_id=N` por producto) → **guard anti-recompra** (`clasificarCandidato`): `dias_con_venta=0` → `excluido_por: DEAD_STOCK` · `zona_precio=SOBRE_MAX` con stock → `excluido_por: SOBRE_MAX` · SOBRE_MAX en quiebre real (stock ≤0 + `demanda_diaria>0`) → sigue candidato con `revision_precio` · los excluidos salen de `productosBajos` y quedan auditados en `excluidos` |
+| **Por cada candidato** | **triage** (`SPEC-12`/R26.8): `CV < UMBRAL_CV` → demanda ponderada del backend, sin LLM (`llm_evitadas+1`) → **cache** (`SPEC-16`): hash del input ya visto → respuesta reusada (`cache_hits+1`) · si no → queda pendiente → **lote** (`SPEC-16`): hasta `DEMANDA_BATCH` por llamada `llmJsonBatch` → array validado item a item, matcheo por `producto_id` → `costTracker.registrar(r)` · todo camino adjunta `desvio_demanda` + `zona_precio`/`indice_precio` (T32.5) al análisis |
 | **Si el lote omite/falla items** | esos productos caen a `llmJson.invoke(prompt individual)` — el lote que falla entero degrada completo |
 | **Si el LLM falla ×2** | fallback: `demanda_diaria` del backend + string en `errores` |
-| **Devuelve** | `{ analisisPorProducto: {1:{…}, 2:{…}}, hashPorProducto: {1:"…"}, errores: [] }` |
-| **Reducer** | `mergeObjeto` → fusiona las claves por producto; `acumulativo` concatena errores |
+| **Devuelve** | `{ productosBajos: [candidatos], excluidos: [{producto_id, sku, excluido_por, detalle}], analisisPorProducto: {1:{…}}, hashPorProducto: {1:"…"}, errores: [] }` |
+| **Reducer** | `listaVacia` → reemplaza `productosBajos`/`excluidos`; `mergeObjeto` → fusiona las claves por producto; `acumulativo` concatena errores |
 | **Edge** | fijo → `calcular-cantidad` |
 
 ### Nodo 3 · `calcular-cantidad` (código)

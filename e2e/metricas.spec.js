@@ -7,7 +7,9 @@ const ADMIN = { email: 'admin@mercadorai.com', password: 'demo-admin-2026' };
 const GERENTE = { email: 'carlos.martinez@mercadorai.com', password: 'demo-gerente-2026' };
 
 const FILAS = 'section[aria-label="Tabla de órdenes de compra"] tbody tr';
-const FILAS_PROV = 'main table tbody tr';
+// Scorecard de proveedores — la tabla queda scopiada por su
+// sección: T32.3 sumó una tabla de pricing accionable a la vista.
+const FILAS_PROV = 'section:has-text("Scorecard de proveedores") tbody tr';
 
 async function login(page, { email, password } = ADMIN) {
   await page.goto('/');
@@ -70,4 +72,37 @@ test('la navegación del sidebar vuelve al dashboard', async ({ page }) => {
 test('GERENTE también accede al scorecard', async ({ page }) => {
   await irAMetricas(page, GERENTE);
   expect(await page.locator(FILAS_PROV).count()).toBeGreaterThan(0);
+});
+
+// SPEC-32 (T32.3) — vista gráfica: charts reales + tabla de
+// pricing accionable que alimenta el modal Ajustar precio.
+test('secciones gráficas: ventas, competitividad, capital y pricing accionable', async ({
+  page,
+}) => {
+  await irAMetricas(page, GERENTE);
+
+  // chart de ventas diarias (recharts renderiza svg)
+  await expect(page.getByText('Ventas del período — facturación por día')).toBeVisible();
+  await expect(page.locator('.recharts-responsive-container svg').first()).toBeVisible();
+
+  // competitividad: banda de zonas + barras por cadena + fecha del snapshot
+  await expect(page.getByText('Competitividad de precios')).toBeVisible();
+  await expect(page.getByText(/precios al 2026-11-20/)).toBeVisible();
+  await expect(page.getByText('Más baratos que el mercado:')).toBeVisible();
+
+  // pareto de capital inmovilizado
+  await expect(page.getByText(/Capital inmovilizado — \$/)).toBeVisible();
+
+  // tabla de pricing accionable con el botón que abre el modal
+  await expect(page.getByText(/Pricing accionable — \d+ fuera de rango/)).toBeVisible();
+  const fila = page
+    .locator('section')
+    .filter({ hasText: 'Pricing accionable' })
+    .locator('tbody tr')
+    .first();
+  await fila.locator('button[aria-label^="Ajustar precio"]').click();
+  await expect(
+    page.getByRole('dialog', { name: 'Ajustar precio' }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Posición de precio en el mercado')).toBeVisible();
 });

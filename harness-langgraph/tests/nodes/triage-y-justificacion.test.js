@@ -22,8 +22,10 @@ vi.mock('../../src/config/ollama.js', () => ({
 }));
 
 const estadisticaDemanda = vi.fn();
+const estadisticasDemandaBulk = vi.fn();
 vi.mock('../../src/integrations/estadisticas.client.js', () => ({
   estadisticaDemanda: (...a) => estadisticaDemanda(...a),
+  estadisticasDemandaBulk: (...a) => estadisticasDemandaBulk(...a),
 }));
 
 // Sin el mock, buscarDemanda/guardarDemanda irían contra la tabla
@@ -56,8 +58,16 @@ const producto = (id) => ({
 });
 
 /** Respuesta de /api/estadisticas/demanda para fixtures. */
-const stats = ({ demanda = 5, cv = 0.1, diasConVenta = 30, desvio = 1.5 } = {}) => ({
-  producto_id: 1,
+const stats = ({
+  id = 1,
+  demanda = 5,
+  cv = 0.1,
+  diasConVenta = 30,
+  desvio = 1.5,
+  zona = 'EN_RANGO',
+  indice = 100,
+} = {}) => ({
+  producto_id: id,
   dias: 90,
   demanda_diaria: demanda,
   tendencia: 0.01,
@@ -66,7 +76,12 @@ const stats = ({ demanda = 5, cv = 0.1, diasConVenta = 30, desvio = 1.5 } = {}) 
   dias_con_venta: diasConVenta,
   dias_en_quiebre: 0,
   ultima_venta: '2026-11-20',
+  zona_precio: zona,
+  indice_precio: indice,
 });
+
+/** El nodo lee el bulk — cada llamada recibe la lista de stats. */
+const bulk = (...list) => estadisticasDemandaBulk.mockResolvedValue(list);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -80,7 +95,7 @@ beforeEach(() => {
 
 describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   it('stats estables: usa la demanda del backend sin llamar al LLM', async () => {
-    estadisticaDemanda.mockResolvedValue(stats());
+    bulk(stats());
     const state = { productosBajos: [producto(1)] };
 
     const { analisisPorProducto, errores } = await analizarDemanda(state);
@@ -98,7 +113,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('cache hit: reuso del análisis con σ fresco del stats actual', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6, desvio: 3.3 }));
+    bulk(stats({ cv: 0.6, desvio: 3.3 }));
     cacheFns.buscarDemanda.mockResolvedValue({
       demanda_diaria: 7, tendencia: 'bajando', observacion: 'cacheada',
     });
@@ -111,26 +126,27 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
     expect(metrics.resumen().cache_hits).toBe(1);
   });
 
-  it('sin ventas en la ventana: demanda 0 determinística, sin LLM ni cache', async () => {
-    estadisticaDemanda.mockResolvedValue(
-      stats({ demanda: 0, cv: null, diasConVenta: 0, desvio: 0 }),
-    );
+  it('sin ventas en la ventana: el guard DEAD_STOCK lo excluye antes del LLM (T32.5)', async () => {
+    bulk(stats({ demanda: 0, cv: null, diasConVenta: 0, desvio: 0 }));
     const state = { productosBajos: [producto(1)] };
 
-    const { analisisPorProducto, errores } = await analizarDemanda(state);
+    const { analisisPorProducto, excluidos, productosBajos, errores } =
+      await analizarDemanda(state);
 
     expect(invokeJson).not.toHaveBeenCalled();
     expect(invokeBatch).not.toHaveBeenCalled();
-    expect(analisisPorProducto[1].demanda_diaria).toBe(0);
-    expect(analisisPorProducto[1].desvio_demanda).toBe(0);
+    // No hay OC ni análisis: queda fuera de productosBajos, auditado
+    expect(productosBajos).toEqual([]);
+    expect(analisisPorProducto).toEqual({});
+    expect(excluidos).toHaveLength(1);
+    expect(excluidos[0]).toMatchObject({ producto_id: 1, excluido_por: 'DEAD_STOCK' });
     expect(errores).toEqual([]);
-    expect(metrics.resumen().llm_evitadas).toBe(1);
-    // ni siquiera se consulta el cache — la respuesta es determinística
+    // ni siquiera se consulta el cache — nunca llegó al triage
     expect(cacheFns.buscarDemanda).not.toHaveBeenCalled();
   });
 
   it('ventas volátiles: una llamada en lote resuelve el análisis', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6 }));
+    bulk(stats({ cv: 0.6 }));
     invokeBatch.mockResolvedValue({
       content: '[{"producto_id": 1, "demanda_diaria": 4, "tendencia": "subiendo", "observacion": "pico"}]',
       response_metadata: {},
@@ -149,7 +165,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('lote con item faltante: solo ese producto cae a llamada individual', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6 }));
+    bulk(stats({ cv: 0.6 }), stats({ id: 2, cv: 0.6 }));
     invokeBatch.mockResolvedValue({
       // el modelo devuelve solo el producto 2 — el 1 falta
       content: '[{"producto_id": 2, "demanda_diaria": 7, "tendencia": "estable", "observacion": "ok"}]',
@@ -170,7 +186,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('respuesta envuelta en objeto {"resultados": [...]}: se extrae el array', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6 }));
+    bulk(stats({ cv: 0.6 }));
     invokeBatch.mockResolvedValue({
       // con format:'json' Ollama sesga a objetos — el modelo suele
       // envolver el array en lugar de devolverlo desnudo
@@ -187,7 +203,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('objeto suelto de un item: resuelve ese producto y el resto cae a individual', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6 }));
+    bulk(stats({ cv: 0.6 }), stats({ id: 2, cv: 0.6 }));
     invokeBatch.mockResolvedValue({
       // el modelo respondió solo un producto sin array (formato
       // real observado con qwen3:8b + format:'json')
@@ -209,7 +225,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('lote entero inválido: todos caen a llamada individual', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ cv: 0.6 }));
+    bulk(stats({ cv: 0.6 }), stats({ id: 2, cv: 0.6 }));
     invokeBatch.mockResolvedValue({ content: 'no json at all', response_metadata: {} });
     invokeJson.mockResolvedValue({
       content: '{"demanda_diaria": 4, "tendencia": "estable", "observacion": "ok"}',
@@ -224,7 +240,7 @@ describe('analizar-demanda — triage heurístico (SPEC-12/R26.8)', () => {
   });
 
   it('pocos datos (<3 días con venta): va al LLM, no al heurístico', async () => {
-    estadisticaDemanda.mockResolvedValue(stats({ diasConVenta: 2 }));
+    bulk(stats({ diasConVenta: 2 }));
     invokeBatch.mockResolvedValue({
       content: '[{"producto_id": 1, "demanda_diaria": 5, "tendencia": "estable", "observacion": "ok"}]',
       response_metadata: {},

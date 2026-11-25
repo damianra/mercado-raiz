@@ -9,6 +9,7 @@ import { createApp } from './app.js';
 import { closeDb, openDb } from './db.js';
 import { seedData } from './seed-data.js';
 import { loginComo } from './test-auth.js';
+import { indicePrecio, posicionPrecio } from './models/competencia.model.js';
 
 let server;
 let base;
@@ -26,6 +27,7 @@ afterEach(() => server?.close());
 afterAll(async () => {
   await db.run('DELETE FROM ventas');
   await db.run("DELETE FROM historial_stock WHERE referencia LIKE 'T-E%'");
+  await db.run(`DELETE FROM precios_competencia WHERE fecha_snapshot > '2027-01-01'`);
   await closeDb(true);
 });
 
@@ -105,6 +107,94 @@ describe('GET /api/estadisticas/demanda — bulk (sin producto_id, R26.9)', () =
   it('bulk también valida dias', async () => {
     const res = await get('/estadisticas/demanda?dias=3');
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/estadisticas/demanda — posición competitiva (SPEC-32 T32.5)', () => {
+  it('bulk expone zona_precio, indice_precio y costo_unitario coherentes con el snapshot', async () => {
+    const res = await get('/estadisticas/demanda?dias=30');
+    const { data } = await res.json();
+    const porId = new Map(data.map((d) => [d.producto_id, d]));
+
+    // Verificación contra la fuente: rango de mercado vigente
+    // (misma regla DISTINCT ON por cadena + snapshot más nuevo).
+    const rangos = await db.all(
+      `SELECT p.id AS producto_id, p.precio_venta,
+              MIN(v.precio) AS mn, MAX(v.precio) AS mx
+         FROM productos p
+         LEFT JOIN (SELECT DISTINCT ON (producto_id, cadena)
+                           producto_id, cadena, precio
+                      FROM precios_competencia
+                     ORDER BY producto_id, cadena, fecha_snapshot DESC) v
+           ON v.producto_id = p.id
+        GROUP BY p.id, p.precio_venta`,
+    );
+
+    let conZona = 0;
+    let conCosto = 0;
+    for (const r of rangos) {
+      const d = porId.get(r.producto_id);
+      expect(d).toHaveProperty('zona_precio');
+      expect(d).toHaveProperty('indice_precio');
+      expect(d).toHaveProperty('costo_unitario');
+      expect(d.zona_precio).toBe(posicionPrecio(r.precio_venta, r.mn, r.mx));
+      expect(d.indice_precio).toBe(indicePrecio(r.precio_venta, r.mn));
+      if (d.zona_precio !== 'SIN_DATOS') conZona++;
+      if (d.costo_unitario != null) conCosto++;
+    }
+    // el seed tiene snapshot para todo el catálogo y costo del
+    // proveedor principal — ambas coberturas deben ser totales.
+    expect(conZona).toBe(seedData.productos.length);
+    expect(conCosto).toBe(seedData.productos.length);
+
+    // costo_unitario = el de producto_proveedor es_principal
+    const p = seedData.productos[0];
+    const ppal = seedData.producto_proveedor.find(
+      (x) => x.producto_id === p.id && x.es_principal === 1,
+    );
+    expect(porId.get(p.id).costo_unitario).toBeCloseTo(ppal.costo_unitario, 5);
+  });
+
+  it('zona SIN_DATOS cuando el snapshot vigente no trae precio (nunca inventado)', async () => {
+    const p = prodSinMovs();
+    // Snapshot nuevo sin precios: es el vigente (fecha más nueva)
+    // → el rango queda null aunque existan snapshots viejos.
+    for (const cadena of ['DIA', 'COTO', 'CARREFOUR', 'LA_ANONIMA']) {
+      await db.run(
+        `INSERT INTO precios_competencia
+           (producto_id, cadena, sku_cadena, precio, precio_lista, fecha_snapshot)
+         VALUES (?, ?, NULL, NULL, NULL, '2030-01-01')`,
+        [p.id, cadena],
+      );
+    }
+    const { data } = await (await get('/estadisticas/demanda?dias=30')).json();
+    const d = data.find((x) => x.producto_id === p.id);
+    expect(d.zona_precio).toBe('SIN_DATOS');
+    expect(d.indice_precio).toBeNull();
+    // la ruta individual devuelve lo mismo (paridad bulk/individual)
+    const ind = await (
+      await get(`/estadisticas/demanda?producto_id=${p.id}&dias=30`)
+    ).json();
+    expect(ind.zona_precio).toBe('SIN_DATOS');
+    expect(ind.indice_precio).toBeNull();
+  });
+
+  it('un snapshot nuevo cambia la zona que ve el bulk (vigencia por fecha)', async () => {
+    const p = prodSinMovs();
+    // Snapshot nuevo con el mercado muy por debajo del precio
+    // propio → SOBRE_MAX.
+    for (const cadena of ['DIA', 'COTO', 'CARREFOUR', 'LA_ANONIMA']) {
+      await db.run(
+        `INSERT INTO precios_competencia
+           (producto_id, cadena, sku_cadena, precio, precio_lista, fecha_snapshot)
+         VALUES (?, ?, NULL, ?, ?, '2030-01-01')`,
+        [p.id, cadena, p.precio_venta * 0.5, p.precio_venta * 0.55],
+      );
+    }
+    const { data } = await (await get('/estadisticas/demanda?dias=30')).json();
+    const d = data.find((x) => x.producto_id === p.id);
+    expect(d.zona_precio).toBe('SOBRE_MAX');
+    expect(d.indice_precio).toBeCloseTo(200, 0); // propio ≈ 2× el mínimo
   });
 });
 

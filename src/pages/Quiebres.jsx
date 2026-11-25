@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ChartLine,
   CircleDollarSign,
   ClipboardList,
   PackageX,
@@ -13,6 +14,7 @@ import Topbar from '../components/Topbar.jsx';
 import Toasts from '../components/Toasts.jsx';
 import AjustePrecioModal from '../components/AjustePrecioModal.jsx';
 import AjusteStockModal from '../components/AjusteStockModal.jsx';
+import HistorialStockModal from '../components/HistorialStockModal.jsx';
 import VentaModal from '../components/VentaModal.jsx';
 import { EmptyState, ErrorState } from '../components/ui.jsx';
 import { getDemandaStats, getProductosQuiebres } from '../lib/api.js';
@@ -35,6 +37,7 @@ export default function Quiebres({ usuario }) {
   const [venta, setVenta] = useState(null);
   const [ajuste, setAjuste] = useState(null);
   const [precio, setPrecio] = useState(null);
+  const [historial, setHistorial] = useState(null);
   const timers = useRef([]);
 
   const pushToast = useCallback((mensaje, tipo = 'ok') => {
@@ -288,6 +291,14 @@ export default function Quiebres({ usuario }) {
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex gap-1">
                           <button
+                            onClick={() => setHistorial(f)}
+                            title="Ver historial de stock (sierra 90d)"
+                            aria-label={`Historial de stock de ${f.sku}`}
+                            className="rounded-lg p-1.5 text-warmgray transition hover:bg-root/10 hover:text-root"
+                          >
+                            <ChartLine size={16} strokeWidth={1.5} />
+                          </button>
+                          <button
                             onClick={() => setVenta(f)}
                             title="Registrar venta"
                             aria-label={`Registrar venta de ${f.sku}`}
@@ -325,6 +336,12 @@ export default function Quiebres({ usuario }) {
           )}
         </main>
       </div>
+      {historial && (
+        <HistorialStockModal
+          producto={historial}
+          onClose={() => setHistorial(null)}
+        />
+      )}
       {venta && (
         <VentaModal
           producto={venta}

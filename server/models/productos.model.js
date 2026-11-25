@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { fechasVentana, seriePosicionStock } from './stock-serie.js';
 
 // Estado derivado del stock — la columna `estado` puede quedar vieja
 // tras ventas/ajustes, así que siempre se recalcula al leer.
@@ -162,6 +163,48 @@ export async function getProducto(id) {
     [id],
   );
   return { ...mapProducto(row), precios };
+}
+
+/**
+ * SPEC-32 (T32.6): sierra de stock — la posición diaria del
+ * producto en la ventana de `dias` días, reconstruida desde
+ * historial_stock con el MISMO replay que dias_en_quiebre
+ * (seriePosicionStock en stock-serie.js). `serie: null` si el
+ * producto no tiene movimientos — fuente no confiable, nunca
+ * inventado (mismo criterio R26.7).
+ * Devuelve null si el producto no existe.
+ */
+export async function historialProducto(id, dias) {
+  const db = await openDb();
+  const p = await db.get(
+    `SELECT id, sku, nombre, stock_minimo FROM productos WHERE id = ?`,
+    [id],
+  );
+  if (!p) return null;
+
+  const [{ hoy }, movs] = await Promise.all([
+    db.get('SELECT CURRENT_DATE::text AS hoy'),
+    db.all(
+      `SELECT (fecha AT TIME ZONE 'UTC')::date::text AS f,
+              cantidad_anterior, cantidad_nueva
+       FROM historial_stock WHERE producto_id = ?
+       ORDER BY fecha ASC, id ASC`,
+      [id],
+    ),
+  ]);
+
+  const fechas = fechasVentana(hoy, dias);
+  const posiciones = seriePosicionStock(movs, fechas);
+  return {
+    producto_id: p.id,
+    sku: p.sku,
+    nombre: p.nombre,
+    dias,
+    serie:
+      posiciones?.map((stock, i) => ({ fecha: fechas[i], stock })) ?? null,
+    stock_minimo: p.stock_minimo,
+    tiene_movimientos: posiciones != null,
+  };
 }
 
 // SPEC-32 (T32.2) — único write path de `precio_venta`. Cambia el

@@ -1,4 +1,6 @@
 import { openDb } from '../db.js';
+import { indicePrecio, posicionPrecio } from './competencia.model.js';
+import { fechasVentana, seriePosicionStock } from './stock-serie.js';
 
 // SPEC-26 (R26.7): estadísticas de demanda por producto sobre la
 // tabla `ventas`. La serie diaria se arma contra CURRENT_DATE de la
@@ -10,41 +12,27 @@ import { openDb } from '../db.js';
 const HALF_LIFE_DIAS = 30; // media móvil ponderada por recencia
 
 // Serie completa de la ventana: [d0 más viejo … hoy]. El ancla es
-// `hoy` de la DB — Date UTC para no mezclar TZ.
+// `hoy` de la DB — Date UTC para no mezclar TZ. Las fechas las arma
+// `fechasVentana` (stock-serie.js), compartida con /productos/:id/historial.
 function armarVentana(hoy, dias, porDia) {
-  const hoyMs = Date.parse(`${hoy}T00:00:00Z`);
-  const fechas = [];
-  const serie = [];
-  for (let i = dias - 1; i >= 0; i--) {
-    const f = new Date(hoyMs - i * 86400000).toISOString().slice(0, 10);
-    fechas.push(f);
-    serie.push(porDia.get(f) ?? 0);
-  }
+  const fechas = fechasVentana(hoy, dias);
+  const serie = fechas.map((f) => porDia.get(f) ?? 0);
   return { fechas, serie };
 }
 
 // Reconstruye la posición de stock día a día desde la cadena de
-// movimientos (cantidad_anterior→cantidad_nueva, ya ordenados por
-// fecha/id). Días antes del primer movimiento heredan su
-// cantidad_anterior — aproximación documentada; sin movimientos la
-// fuente no existe → dias: null.
+// movimientos — el replay vive en stock-serie.js (compartido con
+// el historial del producto, T32.6). Días antes del primer
+// movimiento heredan su cantidad_anterior — aproximación
+// documentada; sin movimientos la fuente no existe → dias: null.
 function quiebreDesde(movs, fechas) {
-  if (movs.length === 0) return { dias: null, indices: new Set() };
+  const posiciones = seriePosicionStock(movs, fechas);
+  if (posiciones == null) return { dias: null, indices: new Set() };
 
-  // posición vigente al inicio de cada fecha de la ventana: el
-  // cantidad_nueva del último movimiento ≤ ese día (o el
-  // cantidad_anterior del primero si aún no hubo ninguno).
-  let cursor = 0;
-  let posicion = movs[0].cantidad_anterior;
   let dias = 0;
   const indices = new Set();
-
-  for (let i = 0; i < fechas.length; i++) {
-    while (cursor < movs.length && movs[cursor].f <= fechas[i]) {
-      posicion = movs[cursor].cantidad_nueva;
-      cursor++;
-    }
-    if (posicion <= 0) {
+  for (let i = 0; i < posiciones.length; i++) {
+    if (posiciones[i] <= 0) {
       dias++;
       indices.add(i);
     }
@@ -55,7 +43,7 @@ function quiebreDesde(movs, fechas) {
 // El cálculo puro, compartido por la ruta individual y la bulk:
 // misma serie + mismos quiebres → mismas stats (una fuente de
 // verdad para agente y dashboard, R26.9).
-function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia }) {
+function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia, mercado }) {
   const quiebre = quiebreDesde(movs, fechas);
 
   // Días elegibles para los denominadores: todo menos quiebres.
@@ -129,7 +117,34 @@ function calcularStats({ productoId, dias, fechas, serie, movs, ultima, economia
             ((economia.venta - economia.costo) * demanda_diaria * quiebre.dias).toFixed(2),
           )
         : null,
+    // SPEC-32 (T32.5): posición competitiva del precio propio
+    // contra el snapshot vigente de precios_competencia — misma
+    // zona/índice que /api/competencia (posicionPrecio/indicePrecio
+    // compartidos, una sola fuente). El agente la usa en el guard
+    // anti-recompra y en el razonamiento de la OC.
+    zona_precio: posicionPrecio(economia?.venta, mercado?.min ?? null, mercado?.max ?? null),
+    indice_precio: indicePrecio(economia?.venta, mercado?.min ?? null),
   };
+}
+
+// T32.5: rango de mercado vigente por producto en UNA query
+// agregada — el snapshot vigente es la fila más reciente por
+// (producto, cadena) (DISTINCT ON ... fecha_snapshot DESC, mismo
+// criterio que competencia.model) y la zona se computa contra
+// min/max de los precios presentes. La ruta individual la reusa
+// con el filtro de producto para que bulk e individual devuelvan
+// los mismos campos (R26.9: una fuente de verdad).
+function queryRangoMercado(productoId) {
+  const filtro = productoId == null ? '' : 'AND pc.producto_id = ?';
+  return `
+    SELECT producto_id, MIN(precio) AS min_mercado, MAX(precio) AS max_mercado
+      FROM (SELECT DISTINCT ON (producto_id, cadena)
+                   producto_id, cadena, precio
+              FROM precios_competencia pc
+             WHERE 1=1 ${filtro}
+             ORDER BY producto_id, cadena, fecha_snapshot DESC) vig
+     WHERE precio IS NOT NULL
+     GROUP BY producto_id`;
 }
 
 export async function estadisticaDemanda(productoId, dias) {
@@ -138,7 +153,7 @@ export async function estadisticaDemanda(productoId, dias) {
   const prod = await db.get(
     `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
      LEFT JOIN producto_proveedor pp
-       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+       ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
      WHERE p.id = ?`,
     [productoId],
   );
@@ -165,8 +180,10 @@ export async function estadisticaDemanda(productoId, dias) {
     'SELECT MAX(fecha)::text AS ultima FROM ventas WHERE producto_id = ?',
     [productoId],
   );
+  const rango = await db.get(queryRangoMercado(productoId), [productoId]);
   return calcularStats({ productoId, dias, fechas, serie, movs, ultima,
-    economia: { venta: prod.precio_venta, costo: prod.costo } });
+    economia: { venta: prod.precio_venta, costo: prod.costo },
+    mercado: { min: rango?.min_mercado ?? null, max: rango?.max_mercado ?? null } });
 }
 
 // R26.9/T26.7 — las mismas estadísticas para TODOS los productos
@@ -177,11 +194,22 @@ export async function estadisticaDemanda(productoId, dias) {
 export async function estadisticasDemandaBulk(dias) {
   const db = await openDb();
   const { hoy } = await db.get('SELECT CURRENT_DATE::text AS hoy');
+  // costo_unitario del proveedor principal: es_principal=1 —
+  // equivalente a productos.proveedor_id (el principal está
+  // denormalizado ahí) y es el criterio explícito que también usa
+  // competencia.model (T32.5).
   const productos = await db.all(
     `SELECT p.id, p.precio_venta, pp.costo_unitario AS costo FROM productos p
      LEFT JOIN producto_proveedor pp
-       ON pp.producto_id = p.id AND pp.proveedor_id = p.proveedor_id AND pp.activo = 1
+       ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
      ORDER BY p.id`,
+  );
+
+  // T32.5: UNA query agregada para el rango de mercado de todos los
+  // productos (no una por producto) — zona/índice se derivan en
+  // calcularStats con posicionPrecio/indicePrecio.
+  const rangos = new Map(
+    (await db.all(queryRangoMercado(null))).map((r) => [r.producto_id, r]),
   );
 
   const ventas = await db.all(
@@ -218,6 +246,7 @@ export async function estadisticasDemandaBulk(dias) {
   return productos.map((p) => {
     const porDia = ventasPor.get(p.id) ?? new Map();
     const { fechas, serie } = armarVentana(hoy, dias, porDia);
+    const rango = rangos.get(p.id);
     return calcularStats({
       productoId: p.id,
       dias,
@@ -226,6 +255,7 @@ export async function estadisticasDemandaBulk(dias) {
       movs: movsPor.get(p.id) ?? [],
       ultima: ultimas.get(p.id) ?? null,
       economia: { venta: p.precio_venta, costo: p.costo },
+      mercado: { min: rango?.min_mercado ?? null, max: rango?.max_mercado ?? null },
     });
   });
 }
@@ -384,5 +414,54 @@ export async function metricasScorecard(dias) {
     },
     ordenes: { pendientes, pendientes_monto: r2(pendientesMonto) },
     proveedores,
+  };
+}
+
+// SPEC-32 (T32.3): serie diaria agregada para el gráfico de ventas.
+// La facturación usa el precio_venta VIGENTE (no el histórico —
+// no existe snapshot de precio por venta; aproximación honesta).
+export async function ventasPorDia(dias) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT v.fecha::text AS fecha, SUM(v.unidades)::int AS unidades,
+            ROUND(SUM(v.unidades * p.precio_venta)::numeric, 2)::double precision AS facturacion
+       FROM ventas v
+       JOIN productos p ON p.id = v.producto_id
+      WHERE v.fecha > CURRENT_DATE - ? * INTERVAL '1 day'
+      GROUP BY v.fecha
+      ORDER BY v.fecha`,
+    [dias],
+  );
+  return { dias, serie: rows };
+}
+
+// SPEC-32 (T32.3): capital inmovilizado — SKUs sin ventas en la
+// ventana con stock > 0, valorados a costo del proveedor principal.
+// El Pareto ordena por plata quieta (no por unidades).
+export async function capitalInmovilizado(dias, limite = 15) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.categoria, p.stock_actual, p.precio_venta,
+            pp.costo_unitario,
+            ROUND((p.stock_actual * pp.costo_unitario)::numeric, 2)::double precision AS capital,
+            MAX(v.fecha)::text AS ultima_venta
+       FROM productos p
+       JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
+       LEFT JOIN ventas v ON v.producto_id = p.id
+      WHERE p.stock_actual > 0
+      GROUP BY p.id, p.sku, p.nombre, p.categoria, p.stock_actual,
+               p.precio_venta, pp.costo_unitario
+     HAVING MAX(v.fecha) IS NULL
+        OR MAX(v.fecha) <= CURRENT_DATE - ? * INTERVAL '1 day'
+      ORDER BY capital DESC`,
+    [dias],
+  );
+  const total = rows.reduce((a, r) => a + r.capital, 0);
+  return {
+    dias,
+    skus: rows.length,
+    capital_total: Math.round(total * 100) / 100,
+    top: rows.slice(0, limite),
   };
 }

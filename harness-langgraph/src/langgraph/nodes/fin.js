@@ -12,6 +12,14 @@ import { log } from '../../utils/logger.js';
 export async function fin(state) {
   log(`  Órdenes creadas: ${state.ordenesCreadas.length}`);
   log(`  Pendientes de aprobación humana: ${state.ordenesPendientes.length}`);
+  // T32.5: productos que el guard sacó de la reposición — quedan
+  // visibles en el resumen, no son error.
+  if (state.excluidos?.length) {
+    log(`  Excluidos por el guard anti-recompra: ${state.excluidos.length}`);
+    for (const e of state.excluidos) {
+      log(`    - ${e.sku}: ${e.excluido_por} — ${e.detalle}`);
+    }
+  }
   log(`  Errores no fatales: ${state.errores.length}`);
   try {
     const stats = await obtenerStats();

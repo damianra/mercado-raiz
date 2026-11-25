@@ -5,6 +5,7 @@ import {
   MOTIVOS_PRECIO,
   actualizarPrecio,
   getProducto,
+  historialProducto,
   listProductos,
 } from '../models/productos.model.js';
 
@@ -47,6 +48,22 @@ export async function get(req, res) {
   const producto = await getProducto(id);
   if (!producto) return res.status(404).json({ error: 'producto no encontrado' });
   res.json(producto);
+}
+
+// SPEC-32 (T32.6): sierra de stock — posición diaria reconstruida
+// desde historial_stock; alimenta el drill-in chart de /quiebres.
+export async function getHistorial(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'id debe ser un entero positivo' });
+  }
+  const dias = req.query.dias === undefined ? 90 : Number(req.query.dias);
+  if (!Number.isInteger(dias) || dias < 7 || dias > 365) {
+    return res.status(400).json({ error: 'dias debe ser un entero entre 7 y 365' });
+  }
+  const h = await historialProducto(id, dias);
+  if (!h) return res.status(404).json({ error: 'producto no encontrado' });
+  res.json(h);
 }
 
 export async function getCompetencia(req, res) {
