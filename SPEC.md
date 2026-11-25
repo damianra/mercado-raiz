@@ -2396,8 +2396,20 @@ escala).
 | T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ✅ |
 | T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
 | T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ⏳ |
-| T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ⏳ |
+| T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ✅ |
 | T32.7 | Fuente de competencia detrás de un cliente "DWH": `server/integrations/competencia-dwh.js` consume la API externa (`COMPETENCIA_DWH_URL`) — hoy **simulada** leyendo `data/articles_sample.csv` — y `sincronizarCompetencia()` vuelca el snapshot en `precios_competencia` (idempotente por UNIQUE) + `POST /api/competencia/sync` (ADMIN/SERVICIO) | ✅ |
+
+**Nota T32.6:** el replay se extrajo a `server/models/stock-serie.js`
+(`fechasVentana` + `seriePosicionStock`) — `quiebreDesde` ahora es un
+wrapper que cuenta `posicion ≤ 0` sobre la misma función, y
+`historialProducto` (productos.model) la usa para la serie diaria →
+una sola semántica, cero duplicación. Respuesta:
+`{producto_id, sku, nombre, dias, serie, stock_minimo, tiene_movimientos}`;
+`serie: null` sin movimientos (R26.7). Front: `HistorialStockModal.jsx`
+con AreaChart de recharts (`type="stepAfter"` — la posición es una
+función escalón), mínimo punteado neutro, dots terra + flag "Quiebre"
+en tooltip cuando stock ≤ 0; drill-in con ícono `ChartLine` en la
+columna Acciones (todos los roles operativos — es lectura).
 
 ### Reglas
 
