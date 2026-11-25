@@ -45,7 +45,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         <div className="flex items-start justify-between">
           <div>
             <p className="font-mono text-sm text-info">{orden.id}</p>
-            <h2 className="mt-1 flex items-center gap-2 font-display text-2xl font-bold text-grafito">
+            <h2 className="mt-1 flex items-center gap-2 font-sans tracking-tight text-2xl font-bold text-grafito">
               <Package size={22} className="text-root" strokeWidth={1.5} />
               {orden.producto}
             </h2>
@@ -70,12 +70,12 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
             { label: 'Mínimo', value: orden.stockMinimo },
             { label: 'A ordenar', value: orden.cantidad, accent: true },
           ].map(({ label, value, accent }) => (
-            <div key={label} className="rounded-lg bg-white p-4 shadow-soft ring-1 ring-root/10">
+            <div key={label} className="rounded-lg bg-white p-4 shadow-soft ring-1 ring-grafito/10">
               <p className="text-xs font-semibold uppercase tracking-wide text-warmgray">
                 {label}
               </p>
               <p
-                className={`tabular mt-1 font-display text-2xl font-bold ${
+                className={`tabular mt-1 font-sans tracking-tight text-2xl font-bold ${
                   accent ? 'text-terra' : 'text-root'
                 }`}
               >
@@ -87,10 +87,10 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         </div>
 
         {/* Cálculo financiero */}
-        <h3 className="mt-6 font-display text-lg font-semibold text-grafito">
+        <h3 className="mt-6 font-sans tracking-tight text-lg font-semibold text-grafito">
           Cálculo financiero
         </h3>
-        <div className="mt-2 rounded-lg bg-white p-4 shadow-soft ring-1 ring-root/10">
+        <div className="mt-2 rounded-lg bg-white p-4 shadow-soft ring-1 ring-grafito/10">
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-warmgray">Costo unitario</dt>
@@ -102,7 +102,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
               <dt className="text-warmgray">Cantidad</dt>
               <dd className="tabular font-mono text-grafito">{orden.cantidad}</dd>
             </div>
-            <div className="flex justify-between border-t border-dashed border-root/15 pt-2">
+            <div className="flex justify-between border-t border-dashed border-grafito/15 pt-2">
               <dt className="font-semibold text-grafito">Total</dt>
               <dd className="tabular font-mono text-lg font-bold text-root">
                 {formatMoney(orden.monto)}
@@ -112,7 +112,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         </div>
 
         {/* Análisis IA */}
-        <h3 className="mt-6 flex items-center gap-2 font-display text-lg font-semibold text-grafito">
+        <h3 className="mt-6 flex items-center gap-2 font-sans tracking-tight text-lg font-semibold text-grafito">
           <Sparkles size={17} className="text-success" strokeWidth={1.5} />
           Análisis de IA
         </h3>
@@ -156,7 +156,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         )}
         {aprobada && (
           <div className="mt-6">
-            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
+            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-grafito/10">
               Orden aprobada — cuando se la comuniques al proveedor, marcalo acá
               (la OC no se envía desde el sistema).
             </p>
@@ -179,11 +179,11 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
         )}
         {enviada && (
           <div className="mt-6">
-            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
+            <p className="mb-3 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-grafito/10">
               Orden marcada como enviada — cuando llega el camión registrá la recepción.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <label className="flex h-12 flex-1 items-center gap-2 rounded-lg bg-white px-3 ring-1 ring-root/20 focus-within:ring-2 focus-within:ring-root">
+              <label className="flex h-12 flex-1 items-center gap-2 rounded-lg bg-white px-3 ring-1 ring-grafito/15 focus-within:ring-2 focus-within:ring-root">
                 <span className="whitespace-nowrap text-xs font-semibold text-warmgray">
                   Unidades recibidas
                 </span>
@@ -224,7 +224,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
           </div>
         )}
         {!pendiente && !aprobada && !enviada && (
-          <p className="mt-6 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-root/10">
+          <p className="mt-6 rounded-lg bg-white p-3 text-center text-sm text-warmgray ring-1 ring-grafito/10">
             {orden.estado === 'RECIBIDA' && orden.cantidadRecibida != null
               ? `Orden recibida — ingresaron ${orden.cantidadRecibida} de ${orden.cantidad} unidades al stock.`
               : 'Esta orden ya fue procesada.'}

@@ -4,9 +4,6 @@
 
 body {
   @apply bg-cream text-grafito font-sans antialiased;
-  background-image:
-    radial-gradient(circle at 20% 80%, rgba(45, 95, 63, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(200, 85, 61, 0.03) 0%, transparent 50%);
 }
 
 /* Números tabulares para datos técnicos */
@@ -20,7 +17,7 @@ body {
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #E0DCD3 25%, #F5F1E8 50%, #E0DCD3 75%);
+  background: linear-gradient(90deg, #E7E5E4 25%, #F5F5F4 50%, #E7E5E4 75%);
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
 }

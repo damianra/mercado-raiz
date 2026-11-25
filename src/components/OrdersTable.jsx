@@ -27,8 +27,9 @@ function Badge({ estado }) {
   const e = ESTADOS[estado] ?? ESTADOS.PENDIENTE_APROBACION;
   return (
     <span
-      className={`inline-flex items-center rounded-2xl px-3 py-1 text-xs font-bold ${e.classes}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${e.classes}`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${e.dot}`} aria-hidden="true" />
       {e.label}
     </span>
   );
@@ -97,11 +98,11 @@ export default function OrdersTable({
   return (
     <section
       id="ordenes"
-      className="scroll-mt-20 rounded-lg bg-white shadow-soft ring-1 ring-root/10"
+      className="scroll-mt-20 rounded-lg bg-white shadow-soft ring-1 ring-grafito/10"
       aria-label="Tabla de órdenes de compra"
     >
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-root/10 p-4">
+      <div className="flex flex-wrap items-center gap-3 border-b border-grafito/10 p-4">
         <div className="relative min-w-48 flex-1">
           <Search
             size={16}
@@ -116,7 +117,7 @@ export default function OrdersTable({
             aria-label="Buscar órdenes"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-lg bg-cream p-1 ring-1 ring-root/10">
+        <div className="flex items-center gap-1 rounded-lg bg-cream p-1 ring-1 ring-grafito/10">
           {FILTROS.map((f) => (
             <button
               key={f.id}
@@ -134,13 +135,13 @@ export default function OrdersTable({
         <button
           onClick={exportarCsv}
           disabled={visibles.length === 0}
-          className="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-root ring-1 ring-root/20 transition hover:bg-root/5 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
+          className="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-root ring-1 ring-grafito/15 transition hover:bg-root/5 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"
         >
           <Download size={15} strokeWidth={1.5} /> Exportar
         </button>
         <button
           onClick={onNueva}
-          className="inline-flex items-center gap-2 rounded-lg bg-terra px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-brand hover:-translate-y-0.5 hover:bg-terra/90 hover:shadow-lift"
+          className="inline-flex items-center gap-2 rounded-lg bg-root px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-brand hover:bg-root-dark"
         >
           <Plus size={15} strokeWidth={2} /> Nueva
         </button>
@@ -160,7 +161,7 @@ export default function OrdersTable({
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-root/10 text-xs font-semibold uppercase tracking-wide text-warmgray">
+                <tr className="border-b border-grafito/10 text-xs font-semibold uppercase tracking-wide text-warmgray">
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3">Proveedor</th>
@@ -190,7 +191,7 @@ export default function OrdersTable({
           </div>
 
           {/* Cards mobile */}
-          <ul className="divide-y divide-root/5 md:hidden">
+          <ul className="divide-y divide-grafito/5 md:hidden">
             {visibles.map((o) => (
               <li key={o.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -232,7 +233,7 @@ export default function OrdersTable({
 function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar, onEnviar }) {
   return (
     <tr
-      className={`group h-16 border-b border-root/5 transition-colors duration-150 hover:bg-cream ${
+      className={`group h-16 border-b border-grafito/5 transition-colors duration-150 hover:bg-cream ${
         o.removiendo ? 'animate-fade-out' : 'animate-fade-up'
       }`}
     >
@@ -251,7 +252,7 @@ function Fila({ orden: o, stats, procesando, onVer, onAprobar, onRechazar, onEnv
       <td className="tabular px-4 py-3 text-right text-sm text-grafito">
         {o.cantidad}
       </td>
-      <td className="tabular px-4 py-3 text-right font-mono text-[15px] font-bold text-root">
+      <td className="tabular px-4 py-3 text-right font-mono text-[15px] font-bold text-grafito">
         {formatMoney(o.monto)}
       </td>
       <td className="px-4 py-3">

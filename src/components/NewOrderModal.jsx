@@ -79,7 +79,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-grafito">
+            <h2 className="flex items-center gap-2 font-sans tracking-tight text-2xl font-bold text-grafito">
               <PackagePlus size={22} className="text-root" strokeWidth={1.5} />
               Nueva orden de compra
             </h2>
@@ -118,7 +118,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
             <div className="skeleton h-12 rounded-lg" />
           </div>
         ) : productos.length === 0 ? (
-          <p className="mt-6 rounded-lg bg-white p-4 text-center text-sm text-warmgray ring-1 ring-root/10">
+          <p className="mt-6 rounded-lg bg-white p-4 text-center text-sm text-warmgray ring-1 ring-grafito/10">
             No hay productos cargados en el catálogo.
           </p>
         ) : (
@@ -140,7 +140,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
                 id="nueva-producto"
                 value={productoId}
                 onChange={(e) => setProductoId(e.target.value)}
-                className="mt-1 w-full rounded-lg bg-white px-3 py-2.5 text-sm text-grafito outline-none ring-1 ring-root/15 transition focus:ring-root/40"
+                className="mt-1 w-full rounded-lg bg-white px-3 py-2.5 text-sm text-grafito outline-none ring-1 ring-grafito/15 transition focus:ring-root/40"
               >
                 <option value="">Seleccionar producto…</option>
                 {productos.map((p) => (
@@ -173,11 +173,11 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
                 placeholder="Unidades a ordenar"
-                className="tabular mt-1 w-full rounded-lg bg-white px-3 py-2.5 text-sm text-grafito outline-none ring-1 ring-root/15 transition placeholder:text-warmgray focus:ring-root/40"
+                className="tabular mt-1 w-full rounded-lg bg-white px-3 py-2.5 text-sm text-grafito outline-none ring-1 ring-grafito/15 transition placeholder:text-warmgray focus:ring-root/40"
               />
             </div>
 
-            <label className="flex items-start gap-2.5 rounded-lg bg-white p-3 ring-1 ring-root/10">
+            <label className="flex items-start gap-2.5 rounded-lg bg-white p-3 ring-1 ring-grafito/10">
               <input
                 type="checkbox"
                 checked={forzarAprobacion}
@@ -193,7 +193,7 @@ export default function NewOrderModal({ open, onClose, onCreated }) {
               </span>
             </label>
 
-            <div className="flex items-center justify-between rounded-lg bg-white p-3 ring-1 ring-root/10">
+            <div className="flex items-center justify-between rounded-lg bg-white p-3 ring-1 ring-grafito/10">
               <span className="text-sm font-semibold text-grafito">
                 Monto estimado
               </span>

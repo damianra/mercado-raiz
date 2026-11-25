@@ -4,14 +4,14 @@ import { Link } from '../lib/router.jsx';
 export default function NotFound() {
   return (
     <div className="grid min-h-screen place-items-center px-6">
-      <div className="w-full max-w-md rounded-lg bg-white p-10 text-center shadow-soft ring-1 ring-root/10">
+      <div className="w-full max-w-md rounded-lg bg-white p-10 text-center shadow-soft ring-1 ring-grafito/10">
         <span className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-terra/90">
           <Leaf size={26} className="text-cream" strokeWidth={1.5} />
         </span>
         <p className="mt-6 font-mono text-sm font-bold tracking-widest text-terra">
           404
         </p>
-        <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-grafito">
+        <h1 className="mt-2 font-sans tracking-tight text-2xl font-bold text-grafito">
           Página no encontrada
         </h1>
         <p className="mt-3 flex items-start justify-center gap-2 text-sm leading-relaxed text-warmgray">

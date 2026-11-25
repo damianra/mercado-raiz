@@ -100,17 +100,17 @@ export default function Topbar({
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-root/10 bg-cream/90 backdrop-blur">
-      <div className="flex h-16 items-center gap-4 px-4 sm:px-8">
+    <header className="sticky top-0 z-30 border-b border-grafito/10 bg-white/85 backdrop-blur">
+      <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
         <button
           onClick={onMenu}
-          className="rounded-lg p-2 text-grafito hover:bg-root/10 md:hidden"
+          className="rounded-lg p-2 text-grafito hover:bg-cream md:hidden"
           aria-label="Abrir menú"
         >
           <Menu size={20} strokeWidth={1.5} />
         </button>
         <div>
-          <h1 className="font-display text-xl font-bold tracking-tight text-grafito sm:text-2xl">
+          <h1 className="font-sans tracking-tight text-lg font-bold text-grafito sm:text-xl">
             {titulo}
           </h1>
           <p className="hidden text-sm text-warmgray sm:block">
@@ -123,7 +123,7 @@ export default function Topbar({
           <div className="relative" ref={panelRef}>
             <button
               onClick={() => setOpen((o) => !o)}
-              className="relative rounded-lg p-2 text-grafito transition-colors hover:bg-root/10"
+              className="relative rounded-lg p-2 text-grafito transition-colors hover:bg-cream"
               aria-label={`Notificaciones${badge ? `, ${badge} pendientes` : ''}`}
               aria-expanded={open}
               aria-haspopup="true"
@@ -138,7 +138,7 @@ export default function Topbar({
 
             {open && (
               <div
-                className="absolute right-0 top-12 w-80 rounded-lg bg-white p-2 shadow-lift ring-1 ring-root/10 animate-fade-up"
+                className="absolute right-0 top-12 w-80 rounded-lg bg-white p-2 shadow-lift ring-1 ring-grafito/10 animate-fade-up"
                 role="menu"
                 aria-label="Notificaciones"
               >
@@ -250,8 +250,8 @@ export default function Topbar({
             )}
           </div>
           )}
-          <div className="flex items-center gap-2">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-root text-sm font-bold text-white">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-root text-xs font-bold text-white ring-2 ring-white shadow-soft">
               {iniciales(usuario?.nombre)}
             </span>
             <div className="hidden sm:block">
@@ -264,7 +264,7 @@ export default function Topbar({
             </div>
             <button
               onClick={onLogout}
-              className="rounded-lg p-2 text-grafito transition-colors hover:bg-root/10"
+              className="rounded-lg p-2 text-grafito transition-colors hover:bg-cream"
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
             >
