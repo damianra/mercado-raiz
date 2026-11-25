@@ -34,6 +34,7 @@ const SELECT_ORDEN = `SELECT o.id, o.orden_id, o.cantidad, o.precio_unitario, o.
     o.enviado_por, o.fecha_envio, o.cantidad_recibida, o.recibido_por, o.fecha_recepcion,
     p.id AS p_id, p.sku AS p_sku, p.nombre AS p_nombre, p.categoria AS p_categoria,
     p.stock_actual AS p_stock_actual, p.stock_minimo AS p_stock_minimo,
+    p.vida_util_dias AS p_vida_util_dias,
     p.precio_venta AS p_precio_venta, p.ubicacion AS p_ubicacion,
     pr.id AS pr_id, pr.nombre AS pr_nombre, pr.contacto AS pr_contacto,
     pr.telefono AS pr_telefono, pr.email AS pr_email,
@@ -51,6 +52,9 @@ function mapOrdenResumen(row) {
       nombre: row.p_nombre,
       stock_actual: row.p_stock_actual,
       stock_minimo: row.p_stock_minimo,
+      // SPEC-33 (T33.4): la recepción ofrece cargar el vencimiento
+      // del lote solo si el producto es perecedero.
+      vida_util_dias: row.p_vida_util_dias,
     },
     proveedor: {
       id: row.pr_id,

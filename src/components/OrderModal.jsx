@@ -4,9 +4,11 @@ import { formatMoney } from '../data/orders.js';
 
 export default function OrderModal({ orden, procesando, onClose, onAprobar, onRechazar, onEnviar, onRecibir }) {
   const [recibida, setRecibida] = useState('');
+  const [vencimiento, setVencimiento] = useState('');
 
   useEffect(() => {
     setRecibida(orden ? String(orden.cantidad) : '');
+    setVencimiento('');
   }, [orden]);
 
   useEffect(() => {
@@ -200,7 +202,7 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
                 <span className="text-xs text-warmgray">/ {orden.cantidad}</span>
               </label>
               <button
-                onClick={() => onRecibir(orden, cantRecibir)}
+                onClick={() => onRecibir(orden, cantRecibir, vencimiento || undefined)}
                 disabled={procesando || !recibirValida}
                 className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-root text-sm font-semibold text-white transition duration-200 ease-brand hover:-translate-y-0.5 hover:bg-root-dark hover:shadow-lift disabled:opacity-40"
               >
@@ -215,6 +217,33 @@ export default function OrderModal({ orden, procesando, onClose, onAprobar, onRe
                 )}
               </button>
             </div>
+            {/* SPEC-33 (T33.4): en perecederos el remito puede traer
+                el vencimiento del lote — opcional; vacío aplica el
+                default hoy + vida_util_dias. */}
+            {orden.vidaUtilDias != null && (
+              <label className="mt-3 flex h-12 items-center gap-2 rounded-lg bg-white px-3 ring-1 ring-grafito/15 focus-within:ring-2 focus-within:ring-root">
+                <span className="whitespace-nowrap text-xs font-semibold text-warmgray">
+                  Vencimiento del lote <span className="font-normal">(opcional)</span>
+                </span>
+                <input
+                  type="date"
+                  value={vencimiento}
+                  onChange={(e) => setVencimiento(e.target.value)}
+                  disabled={procesando}
+                  aria-label="Vencimiento del lote"
+                  className="w-full bg-transparent text-right text-sm font-semibold text-grafito outline-none"
+                />
+                <span className="whitespace-nowrap text-xs text-warmgray">
+                  default:{' '}
+                  {new Date(Date.now() + orden.vidaUtilDias * 86400000)
+                    .toISOString()
+                    .slice(0, 10)
+                    .split('-')
+                    .reverse()
+                    .join('/')}
+                </span>
+              </label>
+            )}
             {recibirValida && cantRecibir < orden.cantidad && (
               <p className="mt-2 text-xs text-warmgray">
                 Recepción parcial — falta {orden.cantidad - cantRecibir}{' '}

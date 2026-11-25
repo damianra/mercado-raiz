@@ -28,12 +28,14 @@ function zonaPropuesta(p, { costo, min, max }) {
   return { texto: 'Sin datos de mercado', cls: 'text-warmgray' };
 }
 
-export default function AjustePrecioModal({ producto, onClose, onHecho }) {
+export default function AjustePrecioModal({ producto, motivoInicial = 'AJUSTE_MERCADO', onClose, onHecho }) {
   const [comp, setComp] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
   const [valor, setValor] = useState('');
-  const [motivo, setMotivo] = useState('AJUSTE_MERCADO');
+  // SPEC-33 (T33.4): "Liquidar" desde /vencimientos entra con
+  // motivoInicial=LIQUIDACION — el select sigue editable.
+  const [motivo, setMotivo] = useState(motivoInicial);
   const [confirmarSalvataje, setConfirmarSalvataje] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState(null);

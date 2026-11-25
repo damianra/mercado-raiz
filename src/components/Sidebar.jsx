@@ -1,5 +1,6 @@
 import {
   Bell,
+  CalendarClock,
   ChartColumn,
   TriangleAlert,
   LayoutDashboard,
@@ -20,6 +21,9 @@ const NAV = [
   { id: 'ordenes', label: 'Órdenes', icon: ClipboardCheck, excluye: ['BUYER'] },
   // SPEC-27 T27.4: quiebres y margen en riesgo — operativo, todos los roles.
   { id: 'quiebres', label: 'Quiebres', icon: TriangleAlert, to: '/quiebres', excluye: ['BUYER'] },
+  // SPEC-33 T33.4: cola de lotes por vencer/vencidos — lectura para
+  // todo no-BUYER; la baja y la liquidación son GERENTE/ADMIN.
+  { id: 'vencimientos', label: 'Vencimientos', icon: CalendarClock, to: '/vencimientos', excluye: ['BUYER'] },
   // SPEC-28 T28.2: scorecard de métricas retail — operativo, todos
   // los roles (fill rate, riesgo, inventario, proveedores).
   { id: 'metricas', label: 'Métricas', icon: ChartColumn, to: '/metricas', excluye: ['BUYER'] },

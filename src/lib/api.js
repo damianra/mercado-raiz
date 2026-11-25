@@ -82,6 +82,9 @@ export function mapOrden(o) {
     cantidadRecibida: o.cantidad_recibida ?? null,
     enviadoPor: o.enviado_por ?? null,
     recibidoPor: o.recibido_por ?? null,
+    // SPEC-33 (T33.4): perecedero → la recepción ofrece cargar el
+    // vencimiento del lote; null = producto no perecedero.
+    vidaUtilDias: o.producto?.vida_util_dias ?? null,
   };
 }
 
@@ -197,12 +200,33 @@ export const enviarOrden = (ordenId) =>
     body: '{}',
   });
 
-export const recibirOrden = (ordenId, cantidadRecibida) =>
+export const recibirOrden = (ordenId, cantidadRecibida, fechaVencimiento) =>
   apiFetch(`/ordenes/${encodeURIComponent(ordenId)}/recibir`, {
     method: 'POST',
-    body: JSON.stringify(
-      cantidadRecibida != null ? { cantidad_recibida: cantidadRecibida } : {},
-    ),
+    // SPEC-33 (T33.4): el remito puede traer el vencimiento del
+    // lote — opcional; sin ella el server aplica hoy+vida_util_dias.
+    body: JSON.stringify({
+      ...(cantidadRecibida != null ? { cantidad_recibida: cantidadRecibida } : {}),
+      ...(fechaVencimiento ? { fecha_vencimiento: fechaVencimiento } : {}),
+    }),
+  });
+
+// SPEC-33 (T33.4): desglose físico del stock por lote con
+// vencimiento — dias_restantes, estado y valor_en_riesgo vienen
+// calculados del server (R33.5).
+export const getLotes = ({ productoId, estado, page = 1, limit = 50 } = {}) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (productoId != null) qs.set('producto_id', String(productoId));
+  if (estado) qs.set('estado', estado);
+  return apiFetch(`/lotes?${qs}`);
+};
+
+// Baja manual del lote (merma por vencimiento — R33.7): lote a 0,
+// contador descontado e historial MERMA, todo en la misma tx.
+export const bajaLote = (loteId) =>
+  apiFetch(`/lotes/${encodeURIComponent(loteId)}/baja`, {
+    method: 'POST',
+    body: '{}',
   });
 
 // SPEC-30 (T30.2): venta POS — descuenta stock + historial en la

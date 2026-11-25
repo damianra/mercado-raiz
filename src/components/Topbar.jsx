@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, LogOut, Menu, PackageX, TriangleAlert } from 'lucide-react';
+import { Bell, CalendarClock, LogOut, Menu, PackageX, TriangleAlert } from 'lucide-react';
 import { formatMoney } from '../data/orders.js';
 import { getAlertas } from '../lib/api.js';
 import { navigate } from '../lib/router.jsx';
@@ -41,11 +41,17 @@ const TIPOS_AJUSTE = new Set([
 ]);
 const destinoAlerta = (a) => {
   if (a.tipo === 'QUIEBRE') return '/quiebres';
+  // T33.4: el vencimiento va a su cola de acción propia.
+  if (a.tipo === 'VENCIMIENTO') return '/vencimientos';
   if (TIPOS_AJUSTE.has(a.tipo) && a.producto_id) {
     return `/metricas?ajustar=${a.producto_id}`;
   }
   return '/metricas';
 };
+
+// Ícono por tipo — VENCIMIENTO lleva el de calendario, el resto
+// quiebre/stock como antes.
+const iconoAlerta = (a) => (a.tipo === 'VENCIMIENTO' ? CalendarClock : PackageX);
 
 export default function Topbar({
   urgentes = 0,
@@ -173,7 +179,9 @@ export default function Topbar({
                           Alertas de stock
                         </p>
                         <ul>
-                          {altasVisibles.slice(0, MAX_ALERTAS_CAMPANA).map((a) => (
+                          {altasVisibles.slice(0, MAX_ALERTAS_CAMPANA).map((a) => {
+                            const Icono = iconoAlerta(a);
+                            return (
                             <li key={`alerta-${a.id}`}>
                               <button
                                 role="menuitem"
@@ -183,7 +191,7 @@ export default function Topbar({
                                 }}
                                 className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cream"
                               >
-                                <PackageX
+                                <Icono
                                   size={16}
                                   strokeWidth={1.5}
                                   className="mt-0.5 shrink-0 text-terra"
@@ -203,7 +211,8 @@ export default function Topbar({
                                 </span>
                               </button>
                             </li>
-                          ))}
+                            );
+                          })}
                         </ul>
                         {altasVisibles.length > MAX_ALERTAS_CAMPANA && (
                           <button
