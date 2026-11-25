@@ -8,7 +8,7 @@ y cómo fluye el trabajo del día a día. Sin tecnicismos.*
 ## Qué es
 
 **Mercado Raíz** es el panel de control de reposición de un retailer de
-alimentos ("del campo a tu mesa"). Responde tres preguntas que hoy se
+alimentos ("del campo a tu mesa"). Responde cuatro preguntas que hoy se
 responden tarde o a ojo:
 
 1. **¿Qué se está por quedar sin stock?** — y cuánta plata deja de ganar
@@ -19,9 +19,12 @@ responden tarde o a ojo:
 3. **¿Quién lo aprueba y en qué estado está?** — nada *grande* se
    compra sin validación humana, y cada orden se sigue hasta que el
    camión descarga y el stock sube.
+4. **¿Qué se está por vencer?** — los perecederos se siguen por lote:
+   qué está por vencer, cuánta plata hay en riesgo y qué conviene
+   hacer (liquidar o dar de baja) antes de que sea pérdida.
 
 La promesa: **menos góndolas vacías, menos plata clavada en mercadería
-que no rota, y decisiones de compra con números a la vista.**
+que no rota o se vence, y decisiones de compra con números a la vista.**
 
 ## El ciclo completo, en una mirada
 
@@ -48,6 +51,8 @@ Se marca como enviada al proveedor
         │
         ▼
 Llega el camión → se registra la recepción
+(si el producto es perecedero, se puede
+cargar el vencimiento que trae el remito)
         │
         ▼
 El stock sube y el quiebre se resuelve
@@ -56,6 +61,12 @@ El stock sube y el quiebre se resuelve
 Cada paso queda registrado: quién aprobó, quién marcó el envío, quién
 recibió, cuántas unidades llegaron (si llegaron menos de lo pedido,
 la diferencia queda anotada).
+
+**Los perecederos se manejan por lote.** Cada recepción de camión y
+cada ingreso manual crean un *lote* con su fecha de vencimiento; las
+ventas y las mermas descuentan siempre del que vence antes (FEFO — lo
+que primero expira, primero sale). Lo que se vence en góndola se da
+de baja desde **Vencimientos** y queda registrado como merma.
 
 ## Las alertas: que nadie tenga que ir a buscarlas
 
@@ -74,7 +85,11 @@ mientras alguien las consulta — la campanita las refresca sola):
 |---|---|---|
 | **Quiebre** | Stock en cero con demanda activa — se está perdiendo venta ahora | Alta |
 | **Riesgo por demora** | El stock alcanza para menos días de lo que tarda el proveedor en entregar | Alta/Media |
-| **Stock muerto** | Mercadería parada hace más de 90 días — plata inmovilizada | Baja |
+| **Vencimiento** | Un producto tiene lotes por vencer o ya vencidos — hay que liquidar o dar de baja | Alta si ya venció o le quedan pocos días; escala con la vida útil del producto |
+| **Presión competitiva** | Una cadena tiene en promo un producto que acá es top seller — la competencia aprieta donde más duele | Alta/Media según la profundidad de la promo |
+| **Precio fuera de mercado** | El precio propio quedó por encima del máximo de las 4 cadenas | Media |
+| **Oportunidad de margen** | El precio propio quedó >15% bajo el mínimo de mercado en un producto que rota — margen regalado | Baja |
+| **Stock muerto** | Mercadería parada hace más de 90 días — plata inmovilizada | Escala con el capital: alta sobre $350.000, media sobre $150.000 |
 | **Orden pendiente** | Una OC lleva más de 48 horas esperando aprobación | Media |
 
 ## Los roles
@@ -85,8 +100,8 @@ mientras alguien las consulta — la campanita las refresca sola):
 Responsable del punto de venta. Su palabra corrige lo que el sistema
 cree que hay en la góndola.
 
-**Qué ve**: todo el negocio — Dashboard de órdenes, Quiebres, Métricas
-y la campanita con las alertas graves.
+**Qué ve**: todo el negocio — Dashboard de órdenes, Quiebres,
+Vencimientos, Métricas y la campanita con las alertas graves.
 
 **Qué hace día a día**:
 
@@ -95,9 +110,15 @@ y la campanita con las alertas graves.
   conteo físico diverge y hay que ajustar).
 - **Ajusta el stock** con el conteo real de góndola/depósito o con
   mermas y roturas — la corrección queda registrada con motivo.
+- **Gestiona los vencimientos** desde la pantalla homónima: ve los
+  lotes por vencer o vencidos con la plata en riesgo y decide por
+  fila — **liquidar** el precio antes de que llegue a cero o **dar
+  de baja** el lote (merma por vencimiento, con confirmación porque
+  descuenta stock real).
 - **Aprueba, envía y recibe órdenes** — tiene los mismos poderes sobre
   las OCs que la aprobadora (es backup de su rol).
-- Mira la **campanita**: las alertas graves le llegan solas.
+- Mira la **campanita**: las alertas graves le llegan solas — un clic
+  en una de vencimiento lo lleva directo a la cola de lotes.
 
 **Su superpoder**: es el único (junto a ADMIN) que puede *corregir* el
 stock — el sistema miente si la realidad miente, y el gerente es quien
@@ -109,8 +130,8 @@ pone los datos a la verdad con el conteo.
 sale sin su firma.
 
 **Qué ve**: lo mismo que el gerente en pantallas (Dashboard, Órdenes,
-Quiebres, Métricas, campanita) — pero su centro de gravedad es la
-bandeja de **órdenes pendientes de aprobación**.
+Quiebres, Vencimientos, Métricas, campanita) — pero su centro de
+gravedad es la bandeja de **órdenes pendientes de aprobación**.
 
 **Qué hace día a día**:
 
@@ -120,7 +141,9 @@ bandeja de **órdenes pendientes de aprobación**.
 - **Marca el envío** al proveedor una vez comunicada la OC.
 - **Registra la recepción** cuando llega el camión — ahí el stock sube
   y, si llegó menos de lo pedido, el faltante queda medido para
-  reclamarle al proveedor.
+  reclamarle al proveedor. En perecederos puede cargar la fecha de
+  vencimiento que trae el remito (si la omite, el sistema estima
+  `hoy + vida útil` del producto).
 - Las órdenes sobre productos en quiebre aparecen como **urgentes** en
   su campanita — son las que más apuran.
 
@@ -156,7 +179,8 @@ concreta, sin salir de una sola pantalla.
 roles y además administra el sistema.
 
 **Qué ve**: todas las pantallas — Dashboard, Órdenes, Quiebres,
-Métricas, **Usuarios** y **Proveedores** (estas dos solo para él).
+Vencimientos, Métricas, **Usuarios** y **Proveedores** (estas dos
+solo para él).
 
 **Qué hace**:
 
@@ -204,6 +228,7 @@ gente.
 |---|---|
 | **Dashboard / Órdenes** | La bandeja de OCs: pendientes, aprobadas, enviadas, recibidas — con buscador y filtros por estado |
 | **Quiebres** | Los productos en riesgo ordenados por **plata que se pierde por día** — con acciones directas de venta y ajuste |
+| **Vencimientos** | Los lotes por vencer o vencidos con días restantes y **plata en riesgo** — baja (merma) o liquidación del precio por fila |
 | **Métricas** | El scorecard: fill rate, margen en riesgo por día, margen perdido del período, inventario en plata, stock muerto y scorecard de proveedores |
 | **Alertas** (solo BUYER) | La cola de trabajo del comprador |
 | **Proveedores** (solo ADMIN) | ABM de proveedores y sus condiciones comerciales |
@@ -220,6 +245,14 @@ gente.
 - **Stock muerto**: mercadería que no rota hace más de 90 días.
 - **Margen en riesgo**: la ganancia que se pierde por día mientras no
   haya stock — el número que ordena la tabla de quiebres.
+- **Lote**: la porción física del stock que entró junta (un camión,
+  un ingreso manual) con su propia fecha de vencimiento.
+- **FEFO** (*first expired, first out*): lo que vence antes se vende
+  (y se merma) antes — el orden en que el sistema descuenta lotes.
+- **Merma por vencimiento**: baja definitiva de un lote vencido —
+  descuenta stock real y queda registrada con motivo.
+- **Vida útil**: los días que un producto perecedero tarda en vencer
+  desde que ingresa — define el vencimiento estimado de cada lote.
 
 ---
 
