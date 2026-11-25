@@ -1,5 +1,6 @@
 import { openDb } from '../db.js';
 import { estadoProducto, leadEsperado } from './productos.model.js';
+import { crearLoteEnTx } from './lotes.model.js';
 
 export const ESTADOS_ORDEN = [
   'PENDIENTE_APROBACION',
@@ -363,7 +364,7 @@ export async function enviarOrden(ordenId, enviadoPor) {
 // misma transacción: la OC registra cuánto llegó (cantidad_recibida
 // ≤ cantidad — el camión puede traer menos: el faltante queda
 // medible) y el producto SUMA stock + historial_stock REPOSICION.
-export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
+export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor, fechaVencimiento) {
   const db = await openDb();
   const ts = now();
   const ok = await db.tx(async (t) => {
@@ -375,7 +376,7 @@ export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
     // null → 409. Sin esto la segunda request volvería a sumar
     // stock y a insertar otro REPOSICION.
     const o = await t.get(
-      `SELECT producto_id, estado FROM ordenes_compra WHERE orden_id = ? FOR UPDATE`,
+      `SELECT id, producto_id, estado FROM ordenes_compra WHERE orden_id = ? FOR UPDATE`,
       [ordenId],
     );
     if (!o || o.estado !== 'ENVIADA') return false;
@@ -386,8 +387,8 @@ export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
        WHERE orden_id = ?`,
       [cantidadRecibida, recibidoPor, ts, ts, ordenId],
     );
-    const { stock_actual: anterior } = await t.get(
-      `SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE`,
+    const { stock_actual: anterior, vida_util_dias: vidaUtil } = await t.get(
+      `SELECT stock_actual, vida_util_dias FROM productos WHERE id = ? FOR UPDATE`,
       [o.producto_id],
     );
     const nuevo = anterior + cantidadRecibida;
@@ -401,6 +402,20 @@ export async function recibirOrden(ordenId, cantidadRecibida, recibidoPor) {
        VALUES (?, 'REPOSICION', ?, ?, ?, ?, ?)`,
       [o.producto_id, anterior, nuevo, cantidadRecibida, ordenId, recibidoPor],
     );
+    // SPEC-33 (T33.2/R33.4): el camión trae un lote — se crea con
+    // la fecha del remito (body) o el default hoy+vida útil del
+    // artículo (NULL en no perecederos). La OC queda linkeada.
+    const vencimientoDefault = vidaUtil != null
+      ? new Date(Date.parse(ts) + vidaUtil * 86400000).toISOString().slice(0, 10)
+      : null;
+    await crearLoteEnTx(t, {
+      productoId: o.producto_id,
+      codigo: ordenId,
+      cantidad: cantidadRecibida,
+      fechaVencimiento: fechaVencimiento ?? vencimientoDefault,
+      origen: 'OC',
+      ordenId: o.id,
+    });
     return true;
   });
   if (!ok) return null;

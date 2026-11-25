@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { crearLoteEnTx, descontarFefo } from './lotes.model.js';
 
 // SPEC-30 (T30.2): motivos del ajuste manual — el conteo físico de
 // góndola/depósito es un motivo, no un tipo de movimiento (por eso
@@ -43,6 +44,21 @@ export async function ajustarStock({
        VALUES (?, 'AJUSTE', ?, ?, ?, ?, ?, ?) RETURNING id`,
       [productoId, anterior, nuevo, nuevo - anterior, referencia ?? null, usuario, motivo],
     );
+    // SPEC-33 (T33.2): espejo en lotes del ajuste — una baja sale
+    // en FEFO (la merma física se cobra al que vence antes); un
+    // conteo que encuentra unidades crea lote AJUSTE sin
+    // vencimiento (el físico encontrado no trae etiqueta — SPEC-33,
+    // decisión "ajuste positivo sin fecha").
+    if (nuevo < anterior) {
+      await descontarFefo(t, productoId, anterior - nuevo);
+    } else if (nuevo > anterior) {
+      await crearLoteEnTx(t, {
+        productoId,
+        codigo: `AJU-${h.id}`,
+        cantidad: nuevo - anterior,
+        origen: 'AJUSTE',
+      });
+    }
     return {
       status: 201,
       data: { movimiento_id: h.id, stock_anterior: anterior, stock_nuevo: nuevo },

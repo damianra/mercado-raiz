@@ -1,4 +1,5 @@
 import { openDb } from '../db.js';
+import { descontarFefo } from './lotes.model.js';
 import { avisarQuiebreAlAgente } from '../harness-trigger.js';
 
 // SPEC-26 (R26.2): ventas como hechos de negocio — lo consume el
@@ -81,6 +82,11 @@ async function aplicarVentaEnTx(t, p, { productoId, unidades, canal, fecha, refe
     `UPDATE productos SET stock_actual = ?, fecha_actualizacion = ? WHERE id = ?`,
     [nuevo, ts, productoId],
   );
+  // SPEC-33 (T33.2): el mismo movimiento descuenta lotes en FEFO —
+  // lo que vence antes sale primero (R33.2/R33.3). El remanente no
+  // cubierto (sobreventa o producto sin lotes) queda solo en el
+  // contador: es la divergencia documentada.
+  await descontarFefo(t, productoId, unidades);
   const v = await t.get(
     `INSERT INTO ventas (producto_id, fecha, unidades, canal, referencia)
      VALUES (?, ?::date, ?, ?, ?) RETURNING id`,
