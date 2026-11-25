@@ -30,8 +30,9 @@ const money = (n) =>
 
 // Genera las alertas-candidata del momento. Función pura para
 // testear las reglas sin tocar la tabla. `lotes` trae las filas con
-// cantidad > 0 y vencimiento ≤ hoy+15d (la ventana máxima posible —
-// cada producto aplica la suya, relativa a su vida útil).
+// cantidad > 0 y vencimiento ≤ hoy+30d (2× la ventana máxima — la
+// banda BAJA llega al doble; cada producto aplica la suya, relativa
+// a su vida útil).
 export function candidatas({ productos, stats, ordenes, corte, competencia, lotes }) {
   const statsPor = new Map(stats.map((s) => [s.producto_id, s]));
   const compPor = competencia ?? new Map();
@@ -66,25 +67,31 @@ export function candidatas({ productos, stats, ordenes, corte, competencia, lote
 
     // T33.3 — VENCIMIENTO: el lote vence igual aunque el contador
     // haya divergido por sobreventa, así que se evalúa antes del
-    // `continue` de stock≤0. Severidad por el lote más próximo:
-    // ALTA ≤3d (o ya vencido), MEDIA ≤7d, BAJA hasta la ventana del
-    // producto (min(15, 40%·vida) — NULL cae a 15d como PROXIMO en
-    // listarLotes: fecha cargada a mano en un seco).
+    // `continue` de stock≤0. Severidad relativa a la ventana del
+    // producto (SPEC-33): ALTA vencido o ≤ max(1, ventana/3)d,
+    // MEDIA ≤ ventana, BAJA ≤ el doble (awareness temprano).
+    // vida NULL → ventana 15, igual que PROXIMO en listarLotes.
     const ventanaVto =
       p.vida_util_dias != null ? diasAlertaVencimiento(p.vida_util_dias) : 15;
-    const enVentana = (lotesPor.get(p.id) ?? []).filter((l) => l.dias <= ventanaVto);
+    const enVentana = (lotesPor.get(p.id) ?? []).filter(
+      (l) => l.dias <= 2 * ventanaVto,
+    );
     if (enVentana.length) {
       const minDias = Math.min(...enVentana.map((l) => l.dias));
       const vencidas = enVentana
         .filter((l) => l.dias < 0)
         .reduce((a, l) => a + l.cantidad, 0);
-      const porVencer = enVentana
-        .filter((l) => l.dias >= 0)
-        .reduce((a, l) => a + l.cantidad, 0);
-      const severidad = minDias <= 3 ? 'ALTA' : minDias <= 7 ? 'MEDIA' : 'BAJA';
+      const proximas = enVentana.filter((l) => l.dias >= 0);
+      const porVencer = proximas.reduce((a, l) => a + l.cantidad, 0);
+      const altaHasta = Math.max(1, Math.floor(ventanaVto / 3));
+      const severidad =
+        minDias <= altaHasta ? 'ALTA' : minDias <= ventanaVto ? 'MEDIA' : 'BAJA';
       const detalle = [
         vencidas > 0 && `${vencidas}u vencidas`,
-        porVencer > 0 && `${porVencer}u por vencer (más próximo en ${Math.max(0, minDias)}d)`,
+        porVencer > 0 &&
+          `${porVencer}u por vencer (más próximo en ${Math.min(
+            ...proximas.map((l) => l.dias),
+          )}d)`,
       ]
         .filter(Boolean)
         .join(' — ');
@@ -263,9 +270,10 @@ async function evaluarAhora() {
     // T32.4: una pasada — min/max de mercado, promos y costo
     // principal por producto (ver competenciaBulk).
     competenciaBulk(),
-    // T33.3: lotes vivos con vencimiento dentro de la ventana
-    // máxima (15d — cada producto recorta la suya en candidatas).
-    // Lotes agotados o sin fecha nunca alertan.
+    // T33.3: lotes vivos con vencimiento dentro del doble de la
+    // ventana máxima (2×15=30d — la banda BAJA llega hasta ahí;
+    // cada producto recorta la suya en candidatas). Lotes agotados
+    // o sin fecha nunca alertan.
     db.all(
       `SELECT producto_id,
               (fecha_vencimiento - CURRENT_DATE)::int AS dias,
@@ -273,7 +281,7 @@ async function evaluarAhora() {
        FROM lotes
        WHERE cantidad_actual > 0
          AND fecha_vencimiento IS NOT NULL
-         AND fecha_vencimiento <= CURRENT_DATE + 15`,
+         AND fecha_vencimiento <= CURRENT_DATE + 30`,
     ),
   ]);
   const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - DIAS_VENTANA * 86400000)
