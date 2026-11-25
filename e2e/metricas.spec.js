@@ -132,4 +132,16 @@ test('deep-link ?ajustar= abre el modal de precio directo (T32.8)', async ({
   });
   await expect(modal).toBeVisible({ timeout: 15_000 });
   await expect(modal).toContainText('MR00002');
+  await modal.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(modal).toBeHidden();
+
+  // Nit del re-review: re-click a la MISMA alerta — el replaceState
+  // dejó el search stale en useSearch; sin el tick de nav el setState
+  // sería idéntico y el modal no reabriría.
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/metricas?ajustar=2');
+    window.dispatchEvent(new Event('app:navigate'));
+  });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect(modal).toContainText('MR00002');
 });

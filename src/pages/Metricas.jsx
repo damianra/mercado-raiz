@@ -68,7 +68,7 @@ export default function Metricas({ usuario }) {
   // en la tabla de outliers (alertas de pricing sobre in-range).
   // Suscrito a useSearch: si el usuario YA está en /metricas, el
   // pushState no remonta la página — el param llega igual.
-  const search = useSearch();
+  const { search, nav } = useSearch();
   useEffect(() => {
     const raw = new URLSearchParams(search).get('ajustar');
     if (raw == null) return;
@@ -83,7 +83,7 @@ export default function Metricas({ usuario }) {
         setPrecio({ id: p.id, sku: p.sku, nombre: p.nombre, precio_venta: p.precio_venta }),
       )
       .catch(() => {}); // id inexistente → la página carga normal
-  }, [search]);
+  }, [search, nav]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
