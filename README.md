@@ -28,7 +28,7 @@ prompt front - back Qwen 3.7
 npm install
 cp .env.example .env      # completar JWT_SECRET (ver archivo)
 docker compose up -d      # Postgres 16 → base mercadoraiz-db en :5432 (con podman: podman compose up -d)
-npm run seed              # puebla la DB: catálogo real de 1.471 artículos + demo del flujo
+npm run seed              # puebla la DB: catálogo real de 1.471 artículos + lotes con vencimiento + demo del flujo
 npm run dev               # frontend en http://localhost:5173
 npm run api               # API Express en http://localhost:4000
 ```
@@ -85,14 +85,16 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `POST /api/ordenes/batch` — array de órdenes en una transacción (todo o nada; 400 con detalle por índice si algún item falla — SPEC-16)
 - `POST /api/ordenes/:orden_id/aprobar` · `POST /api/ordenes/:orden_id/rechazar` (requiere `motivo`)
 - `POST /api/ordenes/:orden_id/enviar` — APROBADA→ENVIADA (la OC ya se le mandó al proveedor; rol aprobador)
-- `POST /api/ordenes/:orden_id/recibir` — ENVIADA→RECIBIDA (llegó el camión: suma `stock_actual` + `historial_stock` en tx; `cantidad_recibida` opcional ≤ pedida, default completa — recepciones parciales medibles)
+- `POST /api/ordenes/:orden_id/recibir` — ENVIADA→RECIBIDA (llegó el camión: suma `stock_actual` + `historial_stock` en tx; `cantidad_recibida` opcional ≤ pedida, default completa — recepciones parciales medibles). Crea el lote `OC-*` en la misma tx (SPEC-33): `fecha_vencimiento` del body (`YYYY-MM-DD`) o default `hoy + vida_util_dias` para perecederos
+- `GET /api/lotes` — desglose físico del stock por lote (SPEC-33): `dias_restantes`, `estado` (VIGENTE/PROXIMO/VENCIDO/AGOTADO) y `valor_en_riesgo` calculados server-side; filtros `producto_id`, `estado`, paginado estándar. Lectura para todo no-BUYER
+- `POST /api/lotes/:id/baja` — merma por vencimiento (SPEC-33): lote a 0 + descuento del contador + `historial_stock` AJUSTE motivo MERMA en la misma tx; 409 si ya está en 0. Roles: `GERENTE` y `ADMIN`
 - `GET /api/productos` — lista paginada, `estado` recalculado al leer
 - `GET /api/dashboard/stats` — KPIs del dashboard
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
-- `POST /api/ventas` — punto de integración POS (SPEC-30 T30.2): descuenta `stock_actual` + `historial_stock` VENTA en la misma tx; el stock puede quedar negativo (la venta es hecho físico — la divergencia se corrige con conteo). Sin rol extra, cualquier no-BUYER. `POST /api/ventas/batch` — lote del cierre de turno en una request (todo-o-nada, máx 500) — la vía para la integración POS frente al rate limiter
-- `POST /api/stock/ajuste` — ajuste manual de inventario (SPEC-30 T30.2): `{producto_id, motivo: MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?, referencia?}` — exactamente un modo; conteo de góndola/depósito vive acá. Roles: `GERENTE` y `ADMIN`
-- `GET /api/alertas?leida=&tipo=` · `PATCH /api/alertas/:id/leida` · `PATCH /api/alertas/leer-todas` · `POST /api/alertas/evaluar` — alertas operativas (SPEC-29): QUIEBRE/RIESGO_LEAD/DEAD_STOCK/ORDEN_PENDIENTE por reglas determinísticas; evaluación lazy cada 60min en el GET. GET: `BUYER`, `ADMIN`, `GERENTE`, `APROBADOR` (la campanita del Topbar lo consume, T30.6); escrituras: `BUYER` y `ADMIN`
+- `POST /api/ventas` — punto de integración POS (SPEC-30 T30.2): descuenta `stock_actual` + `historial_stock` VENTA en la misma tx, **FEFO** sobre los lotes (vence primero → sale primero; SPEC-33); el stock puede quedar negativo (la venta es hecho físico — la divergencia se corrige con conteo). Sin rol extra, cualquier no-BUYER. `POST /api/ventas/batch` — lote del cierre de turno en una request (todo-o-nada, máx 500) — la vía para la integración POS frente al rate limiter
+- `POST /api/stock/ajuste` — ajuste manual de inventario (SPEC-30 T30.2): `{producto_id, motivo: MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?, referencia?, fecha_vencimiento?}` — exactamente un modo; conteo de góndola/depósito vive acá. La baja descuenta FEFO; el ingreso crea un lote `AJU-*` (con la fecha informada o el default de vida útil — SPEC-33). Roles: `GERENTE` y `ADMIN`
+- `GET /api/alertas?leida=&tipo=` · `PATCH /api/alertas/:id/leida` · `PATCH /api/alertas/leer-todas` · `POST /api/alertas/evaluar` — alertas operativas (SPEC-29): QUIEBRE/RIESGO_LEAD/DEAD_STOCK/ORDEN_PENDIENTE por reglas determinísticas + VENCIMIENTO por producto con lote en ventana (severidad relativa a la vida útil — SPEC-33); evaluación lazy cada 60min en el GET. GET: `BUYER`, `ADMIN`, `GERENTE`, `APROBADOR` (la campanita del Topbar lo consume, T30.6); escrituras: `BUYER` y `ADMIN`
 - `GET /api/pedidos/sugerencia?producto_id=` · `POST /api/pedidos` — pedido del BUYER desde `/alertas` (SPEC-29 T29.3 + SPEC-30 T30.4): la sugerencia devuelve precios por proveedor + cantidad calculada con la math del agente por lead; el POST crea la OC real `PENDIENTE_APROBACION` (201) y marca la alerta atendida en la misma transacción — idempotente por `alerta_id` (la OC lleva `alerta_id` para trazabilidad, única). Roles: `BUYER` y `ADMIN`
 - `GET /api/estadisticas/metricas?dias=` — scorecard agregado (SPEC-28): quiebres en $/día de margen, riesgo por cobertura vs lead, inventario a costo/venta, dead stock, exceso, fill rate, órdenes pendientes y scorecard de proveedores
 - `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, σ, días con venta/en quiebre, última venta); sin `producto_id` devuelve `{data:[...]}` con las mismas stats de todos los productos (R26.9 — las columnas demanda/cobertura del dashboard)
@@ -144,7 +146,7 @@ La especificación completa (SDD) está en [`SPEC.md`](SPEC.md). Cada SPEC decla
 | SPEC-28 | Scorecard de métricas retail (`/api/estadisticas/metricas` + vista `/metricas`) |
 | SPEC-29 | Alertas operativas + rol BUYER (`/api/alertas`, reglas determinísticas, dashboard exclusivo `/alertas`) |
 | SPEC-30→32 | Inventario vivo (ciclo OC→recepción, ventas/ajustes, watchdog), rediseño visual, competitividad de precios — en `SPEC.md` |
-| SPEC-33 | Vencimientos y lotes (`lotes`, FEFO en ventas, `productos.vida_util_dias`) — en progreso |
+| SPEC-33 | Vencimientos y lotes (`lotes` descompone `stock_actual`, FEFO en ventas/ajustes, `vida_util_dias`, alerta VENCIMIENTO, `GET /api/lotes`, baja/merma, vista `/vencimientos`) |
 
 ## Usuarios demo
 
@@ -178,7 +180,11 @@ además **Proveedores** (`/proveedores`, SPEC-26). También todos
 los roles ven **Métricas** (`/metricas`, SPEC-28): fill rate,
 margen en riesgo/día, inventario a costo, dead stock, exceso,
 órdenes por aprobar y scorecard de proveedores (SKUs, lead
-esperado, confiabilidad, órdenes y montos).
+esperado, confiabilidad, órdenes y montos). Y todos los no-BUYER
+ven **Vencimientos** (`/vencimientos`, SPEC-33): la cola de lotes
+por vencer o vencidos con días restantes, valor en riesgo y
+estado — `GERENTE`/`ADMIN` pueden dar de baja un lote (merma) o
+liquidar su precio desde la fila.
 
 Endpoints de auth: `POST /api/auth/login` → `{access_token, usuario}`
 + cookies `mr_refresh` (httpOnly) y `mr_csrf` (legible → header

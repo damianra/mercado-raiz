@@ -1795,9 +1795,13 @@ sin rol no ve la sección. Review por sub-agente del PR.
 
 ### Verificado por
 
-Pendiente — por tarea: suite Vitest+E2E contra PG en CI, smoke
-manual de la migración (counts y muestras coinciden con
-`app.sqlite`), corrida del agente end-to-end sobre PG.
+Suite Vitest completa corriendo contra Postgres en CI
+(`.github/workflows/ci.yml` — servicio postgres + init-test-db)
+y en local (schema aislado por archivo, advisory lock de DDL en
+`db.js`); E2E contra la API sobre PG. Smoke de la migración
+`migrate-sqlite-to-pg.js` con counts por tabla y muestras que
+coinciden con `app.sqlite`. Corrida del agente end-to-end sobre
+PG en T26.6.
 
 ---
 
@@ -1809,7 +1813,8 @@ manual de la migración (counts y muestras coinciden con
   historial vacío, y que el tiempo de entrega del proveedor venga
   de una tabla administrable. Depende de SPEC-25 (las tablas
   nuevas se crean directo en Postgres).
-- **Estado global:** ⏳ planificada
+- **Estado global:** ✅ implementada — T26.1 a T26.8 mergeadas —
+  ver "Verificado por"
 - **Contexto:** hoy `historial_stock` seedea 7 movimientos sobre
   7 productos → ~1.460 SKUs sin ventas → `demanda_diaria = 0` →
   la prosa del LLM es correcta pero vacía. El `tiempo_entrega_dias`
@@ -2002,11 +2007,15 @@ pagado). El agente puede elegir proveedor por costo/lead.
 
 ### Verificado por
 
-Pendiente — por tarea: tests de `seed-ventas` (determinismo por EAN,
-perfiles, % sin ventas), CRUD proveedores (409 con referencias,
-whitelist), endpoint demanda (ponderación, quiebres, tendencia),
-suite e2e, corrida del agente mostrando `demanda_diaria > 0` real
-en `analisis_ia` para SKUs con historial.
+Vitest contra Postgres real: `ventas.test.js` (determinismo por
+EAN, perfiles de demanda, % sin ventas, `GET /api/ventas`),
+`proveedores.test.js` (CRUD, 409 con órdenes vivas, whitelist de
+campos, soft delete) y `estadisticas.test.js` (ponderación de
+demanda, quiebres, tendencia, bulk R26.9). E2E de `/proveedores`
+(`proveedores.spec.js`) y de las columnas demanda/cobertura del
+dashboard. Corrida del agente mostrando `demanda_diaria > 0` en
+`analisis_ia` para SKUs con historial. Review por sub-agente en
+cada PR.
 
 ---
 
@@ -2273,7 +2282,7 @@ Estas tareas convierten el sistema en herramienta diaria.
     varios quiebres no genera una corrida por cada uno.
     El backend apunta con `HARNESS_URL` (default :4110).
 
-- **T30.6** Las alertas llegan sin entrar a mirar: canal fuera de
+- **T30.6** ✅ Las alertas llegan sin entrar a mirar: canal fuera de
   la app (email/webhook) o al menos la campanita del Topbar
   funcional para GERENTE/APROBADOR con las alertas ALTA.
 
@@ -2677,8 +2686,8 @@ vencer de la cobertura (R33.9).
 | (post-gen) | SPEC-15 ✅ | `harness-langgraph/.gitignore`, `harness/orchestrator.js` | verificación git |
 | (post-gen) | SPEC-16 ✅ | `harness/analisis-cache.js`, `utils/{concurrencia,llm-json}.js`, `langgraph/nodes/*`, `server/models|controllers|routes/ordenes*` | `analisis-cache`, `concurrencia`, `crear-orden`, `ordenes-batch` (22 tests) + benchmark |
 | (post-gen) | SPEC-22 ✅ | `server/seed-articulos.js`, `server/seed-data.js`, `server/schema.sql`, `server/models/{productos,ordenes}.model.js` | `seed-articulos.test.js` (8) + `api.test.js`, `ordenes-batch.test.js`, e2e actualizados |
-| (post-gen) | SPEC-25 ⏳ | `server/db.js`, `server/schema.sql`→PG, `docker-compose.yml`, `server/migrate-sqlite-to-pg.js`, `harness-langgraph` (PostgresSaver) | suite Vitest+E2E contra PG, smoke de migración |
-| (post-gen) | SPEC-26 ⏳ | `server/seed-ventas.js`, `server/{routes,models,controllers}/{ventas,proveedores,estadisticas}.*`, `src/pages/Proveedores.jsx`, `harness-langgraph` nodos demanda | tests seed/CRUD/demanda + e2e + corrida agente |
+| (post-gen) | SPEC-25 ✅ | `server/db.js`, `server/schema.sql`→PG, `docker-compose.yml`, `server/migrate-sqlite-to-pg.js`, `harness-langgraph` (PostgresSaver) | suite Vitest+E2E contra PG, smoke de migración |
+| (post-gen) | SPEC-26 ✅ | `server/seed-ventas.js`, `server/{routes,models,controllers}/{ventas,proveedores,estadisticas}.*`, `src/pages/Proveedores.jsx`, `harness-langgraph` nodos demanda | tests seed/CRUD/demanda + e2e + corrida agente |
 
 ## Anexo B — Divergencias brief ↔ implementación
 
