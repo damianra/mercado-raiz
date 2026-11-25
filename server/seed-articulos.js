@@ -8,6 +8,10 @@
 // Campos internos únicamente (sin vínculo a retail-radar):
 // sku propio `MR#####`, nombre, marca, ean, categoría, precio propio,
 // stock. El CSV queda como asset de referencia en `data/`.
+//
+// SPEC-32 (T32.1): el snapshot de precios por cadena sí se persiste
+// en `precios_competencia` — mismo parse, filas append-only con
+// fecha_snapshot fija del extracto.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -95,6 +99,7 @@ function parseCsv() {
       throw new Error(`CSV fila ${i + 2}: ${c.length} columnas, esperadas ${COLUMNAS_CSV}`);
     }
     const num = (v) => (v === '' ? null : Number(v));
+    const txt = (v) => (v === '' ? null : v.trim());
     return {
       nombre: c[1].trim(),
       marca: c[2].trim() || null,
@@ -102,6 +107,12 @@ function parseCsv() {
       categoria: NORMALIZA_CATEGORIA[c[6].trim()] ?? c[6].trim(),
       min_price: num(c[19]),
       max_price: num(c[20]),
+      cadenas: {
+        DIA: { sku: txt(c[7]), precio: num(c[8]), lista: num(c[9]) },
+        COTO: { sku: txt(c[10]), precio: num(c[11]), lista: num(c[12]) },
+        CARREFOUR: { sku: txt(c[13]), precio: num(c[14]), lista: num(c[15]) },
+        LA_ANONIMA: { sku: txt(c[16]), precio: num(c[17]), lista: num(c[18]) },
+      },
     };
   });
 }
@@ -150,6 +161,28 @@ function articuloDeCsv(row, id) {
 
 export function generarArticulos() {
   return parseCsv().map((row, i) => articuloDeCsv(row, i + 1));
+}
+
+// SPEC-32 (T32.1) — fecha del extracto retail-radar (data/README.md).
+// Determinística como todo el seed: el re-import cambia el CSV y esta
+// constante, y las filas nuevas conviven con las anteriores
+// (append-only, R32.1).
+export const FECHA_SNAPSHOT_COMPETENCIA = '2026-11-20';
+
+// Filas de `precios_competencia`: una por (artículo × cadena) del
+// snapshot — 4 por artículo aunque falte el dato (precio NULL =
+// "la cadena no lo tenía", distinguible de "fila ausente").
+export function generarCompetencia() {
+  return parseCsv().flatMap((row, i) =>
+    Object.entries(row.cadenas).map(([cadena, c]) => ({
+      producto_id: i + 1,
+      cadena,
+      sku_cadena: c.sku,
+      precio: c.precio,
+      precio_lista: c.lista,
+      fecha_snapshot: FECHA_SNAPSHOT_COMPETENCIA,
+    })),
+  );
 }
 
 // SPEC-27 — markup objetivo por categoría (costo = venta/(1+markup)).

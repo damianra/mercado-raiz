@@ -2361,6 +2361,79 @@ góndola como ubicaciones de stock, tickets/cesta, promos,
 multi-sucursal, locks multi-proceso (advisory lock si la app
 escala).
 
+## SPEC-32 · Competitividad de precios — cruce con retail-radar
+
+- **Fecha:** 2026-12-05
+- **Origen:** pedido del usuario — cruzar los datos de competidores
+  del CSV (`data/articles_sample.csv`: precio y lista por SKU en
+  Día, Coto, Carrefour y La Anónima para los 1.471 artículos) con
+  ventas/costos/stock propios para generar accionables; además
+  gráficos que comuniquen el valor (no solo números).
+- **Estado global:** 🚧 en progreso
+- **Contexto:** SPEC-22 dejó el CSV como asset de referencia sin
+  vínculo en DB y fijó `precio_venta` con factor 0.88–1.18 sobre
+  el punto medio del mercado (~8% bajo el mínimo, ~71% en rango,
+  ~21% sobre el máximo) justamente para habilitar este análisis.
+  Hoy `precio_venta` no tiene write path y el dato de competencia
+  se descarta tras el seed.
+- **Decisiones:** un solo primitivo de escritura nuevo —
+  `PATCH /api/productos/:id/precio` (GERENTE+ADMIN) — y todas las
+  señales del cruce confluyen al modal "Ajustar precio" (patrón
+  alerta→acción ya probado con `ComprarModal`). El costo
+  (`producto_proveedor.costo_unitario`) es el piso de
+  liquidación: por encima recuperás capital + margen, al costo
+  recuperás capital, debajo es salvataje (aún mejor que merma).
+  Gráficos: `recharts` con wrapper propio en
+  `src/components/charts/` (paleta neutra + `root`/`terra`,
+  máx 2 colores de marca).
+
+### Tareas
+
+| # | Tarea | Estado |
+|---|---|---|
+| T32.1 | Persistir snapshot de competencia: tabla `precios_competencia` (producto, cadena, sku_cadena, precio, precio_lista, fecha_snapshot) poblada desde el CSV + modelo de lectura (índice propio vs min/max por SKU y agregados por cadena/categoría) | ⏳ |
+| T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ⏳ |
+| T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ⏳ |
+| T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
+| T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ⏳ |
+| T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ⏳ |
+
+### Reglas
+
+- **R32.1** La tabla de competencia preserva el snapshot del CSV
+  tal cual (con `fecha_snapshot`); re-imports futuros son filas
+  nuevas, nunca updates — así un segundo snapshot habilita
+  tendencias sin cambio de schema. Join interno por `producto_id`
+  (id = orden del CSV) + `ean`/`cadena_sku` para trazabilidad con
+  retail-radar.
+- **R32.2** `PATCH precio`: valida `precio > 0`; responde warning
+  (no error) si `< costo` vigente del proveedor principal — el
+  cliente decide si confirma (flag `confirmar_bajo_costo`).
+  Registra quién/cuándo/anterior→nuevo/motivo en auditoría.
+- **R32.3** Zonas de liquidación en el modal: `costo < p < min
+  mercado` = rentable; `≈ costo` = recuperación; `< costo` =
+  salvataje — el sugerido muestra recuperación estimada
+  (`(p − costo) × stock` vs `costo × stock` inmovilizado).
+- **R32.4** Diagnóstico de muerto por posición: propio > min →
+  promo al mínimo; ya es el más barato → liquidación profunda;
+  cadena en promo en el SKU → liquidar sin competir precio.
+- **R32.5** Toda alerta nueva entra por el mecanismo existente
+  (tabla `alertas`, severidad, `DESTINO_ALERTA` por tipo,
+  campanita 60s). Severidad de `DEAD_STOCK` pondera `stock ×
+  costo` (umbrales documentados en la tarea).
+- **R32.6** Los gráficos respetan la guía de diseño: paleta
+  neutra, `root`/`terra` como únicos acentos, `rounded-2xl
+  ring-1` en contenedores, tooltips con `formatMoney`.
+- **R32.7** El snapshot de competencia es estático (un punto en
+  el tiempo) — la UI lo declara ("precios al 20-11-2026") y las
+  alertas de precio asumen esa fecha. Re-import = nuevo CSV +
+  re-seed parcial.
+
+Fuera de scope: motor de promos real (precio promocional vs base,
+bundles/2x1 — no existe el concepto en el schema); ingestión
+automática desde retail-radar (hoy es re-export manual del CSV);
+elasticidad precio-demanda estimada.
+
 ## Anexo A — Trazabilidad plan → spec → código → tests
 
 | Plan step | SPEC | Archivos clave | Tests |
