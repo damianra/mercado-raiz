@@ -2298,7 +2298,9 @@ Estas tareas convierten el sistema en herramienta diaria.
   en la tabla — ahí el GERENTE actúa: venta/ajuste/conteo de
   T30.2); el resto (RIESGO_LEAD puede tener stock ≥ mínimo y no
   figurar en quiebres) → `/metricas` (tabla de riesgo cobertura
-  < lead). El poll se gatea por `usuario.rol` — SERVICIO no
+  < lead; ampliado después — T32.8: tipos de pricing →
+  `/metricas?ajustar=<id>`, T33.4: VENCIMIENTO → `/vencimientos`).
+  El poll se gatea por `usuario.rol` — SERVICIO no
   dispara un GET siempre-403. `sinNotificaciones` sigue ocultando
   la campana en `/alertas` (la página entera del BUYER ES el
   panel — no se pollea). Un fallo del fetch nunca rompe la página
@@ -2571,12 +2573,13 @@ si falla):
   sistema no inventa mermas.
 - **Alerta `VENCIMIENTO`** en el motor de reglas (mismo lazy-eval
   de SPEC-29): una por producto con unidades en riesgo. Ventana
-  **relativa a la vida útil**: `min(15d, floor(vida_util × 0.4))` —
+  **relativa a la vida útil**: `min(15d, max(1, floor(vida_util × 0.4)))` —
   un F&V de 7d alerta a 2d, un Almacén a 15d; el umbral absoluto
   pondría a los perecederos cortos en alerta permanente. Severidad:
   ALTA si ya venció o vence dentro de `max(1, ventana/3)` días,
   MEDIA dentro de la ventana, BAJA dentro del doble (awareness
-  temprano). El mensaje lleva unidades y valor a costo; el dedup
+  temprano). El mensaje lleva unidades (y valor a costo si el
+  producto tiene costo cargado); el dedup
   24h existente aplica igual (`diasAlertaVencimiento` en
   seed-lotes.js la comparten seed y motor).
 - **Ajuste positivo sin fecha**: un conteo que encuentra unidades

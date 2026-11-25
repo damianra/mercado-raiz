@@ -93,8 +93,8 @@ Base `/api` (auto-mount de `server/routes/<name>.js`). Endpoints principales:
 - `GET /api/historial` — movimientos de stock
 - `GET /api/ventas` — hechos de venta (SPEC-26; filtros: `producto_id`, `desde`/`hasta` `YYYY-MM-DD`, `canal` POS/WEB/MAYOR, paginado estándar)
 - `POST /api/ventas` — punto de integración POS (SPEC-30 T30.2): descuenta `stock_actual` + `historial_stock` VENTA en la misma tx, **FEFO** sobre los lotes (vence primero → sale primero; SPEC-33); el stock puede quedar negativo (la venta es hecho físico — la divergencia se corrige con conteo). Sin rol extra, cualquier no-BUYER. `POST /api/ventas/batch` — lote del cierre de turno en una request (todo-o-nada, máx 500) — la vía para la integración POS frente al rate limiter
-- `POST /api/stock/ajuste` — ajuste manual de inventario (SPEC-30 T30.2): `{producto_id, motivo: MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?, referencia?, fecha_vencimiento?}` — exactamente un modo; conteo de góndola/depósito vive acá. La baja descuenta FEFO; el ingreso crea un lote `AJU-*` (con la fecha informada o el default de vida útil — SPEC-33). Roles: `GERENTE` y `ADMIN`
-- `GET /api/alertas?leida=&tipo=` · `PATCH /api/alertas/:id/leida` · `PATCH /api/alertas/leer-todas` · `POST /api/alertas/evaluar` — alertas operativas (SPEC-29): QUIEBRE/RIESGO_LEAD/DEAD_STOCK/ORDEN_PENDIENTE por reglas determinísticas + VENCIMIENTO por producto con lote en ventana (severidad relativa a la vida útil — SPEC-33); evaluación lazy cada 60min en el GET. GET: `BUYER`, `ADMIN`, `GERENTE`, `APROBADOR` (la campanita del Topbar lo consume, T30.6); escrituras: `BUYER` y `ADMIN`
+- `POST /api/stock/ajuste` — ajuste manual de inventario (SPEC-30 T30.2): `{producto_id, motivo: MERMA|ROTURA|CONTEO|OTRO, cantidad_nueva?|delta?, referencia?, fecha_vencimiento?}` — exactamente un modo; conteo de góndola/depósito vive acá. La baja descuenta FEFO; el ingreso crea un lote `AJU-*` (con la fecha informada — sin ella queda sin vencimiento: el físico encontrado no trae etiqueta, SPEC-33). Roles: `GERENTE` y `ADMIN`
+- `GET /api/alertas?leida=&tipo=` · `PATCH /api/alertas/:id/leida` · `PATCH /api/alertas/leer-todas` · `POST /api/alertas/evaluar` — alertas operativas (SPEC-29): QUIEBRE/RIESGO_LEAD/DEAD_STOCK/ORDEN_PENDIENTE por reglas determinísticas + las de pricing contra competencia (PRESION_COMPETITIVA/PRECIO_FUERA_MERCADO/OPORTUNIDAD_MARGEN — SPEC-32) + VENCIMIENTO por producto con lote en ventana (severidad relativa a la vida útil — SPEC-33); evaluación lazy cada 60min en el GET. GET: `BUYER`, `ADMIN`, `GERENTE`, `APROBADOR` (la campanita del Topbar lo consume, T30.6); escrituras: `BUYER` y `ADMIN`
 - `GET /api/pedidos/sugerencia?producto_id=` · `POST /api/pedidos` — pedido del BUYER desde `/alertas` (SPEC-29 T29.3 + SPEC-30 T30.4): la sugerencia devuelve precios por proveedor + cantidad calculada con la math del agente por lead; el POST crea la OC real `PENDIENTE_APROBACION` (201) y marca la alerta atendida en la misma transacción — idempotente por `alerta_id` (la OC lleva `alerta_id` para trazabilidad, única). Roles: `BUYER` y `ADMIN`
 - `GET /api/estadisticas/metricas?dias=` — scorecard agregado (SPEC-28): quiebres en $/día de margen, riesgo por cobertura vs lead, inventario a costo/venta, dead stock, exceso, fill rate, órdenes pendientes y scorecard de proveedores
 - `GET /api/estadisticas/demanda?producto_id=&dias=` — estadísticas de demanda por producto (R26.7: demanda ponderada, tendencia, CV, σ, días con venta/en quiebre, última venta); sin `producto_id` devuelve `{data:[...]}` con las mismas stats de todos los productos (R26.9 — las columnas demanda/cobertura del dashboard)
@@ -171,13 +171,13 @@ se revocan). Un admin no puede desactivarse ni degradarse a sí
 mismo, y el backend impide dejar el sistema sin el último ADMIN
 activo (`409`).
 
-Todos los roles ven **Quiebres** en el sidebar → `/quiebres`
+Todos los roles no-BUYER ven **Quiebres** en el sidebar → `/quiebres`
 (SPEC-27 T27.4): la lista de acción diaria — productos en cero o
 bajo el mínimo ordenados por margen que se deja de ganar por día
 (`demanda × margen_unitario`), con KPIs de SKUs sin stock, margen
 en riesgo/día y margen perdido en 90 días. Solo `ADMIN` ve
 además **Proveedores** (`/proveedores`, SPEC-26). También todos
-los roles ven **Métricas** (`/metricas`, SPEC-28): fill rate,
+los roles no-BUYER ven **Métricas** (`/metricas`, SPEC-28): fill rate,
 margen en riesgo/día, inventario a costo, dead stock, exceso,
 órdenes por aprobar y scorecard de proveedores (SKUs, lead
 esperado, confiabilidad, órdenes y montos). Y todos los no-BUYER

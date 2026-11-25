@@ -86,7 +86,10 @@ mientras alguien las consulta — la campanita las refresca sola):
 | **Quiebre** | Stock en cero con demanda activa — se está perdiendo venta ahora | Alta |
 | **Riesgo por demora** | El stock alcanza para menos días de lo que tarda el proveedor en entregar | Alta/Media |
 | **Vencimiento** | Un producto tiene lotes por vencer o ya vencidos — hay que liquidar o dar de baja | Alta si ya venció o le quedan pocos días; escala con la vida útil del producto |
-| **Stock muerto** | Mercadería parada hace más de 90 días — plata inmovilizada | Baja |
+| **Presión competitiva** | Una cadena tiene en promo un producto que acá es top seller — la competencia aprieta donde más duele | Alta/Media según la profundidad de la promo |
+| **Precio fuera de mercado** | El precio propio quedó por encima del máximo de las 4 cadenas | Media |
+| **Oportunidad de margen** | El precio propio quedó >15% bajo el mínimo de mercado en un producto que rota — margen regalado | Baja |
+| **Stock muerto** | Mercadería parada hace más de 90 días — plata inmovilizada | Escala con el capital: alta sobre $350.000, media sobre $150.000 |
 | **Orden pendiente** | Una OC lleva más de 48 horas esperando aprobación | Media |
 
 ## Los roles
