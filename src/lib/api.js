@@ -296,3 +296,12 @@ export const actualizarPrecio = ({ productoId, precio, motivo, confirmarBajoCost
       ...(confirmarBajoCosto ? { confirmar_bajo_costo: true } : {}),
     }),
   });
+
+// SPEC-32 (T32.3): insumos de la vista gráfica de Métricas.
+export const getCompetitividad = () => apiFetch('/estadisticas/competitividad');
+export const getVentasDiarias = (dias = 90) =>
+  apiFetch(`/estadisticas/ventas-diarias?dias=${dias}`);
+export const getCapitalInmovilizado = (dias = 90) =>
+  apiFetch(`/estadisticas/capital?dias=${dias}`);
+export const getPricing = (dias = 90) =>
+  apiFetch(`/estadisticas/pricing?dias=${dias}`);

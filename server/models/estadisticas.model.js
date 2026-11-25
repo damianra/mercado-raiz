@@ -386,3 +386,52 @@ export async function metricasScorecard(dias) {
     proveedores,
   };
 }
+
+// SPEC-32 (T32.3): serie diaria agregada para el gráfico de ventas.
+// La facturación usa el precio_venta VIGENTE (no el histórico —
+// no existe snapshot de precio por venta; aproximación honesta).
+export async function ventasPorDia(dias) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT v.fecha::text AS fecha, SUM(v.unidades)::int AS unidades,
+            ROUND(SUM(v.unidades * p.precio_venta)::numeric, 2)::double precision AS facturacion
+       FROM ventas v
+       JOIN productos p ON p.id = v.producto_id
+      WHERE v.fecha > CURRENT_DATE - ? * INTERVAL '1 day'
+      GROUP BY v.fecha
+      ORDER BY v.fecha`,
+    [dias],
+  );
+  return { dias, serie: rows };
+}
+
+// SPEC-32 (T32.3): capital inmovilizado — SKUs sin ventas en la
+// ventana con stock > 0, valorados a costo del proveedor principal.
+// El Pareto ordena por plata quieta (no por unidades).
+export async function capitalInmovilizado(dias, limite = 15) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.categoria, p.stock_actual, p.precio_venta,
+            pp.costo_unitario,
+            ROUND((p.stock_actual * pp.costo_unitario)::numeric, 2)::double precision AS capital,
+            MAX(v.fecha)::text AS ultima_venta
+       FROM productos p
+       JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
+       LEFT JOIN ventas v ON v.producto_id = p.id
+      WHERE p.stock_actual > 0
+      GROUP BY p.id, p.sku, p.nombre, p.categoria, p.stock_actual,
+               p.precio_venta, pp.costo_unitario
+     HAVING MAX(v.fecha) IS NULL
+        OR MAX(v.fecha) <= CURRENT_DATE - ? * INTERVAL '1 day'
+      ORDER BY capital DESC`,
+    [dias],
+  );
+  const total = rows.reduce((a, r) => a + r.capital, 0);
+  return {
+    dias,
+    skus: rows.length,
+    capital_total: Math.round(total * 100) / 100,
+    top: rows.slice(0, limite),
+  };
+}

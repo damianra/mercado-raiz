@@ -1,8 +1,14 @@
 import {
+  capitalInmovilizado,
   estadisticaDemanda,
   estadisticasDemandaBulk,
   metricasScorecard,
+  ventasPorDia,
 } from '../models/estadisticas.model.js';
+import {
+  pricingAccionable,
+  resumenCompetitividad,
+} from '../models/competencia.model.js';
 
 // R26.7: GET /api/estadisticas/demanda?producto_id=&dias=90 —
 // un producto. R26.9/T26.7: sin producto_id devuelve las mismas
@@ -36,4 +42,38 @@ export async function metricas(req, res) {
     return res.status(400).json({ error: 'dias debe ser un entero entre 7 y 365' });
   }
   res.json(await metricasScorecard(dias));
+}
+
+// SPEC-32 (T32.3): lecturas para la vista gráfica de Métricas —
+// competitividad de precios, serie de ventas diarias, capital
+// inmovilizado (Pareto) y la tabla de pricing accionable.
+const diasValido = (req, res) => {
+  const dias = req.query.dias === undefined ? 90 : Number(req.query.dias);
+  if (!Number.isInteger(dias) || dias < 7 || dias > 365) {
+    res.status(400).json({ error: 'dias debe ser un entero entre 7 y 365' });
+    return null;
+  }
+  return dias;
+};
+
+export async function competitividad(req, res) {
+  res.json(await resumenCompetitividad());
+}
+
+export async function ventasDiarias(req, res) {
+  const dias = diasValido(req, res);
+  if (dias == null) return;
+  res.json(await ventasPorDia(dias));
+}
+
+export async function capital(req, res) {
+  const dias = diasValido(req, res);
+  if (dias == null) return;
+  res.json(await capitalInmovilizado(dias));
+}
+
+export async function pricing(req, res) {
+  const dias = diasValido(req, res);
+  if (dias == null) return;
+  res.json(await pricingAccionable(dias));
 }
