@@ -57,13 +57,26 @@ export async function competenciaProducto(productoId) {
   const precios = cadenas.map((c) => c.precio).filter((v) => v != null);
   const min = precios.length ? Math.min(...precios) : null;
   const max = precios.length ? Math.max(...precios) : null;
+  // Piso de liquidación: costo vigente del proveedor principal (R32.3).
+  const pp = await db.get(
+    `SELECT costo_unitario FROM producto_proveedor
+      WHERE producto_id = ? AND es_principal = 1 AND activo = 1
+      ORDER BY id LIMIT 1`,
+    [productoId],
+  );
   return {
     producto_id: p.id,
     precio_venta: p.precio_venta,
+    stock_actual: p.stock_actual,
+    costo_unitario: pp?.costo_unitario ?? null,
     min_mercado: min,
     max_mercado: max,
     indice: indicePrecio(p.precio_venta, min),
     zona: posicionPrecio(p.precio_venta, min, max),
+    fecha_snapshot: cadenas.reduce(
+      (acc, c) => (c.fecha_snapshot > acc ? c.fecha_snapshot : acc),
+      cadenas[0]?.fecha_snapshot ?? null,
+    ),
     cadenas,
   };
 }
