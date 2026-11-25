@@ -1,5 +1,6 @@
 import { openDb } from '../db.js';
 import { indicePrecio, posicionPrecio } from './competencia.model.js';
+import { fechasVentana, seriePosicionStock } from './stock-serie.js';
 
 // SPEC-26 (R26.7): estadísticas de demanda por producto sobre la
 // tabla `ventas`. La serie diaria se arma contra CURRENT_DATE de la
@@ -11,41 +12,27 @@ import { indicePrecio, posicionPrecio } from './competencia.model.js';
 const HALF_LIFE_DIAS = 30; // media móvil ponderada por recencia
 
 // Serie completa de la ventana: [d0 más viejo … hoy]. El ancla es
-// `hoy` de la DB — Date UTC para no mezclar TZ.
+// `hoy` de la DB — Date UTC para no mezclar TZ. Las fechas las arma
+// `fechasVentana` (stock-serie.js), compartida con /productos/:id/historial.
 function armarVentana(hoy, dias, porDia) {
-  const hoyMs = Date.parse(`${hoy}T00:00:00Z`);
-  const fechas = [];
-  const serie = [];
-  for (let i = dias - 1; i >= 0; i--) {
-    const f = new Date(hoyMs - i * 86400000).toISOString().slice(0, 10);
-    fechas.push(f);
-    serie.push(porDia.get(f) ?? 0);
-  }
+  const fechas = fechasVentana(hoy, dias);
+  const serie = fechas.map((f) => porDia.get(f) ?? 0);
   return { fechas, serie };
 }
 
 // Reconstruye la posición de stock día a día desde la cadena de
-// movimientos (cantidad_anterior→cantidad_nueva, ya ordenados por
-// fecha/id). Días antes del primer movimiento heredan su
-// cantidad_anterior — aproximación documentada; sin movimientos la
-// fuente no existe → dias: null.
+// movimientos — el replay vive en stock-serie.js (compartido con
+// el historial del producto, T32.6). Días antes del primer
+// movimiento heredan su cantidad_anterior — aproximación
+// documentada; sin movimientos la fuente no existe → dias: null.
 function quiebreDesde(movs, fechas) {
-  if (movs.length === 0) return { dias: null, indices: new Set() };
+  const posiciones = seriePosicionStock(movs, fechas);
+  if (posiciones == null) return { dias: null, indices: new Set() };
 
-  // posición vigente al inicio de cada fecha de la ventana: el
-  // cantidad_nueva del último movimiento ≤ ese día (o el
-  // cantidad_anterior del primero si aún no hubo ninguno).
-  let cursor = 0;
-  let posicion = movs[0].cantidad_anterior;
   let dias = 0;
   const indices = new Set();
-
-  for (let i = 0; i < fechas.length; i++) {
-    while (cursor < movs.length && movs[cursor].f <= fechas[i]) {
-      posicion = movs[cursor].cantidad_nueva;
-      cursor++;
-    }
-    if (posicion <= 0) {
+  for (let i = 0; i < posiciones.length; i++) {
+    if (posiciones[i] <= 0) {
       dias++;
       indices.add(i);
     }
@@ -427,5 +414,54 @@ export async function metricasScorecard(dias) {
     },
     ordenes: { pendientes, pendientes_monto: r2(pendientesMonto) },
     proveedores,
+  };
+}
+
+// SPEC-32 (T32.3): serie diaria agregada para el gráfico de ventas.
+// La facturación usa el precio_venta VIGENTE (no el histórico —
+// no existe snapshot de precio por venta; aproximación honesta).
+export async function ventasPorDia(dias) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT v.fecha::text AS fecha, SUM(v.unidades)::int AS unidades,
+            ROUND(SUM(v.unidades * p.precio_venta)::numeric, 2)::double precision AS facturacion
+       FROM ventas v
+       JOIN productos p ON p.id = v.producto_id
+      WHERE v.fecha > CURRENT_DATE - ? * INTERVAL '1 day'
+      GROUP BY v.fecha
+      ORDER BY v.fecha`,
+    [dias],
+  );
+  return { dias, serie: rows };
+}
+
+// SPEC-32 (T32.3): capital inmovilizado — SKUs sin ventas en la
+// ventana con stock > 0, valorados a costo del proveedor principal.
+// El Pareto ordena por plata quieta (no por unidades).
+export async function capitalInmovilizado(dias, limite = 15) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.categoria, p.stock_actual, p.precio_venta,
+            pp.costo_unitario,
+            ROUND((p.stock_actual * pp.costo_unitario)::numeric, 2)::double precision AS capital,
+            MAX(v.fecha)::text AS ultima_venta
+       FROM productos p
+       JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
+       LEFT JOIN ventas v ON v.producto_id = p.id
+      WHERE p.stock_actual > 0
+      GROUP BY p.id, p.sku, p.nombre, p.categoria, p.stock_actual,
+               p.precio_venta, pp.costo_unitario
+     HAVING MAX(v.fecha) IS NULL
+        OR MAX(v.fecha) <= CURRENT_DATE - ? * INTERVAL '1 day'
+      ORDER BY capital DESC`,
+    [dias],
+  );
+  const total = rows.reduce((a, r) => a + r.capital, 0);
+  return {
+    dias,
+    skus: rows.length,
+    capital_total: Math.round(total * 100) / 100,
+    top: rows.slice(0, limite),
   };
 }

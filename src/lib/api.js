@@ -287,6 +287,12 @@ export const borrarProveedor = (id) =>
 export const getCompetenciaProducto = (productoId) =>
   apiFetch(`/productos/${productoId}/competencia`);
 
+// SPEC-32 (T32.6): sierra de stock — serie diaria de posición
+// reconstruida desde historial_stock. `serie` puede venir null si
+// el producto no tiene movimientos (R26.7) — el chart la honra.
+export const getHistorialProducto = (productoId, dias = 90) =>
+  apiFetch(`/productos/${productoId}/historial?dias=${dias}`);
+
 export const actualizarPrecio = ({ productoId, precio, motivo, confirmarBajoCosto }) =>
   apiFetch(`/productos/${productoId}/precio`, {
     method: 'PATCH',
@@ -296,3 +302,12 @@ export const actualizarPrecio = ({ productoId, precio, motivo, confirmarBajoCost
       ...(confirmarBajoCosto ? { confirmar_bajo_costo: true } : {}),
     }),
   });
+
+// SPEC-32 (T32.3): insumos de la vista gráfica de Métricas.
+export const getCompetitividad = () => apiFetch('/estadisticas/competitividad');
+export const getVentasDiarias = (dias = 90) =>
+  apiFetch(`/estadisticas/ventas-diarias?dias=${dias}`);
+export const getCapitalInmovilizado = (dias = 90) =>
+  apiFetch(`/estadisticas/capital?dias=${dias}`);
+export const getPricing = (dias = 90) =>
+  apiFetch(`/estadisticas/pricing?dias=${dias}`);

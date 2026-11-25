@@ -5,6 +5,7 @@
 // los re-imports conviven (R32.1), así que siempre se consulta la
 // más nueva, nunca "la tabla entera".
 import { openDb } from '../db.js';
+import { fetchSnapshotCompetencia } from '../integrations/competencia-dwh.js';
 
 export const CADENAS = ['DIA', 'COTO', 'CARREFOUR', 'LA_ANONIMA'];
 
@@ -144,5 +145,143 @@ export async function resumenCompetitividad() {
     })),
     porCategoria: [...porCategoria.values()].sort((a, b) =>
       a.categoria.localeCompare(b.categoria)),
+  };
+}
+
+// SPEC-32 (T32.3): tabla de pricing accionable — productos fuera del
+// rango de mercado con sugerido y diagnóstico (R32.4). Un muerto
+// caro NO es "bajar al mínimo": es liquidar. Uno ya barato no tiene
+// problema de precio → el sugerido es dejar de esperar.
+export async function pricingAccionable(dias = 90, limite = 15) {
+  const db = await openDb();
+  const rows = await db.all(
+    `SELECT p.id, p.sku, p.nombre, p.categoria, p.precio_venta, p.stock_actual,
+            pp.costo_unitario,
+            MIN(pc.precio) AS min_mercado, MAX(pc.precio) AS max_mercado,
+            BOOL_OR(pc.precio < pc.precio_lista) AS promo_competencia,
+            ult.u::text AS ultima_venta
+       FROM productos p
+       LEFT JOIN producto_proveedor pp
+         ON pp.producto_id = p.id AND pp.es_principal = 1 AND pp.activo = 1
+       LEFT JOIN (
+         SELECT DISTINCT ON (producto_id, cadena)
+                producto_id, precio, precio_lista
+           FROM precios_competencia
+          ORDER BY producto_id, cadena, fecha_snapshot DESC
+       ) pc ON pc.producto_id = p.id
+       LEFT JOIN (SELECT producto_id, MAX(fecha) AS u FROM ventas GROUP BY producto_id) ult
+         ON ult.producto_id = p.id
+      GROUP BY p.id, p.sku, p.nombre, p.categoria, p.precio_venta,
+               p.stock_actual, pp.costo_unitario, ult.u`,
+  );
+  const { hoy } = await db.get(`SELECT CURRENT_DATE::text AS hoy`);
+  const corte = new Date(Date.parse(`${hoy}T00:00:00Z`) - dias * 86400000)
+    .toISOString().slice(0, 10);
+  const r2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
+
+  const items = [];
+  for (const r of rows) {
+    const zona = posicionPrecio(r.precio_venta, r.min_mercado, r.max_mercado);
+    if (zona === 'EN_RANGO' || zona === 'SIN_DATOS') continue;
+    const muerto = r.ultima_venta == null || r.ultima_venta <= corte;
+    let sugerido;
+    let accion;
+    if (muerto && r.stock_actual > 0) {
+      if (r.promo_competencia) {
+        sugerido = r.costo_unitario != null ? Math.min(r.costo_unitario, r.min_mercado) : r.min_mercado;
+        accion = 'Liquidar sin competir precio — la cadena también lo está limpiando';
+      } else if (zona === 'SOBRE_MAX' || r.precio_venta > r.min_mercado) {
+        sugerido = r.min_mercado;
+        accion = 'Promo al mínimo del mercado — te preció afuera';
+      } else {
+        sugerido = r.costo_unitario;
+        accion = 'Liquidación al costo — el precio no es el problema';
+      }
+    } else if (zona === 'SOBRE_MAX') {
+      sugerido = r2((r.min_mercado + r.max_mercado) / 2);
+      accion = 'Bajar al punto medio del mercado';
+    } else {
+      sugerido = r.min_mercado;
+      accion = 'Subir al mínimo — estás regalando margen';
+    }
+    items.push({
+      producto_id: r.id,
+      sku: r.sku,
+      nombre: r.nombre,
+      categoria: r.categoria,
+      precio_venta: r.precio_venta,
+      stock_actual: r.stock_actual,
+      costo_unitario: r.costo_unitario,
+      min_mercado: r.min_mercado,
+      max_mercado: r.max_mercado,
+      indice: indicePrecio(r.precio_venta, r.min_mercado),
+      zona,
+      muerto,
+      promo_competencia: r.promo_competencia === true,
+      sugerido: r2(sugerido),
+      accion,
+    });
+  }
+  // Caros primero (más índice = más fuera de mercado), luego los que
+  // regalan margen (menor índice primero).
+  items.sort((a, b) =>
+    a.zona === b.zona
+      ? a.zona === 'SOBRE_MAX'
+        ? b.indice - a.indice
+        : a.indice - b.indice
+      : a.zona === 'SOBRE_MAX'
+        ? -1
+        : 1,
+  );
+  return { dias, items: items.slice(0, limite), total_fuera_de_rango: items.length };
+}
+
+// SPEC-32 (T32.7): re-import del snapshot desde la fuente
+// configurada (DWH real o CSV simulado — ver
+// integrations/competencia-dwh.js). Append-only por R32.1: la
+// UNIQUE (producto_id, cadena, fecha_snapshot) hace el upsert —
+// re-sync de la misma fecha no toca nada, una fecha nueva
+// agrega filas sin pisar el historial.
+export async function sincronizarCompetencia() {
+  const snap = await fetchSnapshotCompetencia();
+  const db = await openDb();
+  const eanAId = new Map(
+    (await db.all(`SELECT id, ean FROM productos WHERE ean IS NOT NULL`)).map((p) => [
+      p.ean,
+      p.id,
+    ]),
+  );
+  let insertadas = 0;
+  let sinMatch = 0;
+  const stmtSql = `INSERT INTO precios_competencia
+      (producto_id, cadena, sku_cadena, precio, precio_lista, fecha_snapshot)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (producto_id, cadena, fecha_snapshot) DO NOTHING`;
+  await db.tx(async (t) => {
+    const stmt = t.prepare(stmtSql);
+    for (const it of snap.items) {
+      const productoId = eanAId.get(it.ean);
+      if (!productoId) {
+        sinMatch += 1;
+        continue;
+      }
+      const { changes } = await stmt.run(
+        productoId,
+        it.cadena,
+        it.sku_cadena ?? null,
+        it.precio ?? null,
+        it.precio_lista ?? null,
+        snap.fecha_snapshot,
+      );
+      insertadas += changes;
+    }
+  });
+  return {
+    fuente: snap.fuente,
+    fecha_snapshot: snap.fecha_snapshot,
+    recibidas: snap.items.length,
+    insertadas,
+    omitidas: snap.items.length - insertadas - sinMatch, // ya existían
+    sin_match: sinMatch,
   };
 }

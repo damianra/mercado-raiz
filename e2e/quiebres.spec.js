@@ -124,6 +124,39 @@ test('ajustar precio desde la fila muestra la escalera de mercado y confirma', a
   await expect(page.getByText(/Precio de .* →/)).toBeVisible();
 });
 
+// SPEC-32 (T32.6): sierra de stock — drill-in desde la fila abre
+// el AreaChart de posición 90d reconstruida desde historial_stock.
+// El seed deriva movimientos para todo el catálogo → el svg de
+// recharts siempre renderiza.
+test('el drill-in de historial abre el chart de posición de stock y Escape cierra', async ({
+  page,
+}) => {
+  await irAQuiebres(page, APROBADOR); // lectura: cualquier rol operativo
+  const fila = page.locator(FILAS_Q).first();
+  const sku = await fila.locator('td').first().locator('.text-xs').innerText();
+
+  await fila.getByLabel(`Historial de stock de ${sku}`).click();
+  const modal = page.getByRole('dialog', { name: 'Historial de stock' });
+  await expect(modal).toBeVisible();
+  await expect(modal.getByText(sku)).toBeVisible();
+
+  // El svg de recharts con la serie + la leyenda (Stock / Mínimo).
+  await expect(
+    modal.getByRole('img', { name: 'Gráfico de posición de stock por día' }),
+  ).toBeVisible();
+  // El svg principal del chart es role="application" (los de
+  // leyenda también son .recharts-surface — hay que discriminar).
+  await expect(modal.getByRole('application')).toBeVisible();
+  await expect(
+    modal.locator('svg.recharts-surface path.recharts-area-area'),
+  ).toBeVisible();
+  await expect(modal.getByText('Stock', { exact: true })).toBeVisible();
+  await expect(modal.getByText('Mínimo', { exact: true })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(modal).not.toBeVisible();
+});
+
 test('APROBADOR ve "Registrar venta" pero no "Ajustar stock" ni "Ajustar precio" (rol)', async ({ page }) => {
   await irAQuiebres(page, APROBADOR);
   const fila = page.locator(FILAS_Q).first();

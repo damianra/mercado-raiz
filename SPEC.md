@@ -2393,10 +2393,23 @@ escala).
 |---|---|---|
 | T32.1 | Persistir snapshot de competencia: tabla `precios_competencia` (producto, cadena, sku_cadena, precio, precio_lista, fecha_snapshot) poblada desde el CSV + modelo de lectura (índice propio vs min/max por SKU y agregados por cadena/categoría) | ✅ |
 | T32.2 | `PATCH /api/productos/:id/precio` + modal "Ajustar precio" con escalera de precios (banda mercado + dots por cadena + marcador propio), sugeridos por zona vs costo, auditoría de cambios | ✅ |
-| T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ⏳ |
+| T32.3 | Métricas gráfica: distribución de competitividad (% catálogo por zona vs cada cadena), ventas por día (90d), Pareto de capital inmovilizado (muertos × costo) + tabla de pricing accionable | ✅ |
 | T32.4 | Alertas accionables: `PRESION_COMPETITIVA` (promo de cadena en top seller), `PRECIO_FUERA_MERCADO` (propio > max sostenido), `OPORTUNIDAD_MARGEN` (más barato >15% y rotación alta), `DEAD_STOCK` ponderada por capital inmovilizado — todas alimentan el modal | ⏳ |
 | T32.5 | Feed al agente: posición competitiva en el análisis + guard anti-recompra de DEAD_STOCK (re-poner stock muerto inmoviliza más capital) | ✅ |
-| T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ⏳ |
+| T32.6 | Sierra de stock: `GET /api/productos/:id/historial` (hoy el replay es interno de `quiebreDesde`) + chart de posición 90d como drill-in desde Quiebres | ✅ |
+| T32.7 | Fuente de competencia detrás de un cliente "DWH": `server/integrations/competencia-dwh.js` consume la API externa (`COMPETENCIA_DWH_URL`) — hoy **simulada** leyendo `data/articles_sample.csv` — y `sincronizarCompetencia()` vuelca el snapshot en `precios_competencia` (idempotente por UNIQUE) + `POST /api/competencia/sync` (ADMIN/SERVICIO) | ✅ |
+
+**Nota T32.6:** el replay se extrajo a `server/models/stock-serie.js`
+(`fechasVentana` + `seriePosicionStock`) — `quiebreDesde` ahora es un
+wrapper que cuenta `posicion ≤ 0` sobre la misma función, y
+`historialProducto` (productos.model) la usa para la serie diaria →
+una sola semántica, cero duplicación. Respuesta:
+`{producto_id, sku, nombre, dias, serie, stock_minimo, tiene_movimientos}`;
+`serie: null` sin movimientos (R26.7). Front: `HistorialStockModal.jsx`
+con AreaChart de recharts (`type="stepAfter"` — la posición es una
+función escalón), mínimo punteado neutro, dots terra + flag "Quiebre"
+en tooltip cuando stock ≤ 0; drill-in con ícono `ChartLine` en la
+columna Acciones (todos los roles operativos — es lectura).
 
 ### Reglas
 
@@ -2426,13 +2439,26 @@ escala).
   ring-1` en contenedores, tooltips con `formatMoney`.
 - **R32.7** El snapshot de competencia es estático (un punto en
   el tiempo) — la UI lo declara ("precios al 20-11-2026") y las
-  alertas de precio asumen esa fecha. Re-import = nuevo CSV +
-  re-seed parcial.
+  alertas de precio asumen esa fecha.
+- **R32.8** La fuente de competencia es un data warehouse externo
+  consultado via `server/integrations/competencia-dwh.js`
+  (`COMPETENCIA_DWH_URL`). Sin URL configurada el cliente
+  **simula la consulta** leyendo `data/articles_sample.csv` —
+  mismo contrato de payload (`{fecha_snapshot, items:[{ean,
+  cadena, sku_cadena, precio, precio_lista}]}`, join a productos
+  por `ean`). `POST /api/competencia/sync` (ADMIN/SERVICIO)
+  dispara `sincronizarCompetencia()`: upsert append-only por
+  `(producto_id, cadena, fecha_snapshot)` — re-sync de la misma
+  fecha es no-op (ON CONFLICT DO NOTHING), una fecha nueva
+  agrega filas sin tocar las anteriores (R32.1). El seed
+  inicial sigue insertando el snapshot base por `producto_id`
+  (bootstrap determinístico); el sync es el path de re-import.
 
 Fuera de scope: motor de promos real (precio promocional vs base,
-bundles/2x1 — no existe el concepto en el schema); ingestión
-automática desde retail-radar (hoy es re-export manual del CSV);
-elasticidad precio-demanda estimada.
+bundles/2x1 — no existe el concepto en el schema); ingesta
+programada del DWH (el sync es manual/on-demand — un cron o
+trigger del harness queda para SPEC posterior); elasticidad
+precio-demanda estimada.
 
 **Implementado** (T32.5): `estadisticasDemandaBulk` (y la ruta
 individual, paridad R26.9) agrega `zona_precio` e `indice_precio`
