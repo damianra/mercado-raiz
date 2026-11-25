@@ -87,7 +87,10 @@ function splitCsvLine(linea) {
   return campos;
 }
 
-function parseCsv() {
+// Exportado para el cliente DWH simulado (SPEC-32 T32.7,
+// server/integrations/competencia-dwh.js): el CSV es el mismo
+// extracto que la API externa serviría — una sola lectura.
+export function parseCsv() {
   const lineas = readFileSync(CSV_PATH, 'utf8').trim().split('\n');
   const header = splitCsvLine(lineas[0]);
   if (header.length !== COLUMNAS_CSV || header[0] !== 'product_id') {

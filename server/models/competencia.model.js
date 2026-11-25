@@ -234,3 +234,54 @@ export async function pricingAccionable(dias = 90, limite = 15) {
   );
   return { dias, items: items.slice(0, limite), total_fuera_de_rango: items.length };
 }
+
+// SPEC-32 (T32.7): re-import del snapshot desde la fuente
+// configurada (DWH real o CSV simulado — ver
+// integrations/competencia-dwh.js). Append-only por R32.1: la
+// UNIQUE (producto_id, cadena, fecha_snapshot) hace el upsert —
+// re-sync de la misma fecha no toca nada, una fecha nueva
+// agrega filas sin pisar el historial.
+export async function sincronizarCompetencia() {
+  const { fetchSnapshotCompetencia } = await import('../integrations/competencia-dwh.js');
+  const snap = await fetchSnapshotCompetencia();
+  const db = await openDb();
+  const eanAId = new Map(
+    (await db.all(`SELECT id, ean FROM productos WHERE ean IS NOT NULL`)).map((p) => [
+      p.ean,
+      p.id,
+    ]),
+  );
+  let insertadas = 0;
+  let sinMatch = 0;
+  const stmtSql = `INSERT INTO precios_competencia
+      (producto_id, cadena, sku_cadena, precio, precio_lista, fecha_snapshot)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (producto_id, cadena, fecha_snapshot) DO NOTHING`;
+  await db.tx(async (t) => {
+    const stmt = t.prepare(stmtSql);
+    for (const it of snap.items) {
+      const productoId = eanAId.get(it.ean);
+      if (!productoId) {
+        sinMatch += 1;
+        continue;
+      }
+      const { changes } = await stmt.run(
+        productoId,
+        it.cadena,
+        it.sku_cadena ?? null,
+        it.precio ?? null,
+        it.precio_lista ?? null,
+        snap.fecha_snapshot,
+      );
+      insertadas += changes;
+    }
+  });
+  return {
+    fuente: snap.fuente,
+    fecha_snapshot: snap.fecha_snapshot,
+    recibidas: snap.items.length,
+    insertadas,
+    omitidas: snap.items.length - insertadas - sinMatch, // ya existían
+    sin_match: sinMatch,
+  };
+}
